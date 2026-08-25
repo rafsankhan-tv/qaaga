@@ -1,0 +1,35 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-purple: #4e20b8;
+  --color-brand-purple-hover: #41189e;
+  --color-brand-purple-dark: #32107e;
+  --color-brand-purple-light: #f4effe;
+  --color-brand-orange: #ff6d00;
+  --color-brand-orange-hover: #ea6000;
+  --color-brand-orange-light: #fff5eb;
+}
+
+html, body {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: clip;
+  -webkit-tap-highlight-color: transparent;
+  scroll-behavior: smooth;
+}
+
+/* Ensure smooth touch scrolling on mobile devices */
+* {
+  box-sizing: border-box;
+}
+
+/* Custom scrollbar utility */
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+

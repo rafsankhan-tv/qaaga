@@ -1,0 +1,170 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with multi-role support and account status",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "fullName": { "type": "string", "maxLength": 120 },
+        "email": { "type": "string", "maxLength": 150 },
+        "phone": { "type": "string", "maxLength": 30 },
+        "avatarUrl": { "type": "string", "maxLength": 500 },
+        "coverUrl": { "type": "string", "maxLength": 500 },
+        "gender": { "type": "string", "enum": ["male", "female", "other"] },
+        "division": { "type": "string", "maxLength": 50 },
+        "district": { "type": "string", "maxLength": 50 },
+        "thana": { "type": "string", "maxLength": 50 },
+        "area": { "type": "string", "maxLength": 100 },
+        "address": { "type": "string", "maxLength": 250 },
+        "roles": { "type": "array" },
+        "accountStatus": { "type": "string", "enum": ["active", "suspended", "pending"] },
+        "isVerified": { "type": "boolean" },
+        "rating": { "type": "number" },
+        "reviewCount": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "fullName", "email", "roles", "accountStatus"]
+    },
+    "ServiceRequest": {
+      "title": "ServiceRequest",
+      "description": "Generic service request created by customer and moderated by Admin",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "customerId": { "type": "string", "maxLength": 128 },
+        "customerName": { "type": "string", "maxLength": 120 },
+        "customerPhone": { "type": "string", "maxLength": 30 },
+        "categoryId": { "type": "string", "maxLength": 64 },
+        "categoryName": { "type": "string", "maxLength": 100 },
+        "subCategory": { "type": "string", "maxLength": 100 },
+        "title": { "type": "string", "maxLength": 150 },
+        "description": { "type": "string", "maxLength": 2000 },
+        "budget": { "type": "number" },
+        "isUrgent": { "type": "boolean" },
+        "preferredDate": { "type": "string" },
+        "preferredTime": { "type": "string" },
+        "district": { "type": "string", "maxLength": 50 },
+        "thana": { "type": "string", "maxLength": 50 },
+        "area": { "type": "string", "maxLength": 100 },
+        "address": { "type": "string", "maxLength": 250 },
+        "images": { "type": "array" },
+        "routingMode": { "type": "string", "enum": ["ALL_ELIGIBLE", "SELECTED_PROVIDERS"] },
+        "targetProviderIds": { "type": "array" },
+        "status": {
+          "type": "string",
+          "enum": [
+            "DRAFT",
+            "SUBMITTED",
+            "ADMIN_REVIEW",
+            "SENT_TO_PROVIDERS",
+            "OFFER_RECEIVED",
+            "OFFERS_SENT_TO_CUSTOMER",
+            "OFFER_ACCEPTED",
+            "AWAITING_PAYMENT",
+            "BOOKED",
+            "PROVIDER_ON_THE_WAY",
+            "ARRIVED",
+            "WORK_STARTED",
+            "COMPLETION_REQUESTED",
+            "COMPLETED",
+            "CANCELLED",
+            "DISPUTED",
+            "REFUNDED"
+          ]
+        },
+        "assignedProviderId": { "type": "string", "maxLength": 128 },
+        "selectedOfferId": { "type": "string", "maxLength": 128 },
+        "bookingId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "customerId", "categoryId", "title", "description", "status"]
+    },
+    "ProviderOffer": {
+      "title": "ProviderOffer",
+      "description": "Price quotation submitted by provider for a service request",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "requestId": { "type": "string", "maxLength": 128 },
+        "providerId": { "type": "string", "maxLength": 128 },
+        "providerName": { "type": "string", "maxLength": 120 },
+        "providerAvatar": { "type": "string", "maxLength": 500 },
+        "providerRating": { "type": "number" },
+        "providerCompletedJobs": { "type": "number" },
+        "offeredPrice": { "type": "number" },
+        "serviceCharge": { "type": "number" },
+        "partsIncluded": { "type": "boolean" },
+        "estimatedDuration": { "type": "string", "maxLength": 80 },
+        "earliestDate": { "type": "string" },
+        "earliestTime": { "type": "string" },
+        "offerMessage": { "type": "string", "maxLength": 1000 },
+        "warranty": { "type": "string", "maxLength": 120 },
+        "status": {
+          "type": "string",
+          "enum": [
+            "DRAFT",
+            "SUBMITTED",
+            "ADMIN_REVIEW",
+            "APPROVED",
+            "REJECTED",
+            "SENT_TO_CUSTOMER",
+            "ACCEPTED",
+            "DECLINED",
+            "EXPIRED"
+          ]
+        },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "requestId", "providerId", "offeredPrice", "status"]
+    },
+    "Booking": {
+      "title": "Booking",
+      "description": "Confirmed booking with 20% advance payment verification and unlocked privacy",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "requestId": { "type": "string", "maxLength": 128 },
+        "offerId": { "type": "string", "maxLength": 128 },
+        "customerId": { "type": "string", "maxLength": 128 },
+        "providerId": { "type": "string", "maxLength": 128 },
+        "serviceType": { "type": "string", "maxLength": 64 },
+        "totalAmount": { "type": "number" },
+        "advancePaid": { "type": "number" },
+        "remainingAmount": { "type": "number" },
+        "remainingCollected": { "type": "boolean" },
+        "advancePercent": { "type": "number" },
+        "isPaid": { "type": "boolean" },
+        "privacyUnlocked": { "type": "boolean" },
+        "transactionId": { "type": "string", "maxLength": 128 },
+        "status": { "type": "string" },
+        "statusHistory": { "type": "array" },
+        "otpCode": { "type": "string", "maxLength": 10 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "customerId", "providerId", "totalAmount", "advancePaid", "isPaid"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Registered users with profile information and roles"
+    },
+    "/serviceRequests/{requestId}": {
+      "schema": "ServiceRequest",
+      "description": "Customer service requests moderated by Admin and quoted by providers"
+    },
+    "/providerOffers/{offerId}": {
+      "schema": "ProviderOffer",
+      "description": "Service price quotations provided by technicians and service agencies"
+    },
+    "/bookings/{bookingId}": {
+      "schema": "Booking",
+      "description": "Paid and active service bookings with milestone tracking"
+    }
+  }
+}
