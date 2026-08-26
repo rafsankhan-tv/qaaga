@@ -9,6 +9,9 @@ import {
   HotelProfile,
   HotelBooking,
   Product,
+  SellerStore,
+  SellerPayoutRequest,
+  SellerReview,
   ProductOrder,
   ProductOrderItem,
   EBook,
@@ -33,7 +36,10 @@ import {
   FeedPost,
   FeedComment,
   UserFollow,
-  FeedBannerSlide
+  FeedBannerSlide,
+  BlogPost,
+  WishlistItem,
+  OrderTrackingStep
 } from '../types';
 
 import {
@@ -45,6 +51,9 @@ import {
   SEED_CAREGIVERS,
   SEED_HOTELS,
   SEED_PRODUCTS,
+  SEED_SELLER_STORES,
+  SEED_SELLER_PAYOUTS,
+  SEED_SELLER_REVIEWS,
   SEED_EBOOKS,
   SEED_USED_PRODUCTS,
   SEED_JOBS,
@@ -55,6 +64,8 @@ import {
 
 import { applyFaviconAndTitle, FAVICON_PRESETS, DEFAULT_SITE_TITLE } from '../data/faviconPresets';
 import { SEED_FEED_POSTS, SEED_FOLLOWS, INITIAL_FEED_BANNER_SLIDES } from '../data/mockFeedData';
+import { SEED_BLOG_POSTS } from '../data/mockBlogData';
+import { SEED_ORDERS, generateDefaultTrackingTimeline } from '../data/mockOrderData';
 import { MARKETPLACE_CATEGORIES } from '../data/categoriesData';
 import { INITIAL_CATEGORY_SHOWCASES } from '../data/categoryShowcasesData';
 import { INITIAL_CUTE_CAT_SETTINGS } from '../data/cuteCatData';
@@ -165,10 +176,18 @@ class MarketplaceStore {
   private hotels: HotelProfile[] = [...SEED_HOTELS];
   private hotelBookings: HotelBooking[] = [];
   private products: Product[] = [...SEED_PRODUCTS];
-  private orders: ProductOrder[] = [];
+  private sellerStores: SellerStore[] = [...SEED_SELLER_STORES];
+  private sellerPayouts: SellerPayoutRequest[] = [...SEED_SELLER_PAYOUTS];
+  private sellerReviews: SellerReview[] = [...SEED_SELLER_REVIEWS];
+  private orders: ProductOrder[] = [...SEED_ORDERS];
+  private wishlist: WishlistItem[] = [
+    { id: 'w-1', type: 'PRODUCT', itemId: 'prod-1', addedAt: new Date().toISOString() },
+    { id: 'w-2', type: 'EBOOK', itemId: 'ebook-1', addedAt: new Date().toISOString() }
+  ];
   private ebooks: EBook[] = [...SEED_EBOOKS];
   private ebookPurchases: EBookPurchase[] = [];
   private usedProducts: UsedProductListing[] = [...SEED_USED_PRODUCTS];
+  private blogPosts: BlogPost[] = [...SEED_BLOG_POSTS];
   private jobs: JobPost[] = [...SEED_JOBS];
   private jobApplications: JobApplication[] = [];
   private feedPosts: FeedPost[] = [...SEED_FEED_POSTS];
@@ -314,6 +333,7 @@ class MarketplaceStore {
         heroBanners: this.heroBanners,
         categoryShowcases: this.categoryShowcases,
         cartItems: this.cartItems,
+        wishlist: this.wishlist,
         supportConversations: this.supportConversations
       };
       localStorage.setItem('qaaga_db_cache', JSON.stringify(data));
@@ -332,7 +352,12 @@ class MarketplaceStore {
         if (parsed.bookings) this.bookings = parsed.bookings;
         if (parsed.appointments) this.appointments = parsed.appointments;
         if (parsed.hotelBookings) this.hotelBookings = parsed.hotelBookings;
-        if (parsed.orders) this.orders = parsed.orders;
+        if (parsed.orders && Array.isArray(parsed.orders) && parsed.orders.length > 0) {
+          this.orders = parsed.orders;
+        }
+        if (parsed.wishlist && Array.isArray(parsed.wishlist)) {
+          this.wishlist = parsed.wishlist;
+        }
         if (parsed.ebookPurchases) this.ebookPurchases = parsed.ebookPurchases;
         if (parsed.usedProducts) this.usedProducts = parsed.usedProducts;
         if (parsed.jobs) this.jobs = parsed.jobs;
@@ -387,7 +412,11 @@ class MarketplaceStore {
     this.hotels = [...SEED_HOTELS];
     this.hotelBookings = [];
     this.products = [...SEED_PRODUCTS];
-    this.orders = [];
+    this.orders = [...SEED_ORDERS];
+    this.wishlist = [
+      { id: 'w-1', type: 'PRODUCT', itemId: 'prod-1', addedAt: new Date().toISOString() },
+      { id: 'w-2', type: 'EBOOK', itemId: 'ebook-1', addedAt: new Date().toISOString() }
+    ];
     this.ebooks = [...SEED_EBOOKS];
     this.ebookPurchases = [];
     this.usedProducts = [...SEED_USED_PRODUCTS];
@@ -419,6 +448,17 @@ class MarketplaceStore {
   public getEbooks() { return this.ebooks; }
   public getEbookPurchases() { return this.ebookPurchases; }
   public getUsedProducts() { return this.usedProducts; }
+  public getBlogPosts() { return this.blogPosts; }
+  public getBlogPostById(id: string) { return this.blogPosts.find(b => b.id === id); }
+  public likeBlogPost(id: string): boolean {
+    const blog = this.blogPosts.find(b => b.id === id);
+    if (blog) {
+      blog.likesCount += 1;
+      this.notify();
+      return true;
+    }
+    return false;
+  }
   public getJobs() { return this.jobs; }
   public getJobApplications() { return this.jobApplications; }
   public getChatMessages(bookingId: string) { return this.chatMessages.filter(m => m.bookingId === bookingId); }
@@ -472,6 +512,74 @@ class MarketplaceStore {
   public clearCart() {
     this.cartItems = [];
     this.notify();
+  }
+
+  // --- WISHLIST (হোয়াইট লিস্ট / উইশলিস্ট) MANAGEMENT ---
+  public getWishlist(): WishlistItem[] {
+    return this.wishlist;
+  }
+
+  public getWishlistCount(): number {
+    return this.wishlist.length;
+  }
+
+  public isInWishlist(itemId: string): boolean {
+    return this.wishlist.some(w => w.itemId === itemId);
+  }
+
+  public toggleWishlist(itemId: string, type: 'PRODUCT' | 'EBOOK' | 'USED' = 'PRODUCT'): boolean {
+    const exists = this.isInWishlist(itemId);
+    if (exists) {
+      this.wishlist = this.wishlist.filter(w => w.itemId !== itemId);
+      this.notify();
+      return false; // Removed
+    } else {
+      this.wishlist.unshift({
+        id: `wish-${Date.now().toString(36)}-${Math.floor(Math.random() * 1000)}`,
+        type,
+        itemId,
+        addedAt: new Date().toISOString()
+      });
+      this.notify();
+      return true; // Added
+    }
+  }
+
+  public addToWishlist(itemId: string, type: 'PRODUCT' | 'EBOOK' | 'USED' = 'PRODUCT') {
+    if (!this.isInWishlist(itemId)) {
+      this.wishlist.unshift({
+        id: `wish-${Date.now().toString(36)}-${Math.floor(Math.random() * 1000)}`,
+        type,
+        itemId,
+        addedAt: new Date().toISOString()
+      });
+      this.notify();
+    }
+  }
+
+  public removeFromWishlist(itemId: string) {
+    this.wishlist = this.wishlist.filter(w => w.itemId !== itemId);
+    this.notify();
+  }
+
+  public clearWishlist() {
+    this.wishlist = [];
+    this.notify();
+  }
+
+  public getWishlistProducts(): Product[] {
+    const ids = this.wishlist.filter(w => w.type === 'PRODUCT').map(w => w.itemId);
+    return this.products.filter(p => ids.includes(p.id));
+  }
+
+  public getWishlistEbooks(): EBook[] {
+    const ids = this.wishlist.filter(w => w.type === 'EBOOK').map(w => w.itemId);
+    return this.ebooks.filter(e => ids.includes(e.id));
+  }
+
+  public getWishlistUsedProducts(): UsedProductListing[] {
+    const ids = this.wishlist.filter(w => w.type === 'USED').map(w => w.itemId);
+    return this.usedProducts.filter(u => ids.includes(u.id));
   }
 
   // --- HERO BANNERS & SLIDER MANAGEMENT (Admin & Live Sync) ---
@@ -1285,6 +1393,19 @@ class MarketplaceStore {
   }
 
   // --- PRODUCT CHECKOUT & SELLER MANAGEMENT ---
+  public getOrderById(id: string): ProductOrder | undefined {
+    return this.orders.find(o => o.id === id || o.orderNumber === id);
+  }
+
+  public getOrderByNumber(orderNumber: string): ProductOrder | undefined {
+    return this.orders.find(o => o.orderNumber.toLowerCase() === orderNumber.toLowerCase().trim() || o.id === orderNumber);
+  }
+
+  public getUserOrders(userId?: string): ProductOrder[] {
+    if (!userId) return this.orders;
+    return this.orders.filter(o => o.customerId === userId || o.customerId === 'user-customer-1' || o.customerId === 'guest-user');
+  }
+
   public createProductOrder(params: {
     customerId: string;
     customerName: string;
@@ -1295,13 +1416,27 @@ class MarketplaceStore {
     area: string;
     items: ProductOrderItem[];
     paymentMethod: 'COD' | 'ONLINE_BKASH' | 'ONLINE_CARD';
+    transactionId?: string;
+    discountAmount?: number;
+    couponCode?: string;
+    customerNote?: string;
+    expressDelivery?: boolean;
   }): ProductOrder {
     const subtotal = params.items.reduce((acc, it) => acc + it.price * it.quantity, 0);
-    const deliveryFee = params.district.toLowerCase() === 'dhaka' ? 80 : 130;
-    const totalAmount = subtotal + deliveryFee;
+    const isDhaka = params.district.toLowerCase().includes('dhaka') || params.district.includes('ঢাকা');
+    const baseFee = isDhaka ? 80 : 130;
+    const deliveryFee = params.expressDelivery ? baseFee + 70 : baseFee;
+    const discount = params.discountAmount || 0;
+    const totalAmount = Math.max(0, subtotal + deliveryFee - discount);
 
     const id = `ord-${Date.now().toString(36)}`;
-    const orderNumber = `QAAGA-ORD-${Math.floor(100000 + Math.random() * 900000)}`;
+    const randomSuffix = Math.floor(100000 + Math.random() * 900000);
+    const orderNumber = `QAAGA-ORD-${randomSuffix}`;
+    const trackingCode = `STDF-${Math.floor(80000000 + Math.random() * 19999999)}`;
+    const otp = `${Math.floor(1000 + Math.random() * 9000)}`;
+
+    const orderDate = new Date().toISOString();
+    const trackingTimeline = generateDefaultTrackingTimeline(orderDate, params.district, 'PENDING');
 
     const newOrder: ProductOrder = {
       id,
@@ -1316,11 +1451,24 @@ class MarketplaceStore {
       items: params.items,
       subtotal,
       deliveryFee,
+      discountAmount: discount,
+      couponCode: params.couponCode,
       totalAmount,
       paymentMethod: params.paymentMethod,
+      paymentStatus: params.paymentMethod === 'COD' ? 'PENDING' : 'PAID',
+      transactionId: params.transactionId || (params.paymentMethod !== 'COD' ? `TXN_${Date.now().toString(36).toUpperCase()}` : undefined),
       orderStatus: 'PENDING',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      courierPartner: 'Steadfast Express Logistics (QAAGA Verified)',
+      trackingNumber: trackingCode,
+      courierTrackingUrl: `https://steadfast.com.bd/t/${trackingCode}`,
+      riderName: 'মোঃ শাকিল হোসেন',
+      riderPhone: '01844-998877',
+      estimatedDelivery: isDhaka ? '২৪ থেকে ৪৮ ঘণ্টার মধ্যে' : '২ থেকে ৪ কার্যদিবসের মধ্যে',
+      deliveryOtp: otp,
+      trackingTimeline,
+      customerNote: params.customerNote,
+      createdAt: orderDate,
+      updatedAt: orderDate
     };
 
     // Deduct stock
@@ -1336,8 +1484,8 @@ class MarketplaceStore {
     this.notifications.unshift({
       id: `notif-${Date.now()}`,
       userId: params.customerId,
-      title: 'Order Placed Successfully',
-      message: `Order #${orderNumber} for BDT ${totalAmount} placed via ${params.paymentMethod}.`,
+      title: 'নতুন প্রোডাক্ট অর্ডার গৃহীত হয়েছে',
+      message: `অর্ডার #${orderNumber} সফলভাবে প্লেস হয়েছে। প্রদেয়: ৳${totalAmount} (${params.paymentMethod === 'COD' ? 'ক্যাশ অন ডেলিভারি' : 'অনলাইন পেইড'})। ওটিপি: ${otp}`,
       type: 'ORDER_STATUS_UPDATE',
       isRead: false,
       createdAt: new Date().toISOString()
@@ -1345,6 +1493,136 @@ class MarketplaceStore {
 
     this.notify();
     return newOrder;
+  }
+
+  public advanceOrderTracking(orderId: string): ProductOrder | null {
+    const order = this.orders.find(o => o.id === orderId || o.orderNumber === orderId);
+    if (!order) return null;
+
+    const sequence: ProductOrder['orderStatus'][] = [
+      'PENDING',
+      'CONFIRMED',
+      'PROCESSING',
+      'SHIPPED',
+      'DELIVERED'
+    ];
+
+    const currentIndex = sequence.indexOf(order.orderStatus);
+    if (currentIndex === -1 || currentIndex >= sequence.length - 1) {
+      if (order.orderStatus === 'DELIVERED') {
+        order.orderStatus = 'COMPLETED';
+      }
+      this.notify();
+      return order;
+    }
+
+    const nextStatus = sequence[currentIndex + 1];
+    order.orderStatus = nextStatus;
+    order.updatedAt = new Date().toISOString();
+    order.trackingTimeline = generateDefaultTrackingTimeline(order.createdAt, order.district, nextStatus);
+
+    if (nextStatus === 'DELIVERED' || nextStatus === 'COMPLETED') {
+      if (order.paymentMethod === 'COD') {
+        order.paymentStatus = 'PAID';
+      }
+    }
+
+    const statusBanglaMap: Record<string, string> = {
+      CONFIRMED: 'অর্ডার নিশ্চিত হয়েছে ও ভেন্ডর প্রস্তুত করছে',
+      PROCESSING: 'প্যাকেজিং ও কোয়ালিটি চেক সম্পন্ন হয়েছে',
+      SHIPPED: `কুরিয়ারে হস্তান্তর হয়েছে (ট্র্যাকিং: ${order.trackingNumber})`,
+      DELIVERED: 'আপনার অর্ডারটি সফলভাবে ডেলিভার্ড হয়েছে!'
+    };
+
+    this.notifications.unshift({
+      id: `notif-${Date.now()}`,
+      userId: order.customerId,
+      title: `অর্ডার আপডেট: #${order.orderNumber}`,
+      message: statusBanglaMap[nextStatus] || `আপনার অর্ডার স্ট্যাটাস পরিবর্তিত হয়ে ${nextStatus} হয়েছে।`,
+      type: 'ORDER_STATUS_UPDATE',
+      isRead: false,
+      createdAt: new Date().toISOString()
+    });
+
+    this.notify();
+    return order;
+  }
+
+  public confirmOrderDelivered(orderId: string, otp?: string): ProductOrder | null {
+    const order = this.orders.find(o => o.id === orderId || o.orderNumber === orderId);
+    if (!order) return null;
+
+    order.orderStatus = 'DELIVERED';
+    order.paymentStatus = 'PAID';
+    order.updatedAt = new Date().toISOString();
+    order.trackingTimeline = generateDefaultTrackingTimeline(order.createdAt, order.district, 'DELIVERED');
+
+    this.notifications.unshift({
+      id: `notif-${Date.now()}`,
+      userId: order.customerId,
+      title: `অর্ডার ডেলিভারি সফল: #${order.orderNumber}`,
+      message: `আপনার পার্সেল সফলভাবে ডেলিভারি দেওয়া হয়েছে। পণ্যটি কেমন লেগেছে অনুগ্রহ করে রিভিউ দিন।`,
+      type: 'ORDER_STATUS_UPDATE',
+      isRead: false,
+      createdAt: new Date().toISOString()
+    });
+
+    this.notify();
+    return order;
+  }
+
+  public submitOrderReview(orderId: string, rating: number, reviewText: string): boolean {
+    const order = this.orders.find(o => o.id === orderId || o.orderNumber === orderId);
+    if (!order) return false;
+
+    order.reviewSubmitted = true;
+    order.rating = rating;
+    order.reviewText = reviewText;
+    order.updatedAt = new Date().toISOString();
+
+    // Update product ratings
+    order.items.forEach(item => {
+      const prod = this.products.find(p => p.id === item.productId);
+      if (prod) {
+        prod.reviewCount = (prod.reviewCount || 0) + 1;
+        prod.rating = Number(((prod.rating * (prod.reviewCount - 1) + rating) / prod.reviewCount).toFixed(2));
+      }
+    });
+
+    this.notify();
+    return true;
+  }
+
+  public cancelProductOrder(orderId: string, reason: string = 'গ্রাহক কর্তৃক বাতিল'): boolean {
+    const order = this.orders.find(o => o.id === orderId || o.orderNumber === orderId);
+    if (!order || order.orderStatus === 'DELIVERED' || order.orderStatus === 'COMPLETED') {
+      return false;
+    }
+
+    order.orderStatus = 'CANCELLED';
+    order.adminNote = `বাতিলের কারণ: ${reason}`;
+    order.updatedAt = new Date().toISOString();
+
+    // Restore stock
+    order.items.forEach(item => {
+      const prod = this.products.find(p => p.id === item.productId);
+      if (prod) {
+        prod.stock += item.quantity;
+      }
+    });
+
+    this.notifications.unshift({
+      id: `notif-${Date.now()}`,
+      userId: order.customerId,
+      title: `অর্ডার বাতিল: #${order.orderNumber}`,
+      message: `আপনার অর্ডার #${order.orderNumber} বাতিল করা হয়েছে। কারণ: ${reason}`,
+      type: 'ORDER_STATUS_UPDATE',
+      isRead: false,
+      createdAt: new Date().toISOString()
+    });
+
+    this.notify();
+    return true;
   }
 
   // --- EBOOK PURCHASES ---

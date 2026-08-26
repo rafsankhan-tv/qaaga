@@ -387,11 +387,12 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose, onNavig
                   <button
                     onClick={() => {
                       onClose();
-                      onNavigate('customer_dashboard');
+                      onNavigate('track_order', { orderNumber: lastOrderNumber });
                     }}
-                    className="w-full bg-[#4e20b8] hover:bg-[#41189e] text-white text-xs font-bold py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
+                    className="w-full bg-gradient-to-r from-[#4e20b8] to-purple-800 hover:opacity-95 text-white text-xs font-bold py-2.5 rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
                   >
-                    কাস্টমার ড্যাশবোর্ডে ট্র্যাক করুন
+                    <Truck size={15} />
+                    <span>লাইভ অর্ডার ট্র্যাকিং করুন</span>
                   </button>
                   <button
                     onClick={() => {
@@ -430,13 +431,24 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose, onNavig
               </div>
 
               {step === 'cart' ? (
-                <button
-                  onClick={() => setStep('checkout')}
-                  className="w-full bg-[#ff6d00] hover:bg-[#ea6000] text-white text-xs font-bold py-3 rounded-xl shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer"
-                >
-                  <span>চেকআউট করুন (Proceed to Checkout)</span>
-                  <ArrowRight size={14} />
-                </button>
+                <div className="space-y-2">
+                  <button
+                    onClick={() => {
+                      onClose();
+                      onNavigate('checkout');
+                    }}
+                    className="w-full bg-[#ff6d00] hover:bg-[#ea6000] text-white text-xs font-bold py-3 rounded-xl shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer"
+                  >
+                    <span>চেকআউট ও পেমেন্ট (Checkout)</span>
+                    <ArrowRight size={14} />
+                  </button>
+                  <button
+                    onClick={() => setStep('checkout')}
+                    className="w-full bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 text-xs font-semibold py-2 rounded-xl transition-all cursor-pointer text-center"
+                  >
+                    কুইক ড্রয়ার চেকআউট (Quick Drawer)
+                  </button>
+                </div>
               ) : (
                 <div className="flex gap-2">
                   <button

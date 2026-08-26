@@ -18,12 +18,15 @@ import {
   User,
   ShoppingBag,
   ExternalLink,
-  Layers
+  Layers,
+  Share2
 } from 'lucide-react';
 import { ShowcaseCardItem, CategoryShowcaseSection, UserProfile } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { marketplaceStore } from '../services/marketplaceStore';
 import { RenderCategoryIcon } from './CategoryIconHelper';
+import { SocialShareModal, ShareTargetData } from './common/SocialShareModal';
+import { FeedProfileModal } from './feed/FeedProfileModal';
 
 interface ShowcaseItemProfileModalProps {
   item: ShowcaseCardItem | null;
@@ -53,6 +56,10 @@ export const ShowcaseItemProfileModal: React.FC<ShowcaseItemProfileModalProps> =
   const [customerNotes, setCustomerNotes] = useState('');
   const [preferredDate, setPreferredDate] = useState(new Date().toISOString().split('T')[0]);
   const [advanceChoice, setAdvanceChoice] = useState<'twenty' | 'full' | 'cod'>('twenty');
+
+  // Share & Provider Profile Modal State
+  const [shareModalData, setShareModalData] = useState<ShareTargetData | null>(null);
+  const [selectedProviderIdForProfile, setSelectedProviderIdForProfile] = useState<string | null>(null);
 
   // Lock background scrolling and handle escape key when modal is open
   useEffect(() => {
@@ -201,12 +208,32 @@ export const ShowcaseItemProfileModal: React.FC<ShowcaseItemProfileModalProps> =
             </div>
           </div>
 
-          <button
-            onClick={onClose}
-            className="w-8 h-8 rounded-full bg-white hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition-colors cursor-pointer border border-slate-200"
-          >
-            <X size={16} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                setShareModalData({
+                  type: 'service',
+                  id: item.id,
+                  title: item.title,
+                  subtitle: `${providerName} • ৳ ${item.priceOrSalary}`,
+                  image: item.imageUrl,
+                  badge: item.badge || 'ভেরিফাইড প্যাকেজ'
+                });
+              }}
+              className="px-3 py-1.5 rounded-full bg-purple-50 hover:bg-purple-100 text-[#4e20b8] flex items-center gap-1.5 transition-all cursor-pointer border border-purple-200 text-xs font-bold"
+              title="সার্ভিস শেয়ার করুন"
+            >
+              <Share2 size={13} />
+              <span className="hidden sm:inline">শেয়ার</span>
+            </button>
+
+            <button
+              onClick={onClose}
+              className="w-8 h-8 rounded-full bg-white hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition-colors cursor-pointer border border-slate-200"
+            >
+              <X size={16} />
+            </button>
+          </div>
         </div>
 
         {/* MODAL BODY (SCROLLABLE) */}
@@ -336,38 +363,46 @@ export const ShowcaseItemProfileModal: React.FC<ShowcaseItemProfileModalProps> =
                   </div>
 
                   {/* Provider Info Pill */}
-                  <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-2xl border border-slate-200/80">
-                    <img
-                      src={providerAvatar}
-                      alt={providerName}
-                      className="w-11 h-11 rounded-full object-cover ring-2 ring-white shadow-xs shrink-0"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-bold text-slate-900 truncate">
-                          {providerName}
-                        </span>
-                        <ShieldCheck size={14} className="text-[#4e20b8] shrink-0" />
-                      </div>
-                      <p className="text-[11px] text-slate-500 truncate">{providerRole}</p>
-                      <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
-                        <span className="flex items-center gap-0.5 text-emerald-600 font-bold">
-                          <Award size={10} />
-                          <span>{providerExperience}</span>
-                        </span>
-                        <span>•</span>
-                        <span>১০০% ভেরিফাইড প্রোফাইল</span>
+                  <div className="flex items-center justify-between gap-3 p-3 bg-slate-50 rounded-2xl border border-slate-200/80">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <img
+                        src={providerAvatar}
+                        alt={providerName}
+                        className="w-11 h-11 rounded-full object-cover ring-2 ring-white shadow-xs shrink-0 cursor-pointer"
+                        onClick={() => setSelectedProviderIdForProfile(item.providerId || 'user-provider-1')}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            onClick={() => setSelectedProviderIdForProfile(item.providerId || 'user-provider-1')}
+                            className="text-xs font-bold text-slate-900 truncate hover:text-[#4e20b8] cursor-pointer"
+                          >
+                            {providerName}
+                          </span>
+                          <ShieldCheck size={14} className="text-[#4e20b8] shrink-0" />
+                        </div>
+                        <p className="text-[11px] text-slate-500 truncate">{providerRole}</p>
+                        <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
+                          <span className="flex items-center gap-0.5 text-emerald-600 font-bold">
+                            <Award size={10} />
+                            <span>{providerExperience}</span>
+                          </span>
+                          <span>•</span>
+                          <span>১০০% ভেরিফাইড প্রোফাইল</span>
+                        </div>
                       </div>
                     </div>
 
-                    {/* Quick Call Button */}
-                    <a
-                      href={`tel:${item.providerPhone || '01900000000'}`}
-                      className="w-8 h-8 rounded-xl bg-white hover:bg-emerald-50 text-emerald-600 border border-slate-200 flex items-center justify-center shadow-2xs transition-colors shrink-0"
-                      title="সরাসরি কল করুন"
-                    >
-                      <Phone size={14} />
-                    </a>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {/* View Complete Profile Button */}
+                      <button
+                        type="button"
+                        onClick={() => setSelectedProviderIdForProfile(item.providerId || 'user-provider-1')}
+                        className="px-3 py-1.5 rounded-xl bg-purple-100 hover:bg-purple-200 text-[#4e20b8] text-xs font-bold transition-colors cursor-pointer"
+                      >
+                        প্রোফাইল দেখুন
+                      </button>
+                    </div>
                   </div>
 
                   {/* Pricing and Advance Guarantee Bar */}
@@ -609,6 +644,28 @@ export const ShowcaseItemProfileModal: React.FC<ShowcaseItemProfileModalProps> =
         </div>
 
       </div>
+
+      {/* Social Media & Link Share Modal */}
+      <SocialShareModal
+        isOpen={!!shareModalData}
+        onClose={() => setShareModalData(null)}
+        shareData={shareModalData}
+      />
+
+      {/* Complete Provider / Author Profile Modal */}
+      {selectedProviderIdForProfile && (
+        <FeedProfileModal
+          isOpen={!!selectedProviderIdForProfile}
+          onClose={() => setSelectedProviderIdForProfile(null)}
+          targetId={selectedProviderIdForProfile}
+          onNavigate={(view, params) => {
+            setSelectedProviderIdForProfile(null);
+            onClose();
+            onNavigate(view, params);
+          }}
+        />
+      )}
+
     </div>,
     document.body
   );

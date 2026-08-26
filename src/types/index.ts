@@ -373,19 +373,65 @@ export interface SellerStore {
   userId: string;
   shopName: string;
   shopLogo: string;
+  bannerImage?: string;
+  ownerName?: string;
   phone: string;
+  whatsapp?: string;
   email: string;
-  nidNumber: string;
+  nidNumber?: string;
   tradeLicense?: string;
   address: string;
   district: string;
   thana: string;
   area: string;
+  bio?: string;
+  deliveryPolicy?: string;
+  returnPolicy?: string;
   bankAccountInfo?: string;
+  bkashMerchant?: string;
   productCategories: string[];
-  approvalStatus: 'PENDING' | 'APPROVED' | 'REJECTED';
+  approvalStatus: 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED';
+  isVerified: boolean;
+  hasOfficialBadge?: boolean;
   rating: number;
+  reviewCount: number;
   totalSales: number;
+  totalProducts?: number;
+  joinedDate?: string;
+  responseTime?: string;
+  deliverySuccessRate?: number;
+  commissionRatePercent?: number;
+  availableBalance?: number;
+  pendingBalance?: number;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface SellerPayoutRequest {
+  id: string;
+  sellerId: string;
+  sellerShopName: string;
+  amount: number;
+  paymentMethod: 'BKASH' | 'NAGAD' | 'BANK_TRANSFER';
+  accountNumber: string;
+  bankName?: string;
+  accountHolderName?: string;
+  status: 'PENDING' | 'APPROVED' | 'PAID' | 'REJECTED';
+  adminNote?: string;
+  transactionRef?: string;
+  requestedAt: string;
+  processedAt?: string;
+}
+
+export interface SellerReview {
+  id: string;
+  sellerId: string;
+  customerId: string;
+  customerName: string;
+  customerAvatar?: string;
+  rating: number;
+  comment: string;
+  productTitle?: string;
   createdAt: string;
 }
 
@@ -419,6 +465,24 @@ export interface ProductOrderItem {
   sellerId: string;
 }
 
+export interface OrderTrackingStep {
+  stepKey: 'PENDING' | 'CONFIRMED' | 'PROCESSING' | 'SHIPPED' | 'OUT_FOR_DELIVERY' | 'DELIVERED';
+  titleBangla: string;
+  titleEnglish: string;
+  descriptionBangla: string;
+  timestamp?: string;
+  location?: string;
+  isCompleted: boolean;
+  isCurrent: boolean;
+}
+
+export interface WishlistItem {
+  id: string;
+  type: 'PRODUCT' | 'EBOOK' | 'USED';
+  itemId: string;
+  addedAt: string;
+}
+
 export interface ProductOrder {
   id: string;
   orderNumber: string;
@@ -432,8 +496,12 @@ export interface ProductOrder {
   items: ProductOrderItem[];
   subtotal: number;
   deliveryFee: number;
+  discountAmount?: number;
+  couponCode?: string;
   totalAmount: number;
   paymentMethod: 'COD' | 'ONLINE_BKASH' | 'ONLINE_CARD';
+  paymentStatus?: 'PENDING' | 'PAID' | 'FAILED';
+  transactionId?: string;
   orderStatus:
     | 'PENDING'
     | 'CONFIRMED'
@@ -444,6 +512,19 @@ export interface ProductOrder {
     | 'CANCELLED'
     | 'RETURN_REQUESTED'
     | 'RETURNED';
+  courierPartner?: string;
+  trackingNumber?: string;
+  courierTrackingUrl?: string;
+  riderName?: string;
+  riderPhone?: string;
+  estimatedDelivery?: string;
+  deliveryOtp?: string;
+  trackingTimeline?: OrderTrackingStep[];
+  customerNote?: string;
+  adminNote?: string;
+  reviewSubmitted?: boolean;
+  rating?: number;
+  reviewText?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -543,6 +624,26 @@ export interface JobApplication {
   coverLetter: string;
   status: 'APPLIED' | 'VIEWED' | 'SHORTLISTED' | 'INTERVIEW' | 'SELECTED' | 'REJECTED';
   appliedAt: string;
+}
+
+export interface BlogPost {
+  id: string;
+  title: string;
+  slug: string;
+  excerpt: string;
+  content: string;
+  coverImage: string;
+  authorName: string;
+  authorAvatar: string;
+  authorRole: string;
+  category: string;
+  tags: string[];
+  readTimeMinutes: number;
+  likesCount: number;
+  viewsCount: number;
+  publishedAt: string;
+  featured?: boolean;
+  relatedCategoryKey?: string;
 }
 
 export interface ChatMessage {

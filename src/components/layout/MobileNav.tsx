@@ -37,7 +37,9 @@ import {
   Instagram,
   Video,
   Phone,
-  Mail
+  Mail,
+  Heart,
+  Truck
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useLocation } from '../../context/LocationContext';
@@ -496,24 +498,46 @@ export const MobileNav: React.FC<MobileNavProps> = ({ currentView, onNavigate, o
               </button>
             </div>
 
-            {/* Quick Utilities: Cart, Support, Search */}
-            <div className="grid grid-cols-3 gap-2 mb-4">
+            {/* Quick Utilities: Cart, Wishlist, Tracking, Support, Search */}
+            <div className="grid grid-cols-5 gap-1.5 mb-4">
               <button
                 onClick={() => {
                   setIsProfileSheetOpen(false);
                   setIsCartOpen(true);
                 }}
-                className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-center flex flex-col items-center justify-center cursor-pointer hover:bg-slate-100"
+                className="p-2 rounded-xl bg-slate-50 border border-slate-200 text-center flex flex-col items-center justify-center cursor-pointer hover:bg-slate-100"
               >
                 <div className="relative">
-                  <ShoppingCart size={18} className="text-[#4e20b8]" />
+                  <ShoppingCart size={16} className="text-[#4e20b8]" />
                   {cartCount > 0 && (
-                    <span className="absolute -top-1.5 -right-2 bg-[#ff6d00] text-white text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center">
+                    <span className="absolute -top-1.5 -right-2 bg-[#ff6d00] text-white text-[8px] font-black w-3.5 h-3.5 rounded-full flex items-center justify-center">
                       {cartCount}
                     </span>
                   )}
                 </div>
-                <span className="text-[11px] font-bold text-slate-800 mt-1">শপিং কার্ট</span>
+                <span className="text-[10px] font-bold text-slate-800 mt-1">কার্ট</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setIsProfileSheetOpen(false);
+                  onNavigate('wishlist');
+                }}
+                className="p-2 rounded-xl bg-rose-50/70 border border-rose-200 text-center flex flex-col items-center justify-center cursor-pointer hover:bg-rose-100/70"
+              >
+                <Heart size={16} className="text-rose-600 fill-rose-100" />
+                <span className="text-[10px] font-bold text-rose-800 mt-1">উইশলিস্ট</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setIsProfileSheetOpen(false);
+                  onNavigate('track_order');
+                }}
+                className="p-2 rounded-xl bg-indigo-50/70 border border-indigo-200 text-center flex flex-col items-center justify-center cursor-pointer hover:bg-indigo-100/70"
+              >
+                <Truck size={16} className="text-[#4e20b8]" />
+                <span className="text-[10px] font-bold text-[#4e20b8] mt-1">ট্র্যাকিং</span>
               </button>
 
               <button
@@ -521,10 +545,10 @@ export const MobileNav: React.FC<MobileNavProps> = ({ currentView, onNavigate, o
                   setIsProfileSheetOpen(false);
                   setIsChatOpen(true);
                 }}
-                className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-center flex flex-col items-center justify-center cursor-pointer hover:bg-slate-100"
+                className="p-2 rounded-xl bg-slate-50 border border-slate-200 text-center flex flex-col items-center justify-center cursor-pointer hover:bg-slate-100"
               >
-                <Headphones size={18} className="text-[#ff6d00]" />
-                <span className="text-[11px] font-bold text-slate-800 mt-1">লাইভ হেল্প</span>
+                <Headphones size={16} className="text-[#ff6d00]" />
+                <span className="text-[10px] font-bold text-slate-800 mt-1">হেল্প</span>
               </button>
 
               <button
@@ -533,10 +557,10 @@ export const MobileNav: React.FC<MobileNavProps> = ({ currentView, onNavigate, o
                   if (onOpenSearch) onOpenSearch();
                   else onNavigate('service_request');
                 }}
-                className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-center flex flex-col items-center justify-center cursor-pointer hover:bg-slate-100"
+                className="p-2 rounded-xl bg-slate-50 border border-slate-200 text-center flex flex-col items-center justify-center cursor-pointer hover:bg-slate-100"
               >
-                <Search size={18} className="text-emerald-600" />
-                <span className="text-[11px] font-bold text-slate-800 mt-1">সার্চ ফিল্টার</span>
+                <Search size={16} className="text-emerald-600" />
+                <span className="text-[10px] font-bold text-slate-800 mt-1">সার্চ</span>
               </button>
             </div>
 

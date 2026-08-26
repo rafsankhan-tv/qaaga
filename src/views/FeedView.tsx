@@ -34,6 +34,7 @@ import { CreatePostModal } from '../components/feed/CreatePostModal';
 import { FeedProfileModal } from '../components/feed/FeedProfileModal';
 import { FeedBannerSlider } from '../components/feed/FeedBannerSlider';
 import { SUGGESTED_PROFILES_TO_FOLLOW } from '../data/mockFeedData';
+import { SocialShareModal, ShareTargetData } from '../components/common/SocialShareModal';
 
 interface FeedViewProps {
   onNavigate: (view: string, params?: any) => void;
@@ -60,6 +61,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
   const [shareToast, setShareToast] = useState<string | null>(null);
   const [bookmarkedPostIds, setBookmarkedPostIds] = useState<string[]>([]);
+  const [shareModalData, setShareModalData] = useState<ShareTargetData | null>(null);
 
   // Load feed posts and follows
   const loadFeedData = () => {
@@ -122,9 +124,14 @@ export const FeedView: React.FC<FeedViewProps> = ({
 
   // Share link handler
   const handleShare = (post: FeedPost) => {
-    navigator.clipboard?.writeText(window.location.href);
-    setShareToast(`"${post.title || 'পোস্ট'}"-এর লিঙ্ক কপি করা হয়েছে! 📋`);
-    setTimeout(() => setShareToast(null), 3000);
+    setShareModalData({
+      type: 'post',
+      id: post.id,
+      title: post.title || `${post.authorName}-এর পোস্ট`,
+      subtitle: post.content.slice(0, 100) + '...',
+      image: (post.images && post.images[0]) || post.authorAvatar,
+      badge: 'ফিড আপডেট'
+    });
   };
 
   // Bookmark toggle
@@ -783,6 +790,13 @@ export const FeedView: React.FC<FeedViewProps> = ({
           onNavigate={onNavigate}
         />
       )}
+
+      {/* Social Media & Link Share Modal */}
+      <SocialShareModal
+        isOpen={!!shareModalData}
+        onClose={() => setShareModalData(null)}
+        shareData={shareModalData}
+      />
 
     </div>
   );
