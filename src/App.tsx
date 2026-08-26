@@ -152,8 +152,8 @@ const MainApp: React.FC = () => {
         />
       )}
 
-      {/* Floating 24/7 WhatsApp & Direct Call Help Widget */}
-      <FloatingHelpWidget />
+      {/* Floating 24/7 Multimodal Suchi Assistant & Direct Help Widget */}
+      <FloatingHelpWidget onNavigate={handleNavigate} />
 
       {/* Mobile Sticky Bottom Navigation with Complete Profile Hub & Quick Action */}
       <MobileNav
