@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Sparkles,
   Search,
@@ -525,16 +526,16 @@ export const CuteCatAssistantModal: React.FC<CuteCatAssistantModalProps> = ({
 
   if (!isOpen) return null;
 
-  return (
+  const modalContent = (
     <div
       id="cute-cat-assistant-modal-backdrop"
-      className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-2 sm:p-4 overflow-y-auto animate-fadeIn"
+      className="fixed inset-0 bg-slate-950/75 backdrop-blur-sm z-[99999] flex items-center justify-center p-2 sm:p-4 overflow-y-auto animate-fadeIn"
       onClick={onClose}
     >
       <div
         id="cute-cat-assistant-modal-box"
         onClick={(e) => e.stopPropagation()}
-        className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl border-2 border-purple-300 animate-scaleUp my-auto max-h-[92vh] flex flex-col overflow-hidden"
+        className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl border-2 border-purple-300 animate-scaleUp my-auto max-h-[92vh] flex flex-col overflow-hidden relative z-[100000]"
       >
         {/* MODAL TOP HEADER */}
         <div className="flex items-center justify-between p-3.5 sm:p-4 border-b border-purple-100 bg-gradient-to-r from-purple-50 via-amber-50/40 to-purple-50 shrink-0">
@@ -1352,4 +1353,9 @@ export const CuteCatAssistantModal: React.FC<CuteCatAssistantModalProps> = ({
       `}</style>
     </div>
   );
+
+  if (typeof document !== 'undefined') {
+    return createPortal(modalContent, document.body);
+  }
+  return modalContent;
 };

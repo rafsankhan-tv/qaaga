@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   Send,
@@ -88,16 +89,16 @@ export const SupportChatDrawer: React.FC<SupportChatDrawerProps> = ({ isOpen, on
     { label: 'পেমেন্ট ও রিফান্ড', text: 'ক্যাশ অন ডেলিভারি এবং বিকাশ পেমেন্ট রিফান্ড পলিসি কী?' }
   ];
 
-  return (
-    <div className="fixed inset-0 z-50 overflow-hidden">
+  const drawerContent = (
+    <div className="fixed inset-0 z-[99980] overflow-hidden">
       {/* Backdrop */}
       <div
         onClick={onClose}
-        className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity animate-fadeIn"
+        className="absolute inset-0 bg-slate-950/70 backdrop-blur-xs transition-opacity animate-fadeIn"
       />
 
       {/* Drawer Panel */}
-      <div className="fixed inset-y-0 right-0 max-w-full flex pl-6 sm:pl-10">
+      <div className="fixed inset-y-0 right-0 max-w-full flex pl-6 sm:pl-10 z-[99981]">
         <div className="w-screen max-w-lg bg-white shadow-2xl flex flex-col justify-between animate-slideLeft">
           
           {/* Header */}
@@ -265,4 +266,9 @@ export const SupportChatDrawer: React.FC<SupportChatDrawerProps> = ({ isOpen, on
       </div>
     </div>
   );
+
+  if (typeof document !== 'undefined') {
+    return createPortal(drawerContent, document.body);
+  }
+  return drawerContent;
 };

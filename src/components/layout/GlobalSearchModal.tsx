@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Search, ChevronRight, Stethoscope, Wrench, ShoppingBag, Hotel, Briefcase, BookOpen, User } from 'lucide-react';
 import { marketplaceStore } from '../../services/marketplaceStore';
 
@@ -33,9 +34,9 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
 
   const totalResults = matchingCategories.length + matchingProviders.length + matchingDoctors.length + matchingHotels.length + matchingProducts.length + matchingEbooks.length + matchingJobs.length;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 sm:pt-24 p-3 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
-      <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[80vh] shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
+  const modalContent = (
+    <div className="fixed inset-0 z-[99990] flex items-start justify-center pt-16 sm:pt-24 p-3 bg-slate-950/70 backdrop-blur-sm animate-fadeIn">
+      <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[80vh] shadow-2xl border border-slate-200 overflow-hidden flex flex-col relative z-[99991]">
         {/* Search Input */}
         <div className="p-3.5 border-b border-slate-200 flex items-center gap-3 bg-slate-50">
           <Search size={18} className="text-indigo-600 shrink-0" />
@@ -210,4 +211,9 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
       </div>
     </div>
   );
+
+  if (typeof document !== 'undefined') {
+    return createPortal(modalContent, document.body);
+  }
+  return modalContent;
 };
