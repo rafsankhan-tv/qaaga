@@ -14,7 +14,10 @@ import {
   Bell,
   CheckCircle2,
   MessageSquare,
-  ShoppingCart
+  ShoppingCart,
+  Phone,
+  Mail,
+  Headphones
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useLocation } from '../../context/LocationContext';
@@ -352,7 +355,7 @@ export const Header: React.FC<HeaderProps> = ({ currentView, onNavigate, onOpenS
                       <div className="text-xs font-bold text-slate-900 truncate">
                         {currentUser?.fullName || 'Rafsan Khan'}
                       </div>
-                      <div className="text-[11px] text-slate-500 truncate">{currentUser?.email || 'rafsankhan.tv@gmail.com'}</div>
+                      <div className="text-[11px] text-slate-500 truncate">{currentUser?.email || 'qaaga@consultant.com'}</div>
                       <div className="mt-1 flex items-center gap-1.5">
                         <span className="text-[10px] bg-purple-50 text-[#4e20b8] border border-purple-100 font-bold px-2 py-0.5 rounded-md">
                           Role: {activeRole}

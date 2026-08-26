@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, ShieldCheck, CheckCircle2, CreditCard, Smartphone, Building, AlertCircle, Loader2 } from 'lucide-react';
 
 interface PaymentModalProps {
@@ -32,6 +33,25 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   const [pinOrOtp, setPinOrOtp] = useState('1234');
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+
+  useEffect(() => {
+    if (isOpen) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          onClose();
+        }
+      };
+      window.addEventListener('keydown', handleKeyDown);
+
+      return () => {
+        document.body.style.overflow = originalOverflow;
+        window.removeEventListener('keydown', handleKeyDown);
+      };
+    }
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -88,11 +108,18 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
-      <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
+  return createPortal(
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-[999999] flex items-center justify-center p-3 sm:p-4 md:p-6 bg-slate-950/80 backdrop-blur-md overflow-y-auto animate-fadeIn"
+      style={{ minHeight: '100vh', minWidth: '100vw' }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="bg-white rounded-2xl max-w-lg w-full my-auto shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh] animate-scaleUp"
+      >
         {/* Modal Header */}
-        <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
+        <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/90 sticky top-0 z-20 backdrop-blur-sm">
           <div className="flex items-center gap-2">
             <div className="w-9 h-9 rounded-xl bg-teal-600/10 text-teal-700 flex items-center justify-center font-bold">
               <ShieldCheck size={20} />
@@ -104,7 +131,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors"
+            className="w-8 h-8 rounded-full hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors cursor-pointer"
           >
             <X size={18} />
           </button>
@@ -287,6 +314,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

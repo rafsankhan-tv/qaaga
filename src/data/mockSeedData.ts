@@ -31,8 +31,8 @@ export const INITIAL_SYSTEM_SETTINGS: PlatformSystemSettings = {
   requireProductApproval: true,
   urgentFeeMultiplier: 1.15,
   bkashMerchantNumber: '01712-345678 (QAAGA Official)',
-  supportPhone: '+880 1800-QAAGA-1',
-  supportEmail: 'support@qaaga.com',
+  supportPhone: '09658824360',
+  supportEmail: 'qaaga@consultant.com',
 
   // Site Branding & Meta Title requested by user
   siteTitle: DEFAULT_SITE_TITLE,
@@ -52,9 +52,9 @@ export const INITIAL_SYSTEM_SETTINGS: PlatformSystemSettings = {
 export const SEED_USERS: UserProfile[] = [
   {
     id: 'user-admin',
-    email: 'rafsankhan.tv@gmail.com',
+    email: 'qaaga@consultant.com',
     fullName: 'Rafsan Khan',
-    phone: '+8801711002233',
+    phone: '+8801644985301',
     avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&h=200&q=80',
     gender: 'male',
     division: 'Dhaka',

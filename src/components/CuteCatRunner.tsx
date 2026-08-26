@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import {
   Sparkles,
   Heart,
-  Flame
+  Flame,
+  X
 } from 'lucide-react';
 import { CuteCatAssistantSettings } from '../types';
 import { marketplaceStore } from '../services/marketplaceStore';
@@ -30,6 +31,7 @@ export const CuteCatRunner: React.FC<CuteCatRunnerProps> = ({
   const [assistantModalMode, setAssistantModalMode] = useState<'chat' | 'text' | 'voice' | 'photo'>('chat');
   const [showHeartReact, setShowHeartReact] = useState(false);
   const [isFloatingBubbleVisible, setIsFloatingBubbleVisible] = useState(true);
+  const [isDockedDismissed, setIsDockedDismissed] = useState(false);
   const [isMouthTalking, setIsMouthTalking] = useState(false);
   const [bubbleAnimationKey, setBubbleAnimationKey] = useState(0);
 
@@ -253,14 +255,14 @@ export const CuteCatRunner: React.FC<CuteCatRunnerProps> = ({
       )}
 
       {/* 2. DOCKED FLOATING MINI-CAT WIDGET (When visitor scrolls down the page on any device) */}
-      {renderFloating && isScrolledDown && settings.enableFloatingOnScroll && (
+      {renderFloating && !isDockedDismissed && settings.enableFloatingOnScroll && (
         <div
           id="docked-cat-floating"
           className={`fixed ${
             settings.floatingPosition === 'bottom-left'
               ? 'left-3 sm:left-6 items-start'
               : 'right-3 sm:right-6 items-end'
-          } bottom-[76px] md:bottom-6 z-50 flex flex-col animate-slideUp select-none`}
+          } bottom-[74px] sm:bottom-6 z-50 flex flex-col animate-slideUp select-none`}
           style={{
             transform: `scale(${settings.floatingScale || 0.95})`,
             transformOrigin: settings.floatingPosition === 'bottom-left' ? 'bottom left' : 'bottom right'
@@ -301,36 +303,51 @@ export const CuteCatRunner: React.FC<CuteCatRunnerProps> = ({
             </div>
           )}
 
-          {/* Mini Docked Animated Jumping Cat Button */}
-          <div
-            className="relative group cursor-pointer"
-            onClick={() => handleCatClick('chat')}
-            title="মিউ মিউ অ্যাসিস্ট্যান্টকে জিজ্ঞেস করুন"
-          >
-            {/* Glowing animated pulsing aura */}
-            <div className="absolute -inset-1.5 bg-gradient-to-r from-purple-600 via-amber-400 to-purple-600 rounded-full blur-xs opacity-80 group-hover:opacity-100 transition-opacity animate-pulse" />
+          {/* Mini Docked Animated Jumping Cat Button with 'X' Hide Trigger */}
+          <div className="relative group">
+            {/* Dedicated 'X' Hide Button for Visitor */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsDockedDismissed(true);
+              }}
+              className="absolute -top-1 -right-1 w-5 h-5 bg-slate-900/90 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-[10px] font-bold shadow-md cursor-pointer border border-white/60 transition-colors z-30"
+              title="লাইভ হেল্পার হাইড করুন (Hide)"
+            >
+              <X size={11} />
+            </button>
 
-            <div className="relative bg-white rounded-full p-2 border-2 border-[#4e20b8] shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all">
-              <div className="animate-catLapjhat">
-                <CuteCatAvatarSvg
-                  skin={settings.catSkin || 'orange-tabby'}
-                  isTalking={isMouthTalking}
-                  size={52}
-                  customUrl={settings.avatarUrl}
-                />
+            <div
+              className="relative group cursor-pointer"
+              onClick={() => handleCatClick('chat')}
+              title="মিউ মিউ লাইভ অ্যাসিস্ট্যান্টকে জিজ্ঞেস করুন"
+            >
+              {/* Glowing animated pulsing aura */}
+              <div className="absolute -inset-1.5 bg-gradient-to-r from-purple-600 via-amber-400 to-purple-600 rounded-full blur-xs opacity-80 group-hover:opacity-100 transition-opacity animate-pulse" />
+
+              <div className="relative bg-white rounded-full p-2 border-2 border-[#4e20b8] shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all">
+                <div className="animate-catLapjhat">
+                  <CuteCatAvatarSvg
+                    skin={settings.catSkin || 'orange-tabby'}
+                    isTalking={isMouthTalking}
+                    size={52}
+                    customUrl={settings.avatarUrl}
+                  />
+                </div>
+
+                {/* Online pulse status beacon */}
+                <span className="absolute top-0 right-0 flex h-3.5 w-3.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500 border-2 border-white"></span>
+                </span>
               </div>
 
-              {/* Online pulse status beacon */}
-              <span className="absolute top-0 right-0 flex h-3.5 w-3.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500 border-2 border-white"></span>
-              </span>
-            </div>
-
-            {/* Click CTA label pill: জিজ্ঞেস করুন 🐾 */}
-            <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-[#4e20b8] hover:bg-[#3b1594] text-white text-[9px] sm:text-[10px] font-black px-2.5 py-0.5 rounded-full shadow-md whitespace-nowrap border border-white flex items-center gap-1 transition-transform group-hover:scale-105">
-              <span>জিজ্ঞেস করুন</span>
-              <span>🐾</span>
+              {/* Click CTA label pill: জিজ্ঞেস করুন 🐾 */}
+              <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-[#4e20b8] hover:bg-[#3b1594] text-white text-[9px] sm:text-[10px] font-black px-2.5 py-0.5 rounded-full shadow-md whitespace-nowrap border border-white flex items-center gap-1 transition-transform group-hover:scale-105">
+                <span>লাইভ হেল্প</span>
+                <span>🐾</span>
+              </div>
             </div>
           </div>
         </div>

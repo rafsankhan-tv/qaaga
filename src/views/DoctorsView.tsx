@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Stethoscope,
   Calendar,
@@ -9,7 +10,8 @@ import {
   Search,
   User,
   Phone,
-  FileText
+  FileText,
+  X
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { marketplaceStore } from '../services/marketplaceStore';
@@ -31,6 +33,21 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ initialDoctorId, onNav
   const [bookingDoctor, setBookingDoctor] = useState<DoctorProfile | null>(
     doctors.find((d) => d.id === initialDoctorId) || null
   );
+
+  useEffect(() => {
+    if (bookingDoctor) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') setBookingDoctor(null);
+      };
+      window.addEventListener('keydown', handleKeyDown);
+      return () => {
+        document.body.style.overflow = originalOverflow;
+        window.removeEventListener('keydown', handleKeyDown);
+      };
+    }
+  }, [bookingDoctor]);
 
   // Booking Form State
   const [patientName, setPatientName] = useState(currentUser?.fullName || 'Mohammad Rafiq');
@@ -187,132 +204,141 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ initialDoctorId, onNav
       </div>
 
       {/* APPOINTMENT BOOKING MODAL */}
-      {bookingDoctor && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto space-y-4">
-            <div className="border-b border-slate-100 pb-3 flex items-start justify-between">
-              <div>
-                <h3 className="text-base font-bold text-slate-900">Book Doctor Consultation Serial</h3>
-                <div className="text-xs text-blue-700 font-semibold">{bookingDoctor.name} &bull; {bookingDoctor.specialization}</div>
-              </div>
-              <button
-                onClick={() => setBookingDoctor(null)}
-                className="text-slate-400 hover:text-slate-700 text-xs font-bold"
-              >
-                Close
-              </button>
-            </div>
-
-            <form onSubmit={handleOpenPayment} className="space-y-3.5">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Patient Full Name:</label>
-                <input
-                  type="text"
-                  value={patientName}
-                  onChange={(e) => setPatientName(e.target.value)}
-                  className="w-full p-2 text-xs bg-slate-50 border border-slate-300 rounded-xl"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
+      {bookingDoctor &&
+        createPortal(
+          <div
+            onClick={() => setBookingDoctor(null)}
+            className="fixed inset-0 z-[999999] flex items-center justify-center p-3 sm:p-5 md:p-6 bg-slate-950/80 backdrop-blur-md overflow-y-auto animate-fadeIn"
+            style={{ minHeight: '100vh', minWidth: '100vw' }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-3xl max-w-lg w-full p-6 my-auto shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto space-y-4 animate-scaleUp"
+            >
+              <div className="border-b border-slate-100 pb-3 flex items-start justify-between">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Patient Age:</label>
-                  <input
-                    type="number"
-                    value={patientAge}
-                    onChange={(e) => setPatientAge(Number(e.target.value))}
-                    className="w-full p-2 text-xs bg-slate-50 border border-slate-300 rounded-xl"
-                    required
-                  />
+                  <h3 className="text-base font-bold text-slate-900">Book Doctor Consultation Serial</h3>
+                  <div className="text-xs text-blue-700 font-semibold">{bookingDoctor.name} &bull; {bookingDoctor.specialization}</div>
                 </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Gender:</label>
-                  <select
-                    value={patientGender}
-                    onChange={(e) => setPatientGender(e.target.value as any)}
-                    className="w-full p-2 text-xs bg-slate-50 border border-slate-300 rounded-xl"
-                  >
-                    <option value="male">Male</option>
-                    <option value="female">Female</option>
-                    <option value="other">Other</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Patient Contact Phone:</label>
-                <input
-                  type="text"
-                  value={patientPhone}
-                  onChange={(e) => setPatientPhone(e.target.value)}
-                  className="w-full p-2 text-xs bg-slate-50 border border-slate-300 rounded-xl"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Preferred Date:</label>
-                  <input
-                    type="date"
-                    value={appointmentDate}
-                    onChange={(e) => setAppointmentDate(e.target.value)}
-                    className="w-full p-2 text-xs bg-slate-50 border border-slate-300 rounded-xl"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Time Slot:</label>
-                  <select
-                    value={selectedSlot}
-                    onChange={(e) => setSelectedSlot(e.target.value)}
-                    className="w-full p-2 text-xs bg-slate-50 border border-slate-300 rounded-xl"
-                  >
-                    {bookingDoctor.availableSchedules.map((s, idx) => (
-                      <option key={idx} value={`${s.day} (${s.startTime} - ${s.endTime})`}>
-                        {s.day} ({s.startTime} - {s.endTime})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Chief Medical Complaint / Summary:</label>
-                <textarea
-                  rows={2}
-                  value={problemSummary}
-                  onChange={(e) => setProblemSummary(e.target.value)}
-                  className="w-full p-2 text-xs bg-slate-50 border border-slate-300 rounded-xl"
-                />
-              </div>
-
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-900">
-                100% online advance confirmation of <strong>BDT {bookingDoctor.consultationFee}</strong> guarantees your serial number with no waiting line at {bookingDoctor.hospitalChamber}.
-              </div>
-
-              <div className="flex gap-2 pt-2">
                 <button
-                  type="button"
                   onClick={() => setBookingDoctor(null)}
-                  className="flex-1 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+                  className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition-colors cursor-pointer"
                 >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2.5 bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold rounded-xl shadow-md cursor-pointer"
-                >
-                  Proceed to Pay BDT {bookingDoctor.consultationFee}
+                  <X size={16} />
                 </button>
               </div>
-            </form>
-          </div>
-        </div>
-      )}
+
+              <form onSubmit={handleOpenPayment} className="space-y-3.5">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Patient Full Name:</label>
+                  <input
+                    type="text"
+                    value={patientName}
+                    onChange={(e) => setPatientName(e.target.value)}
+                    className="w-full p-2 text-xs bg-slate-50 border border-slate-300 rounded-xl"
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Patient Age:</label>
+                    <input
+                      type="number"
+                      value={patientAge}
+                      onChange={(e) => setPatientAge(Number(e.target.value))}
+                      className="w-full p-2 text-xs bg-slate-50 border border-slate-300 rounded-xl"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Gender:</label>
+                    <select
+                      value={patientGender}
+                      onChange={(e) => setPatientGender(e.target.value as any)}
+                      className="w-full p-2 text-xs bg-slate-50 border border-slate-300 rounded-xl"
+                    >
+                      <option value="male">Male</option>
+                      <option value="female">Female</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Patient Contact Phone:</label>
+                  <input
+                    type="text"
+                    value={patientPhone}
+                    onChange={(e) => setPatientPhone(e.target.value)}
+                    className="w-full p-2 text-xs bg-slate-50 border border-slate-300 rounded-xl"
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Preferred Date:</label>
+                    <input
+                      type="date"
+                      value={appointmentDate}
+                      onChange={(e) => setAppointmentDate(e.target.value)}
+                      className="w-full p-2 text-xs bg-slate-50 border border-slate-300 rounded-xl"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Time Slot:</label>
+                    <select
+                      value={selectedSlot}
+                      onChange={(e) => setSelectedSlot(e.target.value)}
+                      className="w-full p-2 text-xs bg-slate-50 border border-slate-300 rounded-xl"
+                    >
+                      {bookingDoctor.availableSchedules.map((s, idx) => (
+                        <option key={idx} value={`${s.day} (${s.startTime} - ${s.endTime})`}>
+                          {s.day} ({s.startTime} - {s.endTime})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Chief Medical Complaint / Summary:</label>
+                  <textarea
+                    rows={2}
+                    value={problemSummary}
+                    onChange={(e) => setProblemSummary(e.target.value)}
+                    className="w-full p-2 text-xs bg-slate-50 border border-slate-300 rounded-xl"
+                  />
+                </div>
+
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-900">
+                  100% online advance confirmation of <strong>BDT {bookingDoctor.consultationFee}</strong> guarantees your serial number with no waiting line at {bookingDoctor.hospitalChamber}.
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setBookingDoctor(null)}
+                    className="flex-1 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 py-2.5 bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold rounded-xl shadow-md cursor-pointer"
+                  >
+                    Proceed to Pay BDT {bookingDoctor.consultationFee}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>,
+          document.body
+        )}
 
       {/* Payment Modal */}
       {isPaymentOpen && bookingDoctor && (

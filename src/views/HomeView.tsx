@@ -887,27 +887,27 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, onOpenSearch }) 
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
             {filteredShowcases.map((section) => (
               <div
                 key={section.id}
-                className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-xs flex flex-col justify-between hover:border-purple-300/80 hover:shadow-md transition-all duration-200 group/card"
+                className="bg-white rounded-2xl border border-slate-200/90 overflow-hidden shadow-xs flex flex-col justify-between hover:border-purple-300/90 hover:shadow-md transition-all duration-200 group/card"
               >
                 <div>
                   {/* Category Header */}
                   <div className="flex items-center justify-between p-3.5 pb-2.5 border-b border-slate-100 bg-white">
-                    <div className="flex items-center gap-2 min-w-0">
+                    <div className="flex items-center gap-2.5 min-w-0">
                       <div
-                        className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                        className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 shadow-2xs"
                         style={{ backgroundColor: `${section.themeColor}15`, color: section.themeColor }}
                       >
-                        <RenderCategoryIcon iconName={section.iconName} size={15} />
+                        <RenderCategoryIcon iconName={section.iconName} size={16} />
                       </div>
                       <div className="min-w-0">
-                        <h3 className="text-xs sm:text-sm font-black text-slate-900 tracking-tight truncate group-hover/card:text-[#4e20b8] transition-colors">
+                        <h3 className="text-sm font-black text-slate-900 tracking-tight truncate group-hover/card:text-[#4e20b8] transition-colors">
                           {section.titleBangla}
                         </h3>
-                        <span className="text-[10px] text-slate-400 block truncate leading-tight font-medium">
+                        <span className="text-[10px] sm:text-[11px] text-slate-400 block truncate leading-tight font-medium">
                           {section.titleEnglish}
                         </span>
                       </div>
@@ -915,9 +915,9 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, onOpenSearch }) 
 
                     <button
                       onClick={() => onNavigate(section.viewAllTargetView, section.viewAllTargetParams)}
-                      className="text-xs font-bold text-[#4e20b8] hover:text-[#ff6d00] flex items-center gap-0.5 cursor-pointer transition-colors shrink-0 ml-1"
+                      className="text-xs font-bold text-[#4e20b8] hover:text-[#ff6d00] flex items-center gap-0.5 cursor-pointer transition-colors shrink-0 ml-1 whitespace-nowrap"
                     >
-                      <span className="text-[11px]">সব দেখুন</span>
+                      <span className="text-[11px] font-semibold">সব দেখুন</span>
                       <ChevronRight size={12} />
                     </button>
                   </div>
@@ -941,7 +941,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, onOpenSearch }) 
                             {section.bannerTagline}
                           </span>
                         )}
-                        <span className="text-[11px] font-bold text-white leading-tight truncate mt-0.5 drop-shadow-sm">
+                        <span className="text-[11px] sm:text-xs font-bold text-white leading-tight truncate mt-0.5 drop-shadow-sm">
                           {section.subtitleBangla || section.titleBangla}
                         </span>
                       </div>
@@ -949,7 +949,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, onOpenSearch }) 
                   )}
 
                   {/* Showcase Products & Services List Below the Banner */}
-                  <div className="p-3 space-y-2.5">
+                  <div className="p-3 sm:p-3.5 space-y-3">
                     {section.items.map((item) => (
                       <div
                         key={item.id}
@@ -957,48 +957,52 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, onOpenSearch }) 
                           setSelectedShowcaseItem(item);
                           setSelectedShowcaseSection(section);
                         }}
-                        className="group/item flex items-start gap-2.5 p-2 rounded-xl bg-slate-50/70 hover:bg-purple-50/50 transition-all border border-slate-100 hover:border-purple-200/80 cursor-pointer"
+                        className="group/item flex items-center gap-3 sm:gap-3.5 p-2.5 sm:p-3 rounded-2xl bg-white hover:bg-purple-50/60 transition-all border border-slate-200/90 hover:border-purple-300 shadow-xs hover:shadow-md cursor-pointer"
                       >
-                        <div className="relative shrink-0">
+                        {/* High-Definition Item Photo on Left */}
+                        <div className="relative shrink-0 w-24 h-24 sm:w-26 sm:h-26 md:w-28 md:h-28 rounded-2xl overflow-hidden bg-slate-100 ring-1 ring-slate-200/90 shadow-sm flex items-center justify-center">
                           <img
                             src={item.imageUrl}
                             alt={item.title}
-                            className="w-13 h-13 rounded-lg object-cover ring-1 ring-slate-200 shrink-0 bg-slate-100 group-hover/item:scale-103 transition-transform"
+                            className="w-full h-full object-cover group-hover/item:scale-105 transition-transform duration-300"
                             onError={(e) => {
                               (e.currentTarget as HTMLImageElement).src =
-                                'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=150&q=80';
+                                'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=400&q=80';
                             }}
                           />
                           {item.badge && (
-                            <span className="absolute -top-1.5 -left-1 bg-slate-900 text-white text-[8px] font-bold px-1.5 py-0.2 rounded-full border border-white/40 shadow-2xs">
+                            <span className="absolute top-1 left-1 bg-slate-900/95 backdrop-blur-xs text-white text-[8px] sm:text-[9px] font-black px-1.5 py-0.5 rounded-md border border-white/30 shadow-xs leading-none">
                               {item.badge}
                             </span>
                           )}
                         </div>
 
-                        <div className="flex-1 min-w-0">
-                          <h4 className="text-xs font-bold text-slate-900 group-hover/item:text-[#4e20b8] truncate">
-                            {item.title}
-                          </h4>
-                          <p className="text-[10px] text-slate-500 truncate mt-0.5 leading-snug">
-                            {item.subtitle}
-                          </p>
+                        {/* Item Details */}
+                        <div className="flex-1 min-w-0 flex flex-col justify-between self-stretch py-0.5">
+                          <div>
+                            <h4 className="text-xs sm:text-sm font-black text-slate-900 group-hover/item:text-[#4e20b8] line-clamp-2 leading-snug transition-colors">
+                              {item.title}
+                            </h4>
+                            <p className="text-[11px] sm:text-xs text-slate-500 line-clamp-2 mt-0.5 leading-snug">
+                              {item.subtitle}
+                            </p>
 
-                          {/* Rating & Review */}
-                          <div className="flex items-center gap-1 text-[10px] text-slate-600 mt-0.5">
-                            <Star size={10} className="fill-amber-400 text-amber-400 shrink-0" />
-                            <span className="font-bold">{item.rating || '4.8'}</span>
-                            {item.reviewCount && (
-                              <span className="text-slate-400">({item.reviewCount})</span>
-                            )}
+                            {/* Rating & Review */}
+                            <div className="flex items-center gap-1.5 text-xs text-slate-700 mt-1">
+                              <Star size={12} className="fill-amber-400 text-amber-400 shrink-0" />
+                              <span className="font-bold text-slate-800">{item.rating || '4.9'}</span>
+                              {item.reviewCount && (
+                                <span className="text-slate-400 font-medium text-[11px]">({item.reviewCount})</span>
+                              )}
+                            </div>
                           </div>
 
-                          {/* Price & View Profile / Open Button */}
-                          <div className="flex items-center justify-between mt-1 pt-1 border-t border-slate-200/60">
-                            <span className="text-xs font-black text-slate-900">
+                          {/* Price & View Profile Button */}
+                          <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-slate-100 gap-2">
+                            <span className="text-xs sm:text-sm font-black text-[#4e20b8] whitespace-nowrap">
                               ৳ {item.priceOrSalary}{' '}
                               {item.unitText && (
-                                <span className="text-[9px] font-normal text-slate-500">
+                                <span className="text-[10px] font-normal text-slate-500">
                                   {item.unitText}
                                 </span>
                               )}
@@ -1011,9 +1015,10 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, onOpenSearch }) 
                                 setSelectedShowcaseItem(item);
                                 setSelectedShowcaseSection(section);
                               }}
-                              className="bg-[#4e20b8] hover:bg-[#3d1796] text-white text-[10px] font-bold px-2.5 py-0.5 rounded-md transition-all cursor-pointer shadow-2xs hover:shadow-xs flex items-center gap-1"
+                              className="bg-[#4e20b8] hover:bg-[#3d1796] text-white text-[11px] font-bold px-3 py-1.5 rounded-xl transition-all cursor-pointer shadow-xs hover:shadow-md flex items-center gap-1 active:scale-95 shrink-0 whitespace-nowrap"
                             >
-                              <span>{(!item.ctaText || item.ctaText === 'ওপেন করুন') ? 'বিস্তারিত দেখুন' : item.ctaText}</span>
+                              <span>{(!item.ctaText || item.ctaText === 'ওপেন করুন' || item.ctaText === 'বিস্তারিত দেখুন') ? 'প্রোফাইল দেখুন' : item.ctaText}</span>
+                              <ChevronRight size={12} />
                             </button>
                           </div>
                         </div>

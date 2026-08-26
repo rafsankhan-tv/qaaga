@@ -15,7 +15,9 @@ import {
   MessageSquare,
   Wrench,
   Stethoscope,
-  ShoppingBag
+  ShoppingBag,
+  Phone,
+  Mail
 } from 'lucide-react';
 import { marketplaceStore } from '../../services/marketplaceStore';
 import { useAuth } from '../../context/AuthContext';
@@ -154,6 +156,40 @@ export const SupportChatDrawer: React.FC<SupportChatDrawerProps> = ({ isOpen, on
 
           {/* Chat Messages Body */}
           <div className="flex-1 overflow-y-auto p-4 space-y-3.5 bg-slate-50/50">
+            {/* Urgent Direct Contact Strip */}
+            <div className="bg-gradient-to-r from-purple-900 to-indigo-950 text-white rounded-2xl p-3 shadow-xs">
+              <div className="flex items-center justify-between text-xs font-bold mb-2">
+                <span className="flex items-center gap-1.5 text-amber-300">
+                  <Phone size={13} />
+                  <span>জরুরী কাস্টমার কেয়ার ও সাপোর্ট</span>
+                </span>
+                <span className="text-[10px] bg-emerald-500/30 text-emerald-300 px-2 py-0.5 rounded-full font-bold">24/7 Live</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <a
+                  href="tel:09658824360"
+                  className="flex items-center gap-1.5 bg-white/10 hover:bg-amber-500 hover:text-slate-900 px-2.5 py-1.5 rounded-xl font-bold transition-all"
+                >
+                  <Phone size={12} className="text-[#ff6d00]" />
+                  <span className="truncate">09658824360</span>
+                </a>
+                <a
+                  href="https://wa.me/8801644985301"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 bg-emerald-600/30 hover:bg-emerald-600 px-2.5 py-1.5 rounded-xl font-bold text-emerald-200 hover:text-white transition-all"
+                >
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="truncate">WhatsApp Help</span>
+                </a>
+              </div>
+              <div className="mt-2 text-center">
+                <a href="mailto:qaaga@consultant.com" className="text-[11px] text-purple-200 hover:text-white transition-colors">
+                  ইমেইল: <strong className="underline">qaaga@consultant.com</strong>
+                </a>
+              </div>
+            </div>
+
             {/* Security Banner */}
             <div className="bg-purple-50/70 border border-purple-100 rounded-xl p-2.5 text-center text-[11px] text-slate-600 flex items-center justify-center gap-1.5">
               <ShieldCheck size={14} className="text-[#4e20b8]" />

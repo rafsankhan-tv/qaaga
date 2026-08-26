@@ -35,7 +35,9 @@ import {
   Facebook,
   Youtube,
   Instagram,
-  Video
+  Video,
+  Phone,
+  Mail
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useLocation } from '../../context/LocationContext';
@@ -344,7 +346,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({ currentView, onNavigate, o
                     <h3 className="text-sm font-black truncate">{currentUser?.fullName || 'Rafsan Khan'}</h3>
                     <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
                   </div>
-                  <div className="text-xs text-purple-200/90 truncate">{currentUser?.email || 'rafsankhan.tv@gmail.com'}</div>
+                  <div className="text-xs text-purple-200/90 truncate">{currentUser?.email || 'qaaga@consultant.com'}</div>
                   
                   <div className="mt-1.5 flex items-center gap-2 flex-wrap">
                     <span className="text-[10px] bg-purple-500/30 text-purple-200 border border-purple-400/30 font-bold px-2 py-0.5 rounded-full backdrop-blur-xs">
@@ -536,6 +538,54 @@ export const MobileNav: React.FC<MobileNavProps> = ({ currentView, onNavigate, o
                 <Search size={18} className="text-emerald-600" />
                 <span className="text-[11px] font-bold text-slate-800 mt-1">সার্চ ফিল্টার</span>
               </button>
+            </div>
+
+            {/* 24/7 Direct Help & Contact Bar */}
+            <div className="p-3 rounded-2xl bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white mb-3 border border-indigo-900/40 shadow-sm">
+              <div className="text-[11px] font-bold text-slate-300 mb-2 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <Headphones size={13} className="text-[#ff6d00]" />
+                  <span>২৪/৭ কাস্টমার সাপোর্ট ও হেল্পডেস্ক</span>
+                </span>
+                <span className="text-[9px] bg-emerald-500/30 text-emerald-300 px-2 py-0.5 rounded-full font-bold border border-emerald-500/40">Active</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <a
+                  href="tel:09658824360"
+                  className="flex items-center gap-2 p-2 rounded-xl bg-white/10 hover:bg-amber-500/20 text-white text-xs font-bold transition-all border border-white/10"
+                >
+                  <div className="w-6 h-6 rounded-lg bg-[#ff6d00] text-white flex items-center justify-center shrink-0">
+                    <Phone size={12} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-[9px] text-slate-300">সরাসরি কল</div>
+                    <div className="truncate text-amber-300 font-bold">09658824360</div>
+                  </div>
+                </a>
+
+                <a
+                  href="https://wa.me/8801644985301"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 p-2 rounded-xl bg-white/10 hover:bg-emerald-500/20 text-white text-xs font-bold transition-all border border-white/10"
+                >
+                  <div className="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                    <Headphones size={12} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-[9px] text-slate-300">হোয়াটসঅ্যাপ</div>
+                    <div className="truncate text-emerald-300 font-bold">+8801644985301</div>
+                  </div>
+                </a>
+              </div>
+
+              <a
+                href="mailto:qaaga@consultant.com"
+                className="mt-2 flex items-center justify-center gap-1.5 p-1.5 rounded-xl bg-white/5 hover:bg-purple-500/20 text-slate-300 text-[11px] transition-all border border-white/5"
+              >
+                <Mail size={12} className="text-purple-400" />
+                <span>ইমেইল: <strong className="text-white">qaaga@consultant.com</strong></span>
+              </a>
             </div>
 
             {/* QAAGA Official Social Channels */}

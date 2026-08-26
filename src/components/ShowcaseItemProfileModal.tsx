@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   Star,
@@ -52,6 +53,28 @@ export const ShowcaseItemProfileModal: React.FC<ShowcaseItemProfileModalProps> =
   const [customerNotes, setCustomerNotes] = useState('');
   const [preferredDate, setPreferredDate] = useState(new Date().toISOString().split('T')[0]);
   const [advanceChoice, setAdvanceChoice] = useState<'twenty' | 'full' | 'cod'>('twenty');
+
+  // Lock background scrolling and handle escape key when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      setSelectedPhotoIndex(0);
+      setOrderSuccess(false);
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          onClose();
+        }
+      };
+      window.addEventListener('keydown', handleKeyDown);
+
+      return () => {
+        document.body.style.overflow = originalOverflow;
+        window.removeEventListener('keydown', handleKeyDown);
+      };
+    }
+  }, [isOpen, onClose, item]);
 
   if (!isOpen || !item) return null;
 
@@ -146,12 +169,19 @@ export const ShowcaseItemProfileModal: React.FC<ShowcaseItemProfileModalProps> =
     }, 600);
   };
 
-  return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 animate-fadeIn">
-      <div className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl border border-slate-200/90 overflow-hidden flex flex-col max-h-[92vh]">
+  return createPortal(
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-[999999] overflow-y-auto bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 md:p-6 animate-fadeIn"
+      style={{ minHeight: '100vh', minWidth: '100vw' }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="bg-white w-full max-w-3xl my-auto rounded-3xl shadow-2xl border border-slate-200/90 overflow-hidden flex flex-col max-h-[90vh] animate-scaleUp"
+      >
         
         {/* MODAL TOP HEADER */}
-        <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
+        <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between bg-slate-50/90 sticky top-0 z-20 backdrop-blur-sm">
           <div className="flex items-center gap-2.5">
             {section && (
               <div
@@ -246,36 +276,48 @@ export const ShowcaseItemProfileModal: React.FC<ShowcaseItemProfileModalProps> =
               <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-start">
                 {/* Left: Photos & Gallery */}
                 <div className="md:col-span-5 space-y-2.5">
-                  <div className="relative rounded-2xl overflow-hidden bg-slate-100 aspect-4/3 border border-slate-200 shadow-xs group">
+                  <div className="relative rounded-2xl overflow-hidden bg-slate-100 aspect-4/3 border border-slate-200/90 shadow-sm group">
                     <img
                       src={activePhoto}
                       alt={item.title}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).src =
+                          'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=600&q=80';
+                      }}
                     />
                     {item.badge && (
-                      <span className="absolute top-3 left-3 bg-[#4e20b8] text-white text-[10px] font-bold px-2.5 py-1 rounded-full shadow-md">
+                      <span className="absolute top-3 left-3 bg-[#4e20b8] text-white text-[11px] font-black px-2.5 py-1 rounded-lg shadow-md border border-white/20">
                         {item.badge}
                       </span>
                     )}
-                    <span className="absolute bottom-3 right-3 bg-slate-900/80 backdrop-blur-sm text-white text-[10px] font-bold px-2 py-0.5 rounded-lg flex items-center gap-1">
-                      <Star size={11} className="fill-amber-400 text-amber-400" />
+                    <span className="absolute bottom-3 right-3 bg-slate-900/85 backdrop-blur-sm text-white text-[11px] font-bold px-2.5 py-1 rounded-xl flex items-center gap-1 shadow-sm">
+                      <Star size={12} className="fill-amber-400 text-amber-400" />
                       <span>{item.rating || '4.9'} ({item.reviewCount || '100+'})</span>
                     </span>
                   </div>
 
                   {/* Thumbnails switcher */}
                   {allPhotos.length > 1 && (
-                    <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                    <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-0.5">
                       {allPhotos.map((photo, idx) => (
                         <button
                           key={idx}
                           type="button"
                           onClick={() => setSelectedPhotoIndex(idx)}
-                          className={`w-14 h-12 rounded-lg overflow-hidden border-2 transition-all shrink-0 cursor-pointer ${
-                            selectedPhotoIndex === idx ? 'border-[#4e20b8] ring-2 ring-purple-200' : 'border-slate-200 opacity-70 hover:opacity-100'
+                          className={`w-16 h-14 rounded-xl overflow-hidden border-2 transition-all shrink-0 cursor-pointer shadow-2xs ${
+                            selectedPhotoIndex === idx ? 'border-[#4e20b8] ring-2 ring-purple-300 scale-102' : 'border-slate-200 opacity-70 hover:opacity-100'
                           }`}
                         >
-                          <img src={photo} alt="" className="w-full h-full object-cover" />
+                          <img
+                            src={photo}
+                            alt=""
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).src =
+                                'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=200&q=80';
+                            }}
+                          />
                         </button>
                       ))}
                     </div>
@@ -567,6 +609,7 @@ export const ShowcaseItemProfileModal: React.FC<ShowcaseItemProfileModalProps> =
         </div>
 
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

@@ -340,17 +340,30 @@ export const FeedProfileModal: React.FC<FeedProfileModalProps> = ({
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Phone size={15} className="text-slate-400 shrink-0" />
+                  <Phone size={15} className="text-[#ff6d00] shrink-0" />
                   <div>
-                    <span className="font-bold text-slate-800">হেল্পলাইন/যোগাযোগ: </span>
-                    +880 1800-QAAGA-1
+                    <span className="font-bold text-slate-800">কল / হটলাইন: </span>
+                    <a href="tel:09658824360" className="text-[#4e20b8] font-bold hover:underline">
+                      09658824360
+                    </a>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Mail size={15} className="text-slate-400 shrink-0" />
+                  <span className="w-3.5 h-3.5 rounded-full bg-emerald-500 flex items-center justify-center text-white text-[9px] font-bold">W</span>
+                  <div>
+                    <span className="font-bold text-slate-800">হোয়াটসঅ্যাপ: </span>
+                    <a href="https://wa.me/8801644985301" target="_blank" rel="noopener noreferrer" className="text-emerald-600 font-bold hover:underline">
+                      +8801644985301
+                    </a>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Mail size={15} className="text-purple-600 shrink-0" />
                   <div>
                     <span className="font-bold text-slate-800">সাপোর্ট ইমেইল: </span>
-                    support@qaaga.com
+                    <a href="mailto:qaaga@consultant.com" className="text-[#4e20b8] font-semibold hover:underline">
+                      qaaga@consultant.com
+                    </a>
                   </div>
                 </div>
               </div>

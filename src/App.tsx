@@ -24,6 +24,7 @@ import { SellerDashboardView } from './views/SellerDashboardView';
 import { RoleRegistrationView } from './views/RoleRegistrationView';
 import { FeedView } from './views/FeedView';
 import { CuteCatRunner } from './components/CuteCatRunner';
+import { FloatingHelpWidget } from './components/common/FloatingHelpWidget';
 import { marketplaceStore } from './services/marketplaceStore';
 
 const MainApp: React.FC = () => {
@@ -150,6 +151,9 @@ const MainApp: React.FC = () => {
           renderFloating={true}
         />
       )}
+
+      {/* Floating 24/7 WhatsApp & Direct Call Help Widget */}
+      <FloatingHelpWidget />
 
       {/* Mobile Sticky Bottom Navigation with Complete Profile Hub & Quick Action */}
       <MobileNav

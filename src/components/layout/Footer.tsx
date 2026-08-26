@@ -68,18 +68,51 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
             <p className="text-xs text-slate-400 leading-relaxed max-w-sm">
               qaaga.com is Bangladesh&apos;s verified multi-service super marketplace connecting technicians, BMDC doctors, home nurses, hotels, merchants, and job candidates.
             </p>
-            <div className="pt-1 text-xs text-slate-400 space-y-1">
+            <div className="pt-2 text-xs text-slate-400 space-y-2">
               <div className="flex items-center gap-1.5">
-                <MapPin size={12} className="text-[#ff6d00] shrink-0" />
+                <MapPin size={13} className="text-[#ff6d00] shrink-0" />
                 <span className="truncate">Gulshan 2 &bull; Dhanmondi &bull; Nationwide Coverage</span>
               </div>
-              <div className="flex items-center gap-1.5">
-                <Phone size={12} className="text-[#ff6d00] shrink-0" />
-                <span>Hotline: +880 1800-QAAGA-1</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Mail size={12} className="text-[#ff6d00] shrink-0" />
-                <span>support@qaaga.com</span>
+              
+              {/* Direct Clickable Contact List */}
+              <div className="space-y-1.5 pt-1">
+                <a
+                  href="tel:09658824360"
+                  className="flex items-center gap-2 text-slate-300 hover:text-amber-400 transition-colors group"
+                >
+                  <div className="w-6 h-6 rounded-lg bg-slate-800 flex items-center justify-center text-[#ff6d00] group-hover:bg-[#ff6d00] group-hover:text-white transition-colors">
+                    <Phone size={12} />
+                  </div>
+                  <span>
+                    হটলাইন / কল: <strong className="text-white font-bold tracking-wide">09658824360</strong>
+                  </span>
+                </a>
+
+                <a
+                  href="https://wa.me/8801644985301"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 text-slate-300 hover:text-emerald-400 transition-colors group"
+                >
+                  <div className="w-6 h-6 rounded-lg bg-emerald-950/80 border border-emerald-800/60 flex items-center justify-center text-emerald-400 group-hover:bg-emerald-500 group-hover:text-white transition-colors">
+                    <Headphones size={12} />
+                  </div>
+                  <span>
+                    হোয়াটসঅ্যাপ হেল্প: <strong className="text-emerald-400 font-bold tracking-wide">+8801644985301</strong>
+                  </span>
+                </a>
+
+                <a
+                  href="mailto:qaaga@consultant.com"
+                  className="flex items-center gap-2 text-slate-300 hover:text-purple-300 transition-colors group"
+                >
+                  <div className="w-6 h-6 rounded-lg bg-slate-800 flex items-center justify-center text-purple-400 group-hover:bg-purple-600 group-hover:text-white transition-colors">
+                    <Mail size={12} />
+                  </div>
+                  <span>
+                    ইমেইল সাপোর্ট: <strong className="text-white font-semibold">qaaga@consultant.com</strong>
+                  </span>
+                </a>
               </div>
             </div>
 
