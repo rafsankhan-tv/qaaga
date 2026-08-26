@@ -24,6 +24,7 @@ import { SellerDashboardView } from './views/SellerDashboardView';
 import { RoleRegistrationView } from './views/RoleRegistrationView';
 import { FeedView } from './views/FeedView';
 import { CuteCatRunner } from './components/CuteCatRunner';
+import { marketplaceStore } from './services/marketplaceStore';
 
 const MainApp: React.FC = () => {
   const { activeRole } = useAuth();
@@ -32,6 +33,15 @@ const MainApp: React.FC = () => {
   const [viewParams, setViewParams] = useState<any>({});
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isLocationOpen, setIsLocationOpen] = useState(false);
+
+  useEffect(() => {
+    // Initial sync of settings & metadata
+    marketplaceStore.getSettings();
+    const unsubscribe = marketplaceStore.subscribe(() => {
+      // triggers updates if any global state changes
+    });
+    return () => unsubscribe();
+  }, []);
 
   const handleNavigate = (view: string, params?: any) => {
     setCurrentView(view);

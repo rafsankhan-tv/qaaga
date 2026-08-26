@@ -1,6 +1,6 @@
 {
   "name": "QAAGA Super Marketplace",
-  "description": "Production-ready full-stack multi-service marketplace for services, repairs, doctors, home care, hotels, products, ebooks, and jobs with multi-role access control.",
+  "description": "qaaga.com is Bangladesh's verified multi-service super marketplace for on-demand services, repairs, doctors, home care, hotels, products, and jobs.",
   "requestFramePermissions": ["camera", "microphone", "geolocation"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

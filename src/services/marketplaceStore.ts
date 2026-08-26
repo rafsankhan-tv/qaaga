@@ -53,6 +53,7 @@ import {
   SEED_BOOKINGS
 } from '../data/mockSeedData';
 
+import { applyFaviconAndTitle, FAVICON_PRESETS, DEFAULT_SITE_TITLE } from '../data/faviconPresets';
 import { SEED_FEED_POSTS, SEED_FOLLOWS, INITIAL_FEED_BANNER_SLIDES } from '../data/mockFeedData';
 import { MARKETPLACE_CATEGORIES } from '../data/categoriesData';
 import { INITIAL_CATEGORY_SHOWCASES } from '../data/categoryShowcasesData';
@@ -288,6 +289,7 @@ class MarketplaceStore {
 
   constructor() {
     this.loadFromStorage();
+    applyFaviconAndTitle(this.settings);
   }
 
   private saveToStorage() {
@@ -337,7 +339,12 @@ class MarketplaceStore {
         if (parsed.jobApplications) this.jobApplications = parsed.jobApplications;
         if (parsed.chatMessages) this.chatMessages = parsed.chatMessages;
         if (parsed.notifications) this.notifications = parsed.notifications;
-        if (parsed.settings) this.settings = parsed.settings;
+        if (parsed.settings) {
+          this.settings = {
+            ...INITIAL_SYSTEM_SETTINGS,
+            ...parsed.settings
+          };
+        }
         if (parsed.providers) this.providers = parsed.providers;
         if (parsed.products) this.products = parsed.products;
         if (parsed.categories) this.categories = parsed.categories;
@@ -360,6 +367,7 @@ class MarketplaceStore {
 
   private notify() {
     this.saveToStorage();
+    applyFaviconAndTitle(this.settings);
     this.listeners.forEach((l) => l());
   }
 
@@ -1442,9 +1450,80 @@ class MarketplaceStore {
     return newMsg;
   }
 
-  // --- ADMIN SYSTEM CONTROLS ---
+  // --- ADMIN SYSTEM CONTROLS & BRANDING ---
   public updateSystemSettings(newSettings: Partial<PlatformSystemSettings>) {
     this.settings = { ...this.settings, ...newSettings };
+    this.notify();
+  }
+
+  public updateSiteBranding(updates: {
+    siteTitle?: string;
+    siteName?: string;
+    siteTagline?: string;
+    siteDescription?: string;
+    showTaglineInBrowserTitle?: boolean;
+    themeColor?: string;
+  }) {
+    this.settings = {
+      ...this.settings,
+      ...updates
+    };
+    this.notify();
+  }
+
+  public setFaviconPreset(presetId: string) {
+    const preset = FAVICON_PRESETS.find(p => p.id === presetId) || FAVICON_PRESETS[0];
+    this.settings = {
+      ...this.settings,
+      faviconType: 'preset',
+      faviconPresetId: preset.id,
+      faviconUrl: preset.svgDataUri,
+      customFaviconUpload: ''
+    };
+    this.notify();
+  }
+
+  public uploadCustomFavicon(base64DataUrl: string) {
+    this.settings = {
+      ...this.settings,
+      faviconType: 'custom_upload',
+      customFaviconUpload: base64DataUrl,
+      faviconUrl: base64DataUrl
+    };
+    this.notify();
+  }
+
+  public setCustomFaviconUrl(url: string) {
+    this.settings = {
+      ...this.settings,
+      faviconType: 'custom_url',
+      faviconUrl: url,
+      customFaviconUpload: ''
+    };
+    this.notify();
+  }
+
+  public removeCustomFavicon() {
+    this.settings = {
+      ...this.settings,
+      faviconType: 'preset',
+      faviconPresetId: 'qaaga-purple-q',
+      faviconUrl: FAVICON_PRESETS[0].svgDataUri,
+      customFaviconUpload: ''
+    };
+    this.notify();
+  }
+
+  public resetSiteTitleAndBranding() {
+    this.settings = {
+      ...this.settings,
+      siteTitle: DEFAULT_SITE_TITLE,
+      siteTagline: DEFAULT_SITE_TITLE,
+      faviconType: 'preset',
+      faviconPresetId: 'qaaga-purple-q',
+      faviconUrl: FAVICON_PRESETS[0].svgDataUri,
+      customFaviconUpload: ''
+    };
     this.notify();
   }
 

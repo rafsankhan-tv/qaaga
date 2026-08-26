@@ -582,6 +582,15 @@ export interface NotificationItem {
   createdAt: string;
 }
 
+export interface FaviconPreset {
+  id: string;
+  name: string;
+  nameBangla: string;
+  category: 'official' | 'gold' | 'rose' | 'emerald' | 'cat' | 'minimal' | 'cyan';
+  previewColor: string;
+  svgDataUri: string;
+}
+
 export interface PlatformSystemSettings {
   defaultAdvancePercent: number; // e.g. 20
   platformCommissionPercent: number; // e.g. 10
@@ -593,6 +602,20 @@ export interface PlatformSystemSettings {
   bkashMerchantNumber: string;
   supportPhone: string;
   supportEmail: string;
+
+  // Site Branding & Meta Title
+  siteTitle: string; // e.g. "qaaga.com is Bangladesh's verified multi-service super marketplace"
+  siteName: string; // e.g. "qaaga.com"
+  siteTagline: string; // e.g. "Bangladesh's verified multi-service super marketplace"
+  siteDescription: string;
+
+  // Favicon Configuration
+  faviconType: 'preset' | 'custom_url' | 'custom_upload' | 'default';
+  faviconUrl: string; // URL or preset SVG data URI
+  faviconPresetId: string;
+  customFaviconUpload?: string; // Base64 data URL
+  themeColor?: string;
+  showTaglineInBrowserTitle?: boolean;
 }
 
 export interface HeroBannerSlide {

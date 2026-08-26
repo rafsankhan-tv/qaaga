@@ -14,6 +14,13 @@ import {
   Booking,
   PlatformSystemSettings
 } from '../types';
+import {
+  DEFAULT_SITE_TITLE,
+  DEFAULT_SITE_NAME,
+  DEFAULT_SITE_TAGLINE,
+  DEFAULT_SITE_DESCRIPTION,
+  FAVICON_PRESETS
+} from './faviconPresets';
 
 export const INITIAL_SYSTEM_SETTINGS: PlatformSystemSettings = {
   defaultAdvancePercent: 20,
@@ -25,7 +32,21 @@ export const INITIAL_SYSTEM_SETTINGS: PlatformSystemSettings = {
   urgentFeeMultiplier: 1.15,
   bkashMerchantNumber: '01712-345678 (QAAGA Official)',
   supportPhone: '+880 1800-QAAGA-1',
-  supportEmail: 'support@qaaga.com'
+  supportEmail: 'support@qaaga.com',
+
+  // Site Branding & Meta Title requested by user
+  siteTitle: DEFAULT_SITE_TITLE,
+  siteName: DEFAULT_SITE_NAME,
+  siteTagline: DEFAULT_SITE_TAGLINE,
+  siteDescription: DEFAULT_SITE_DESCRIPTION,
+
+  // Favicon Configuration
+  faviconType: 'preset',
+  faviconPresetId: 'qaaga-purple-q',
+  faviconUrl: FAVICON_PRESETS[0].svgDataUri,
+  customFaviconUpload: '',
+  themeColor: '#7c3aed',
+  showTaglineInBrowserTitle: true
 };
 
 export const SEED_USERS: UserProfile[] = [

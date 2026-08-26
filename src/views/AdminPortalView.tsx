@@ -33,13 +33,26 @@ import {
   MessageSquare,
   Flame,
   Smile,
-  Bot
+  Bot,
+  Globe,
+  UploadCloud,
+  RotateCcw,
+  Copy,
+  CheckCircle
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { marketplaceStore } from '../services/marketplaceStore';
 import { RenderCategoryIcon } from '../components/CategoryIconHelper';
 import { CuteCatAvatarSvg } from '../components/CuteCatAvatarSvg';
 import { CUTE_CAT_SKIN_PRESETS } from '../data/cuteCatData';
+import {
+  FAVICON_PRESETS,
+  getActiveFaviconHref,
+  DEFAULT_SITE_TITLE,
+  DEFAULT_SITE_NAME,
+  DEFAULT_SITE_TAGLINE,
+  DEFAULT_SITE_DESCRIPTION
+} from '../data/faviconPresets';
 import {
   ServiceRequest,
   ProviderOffer,
@@ -71,6 +84,7 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({ onNavigate, in
     | 'CATEGORIES'
     | 'PROVIDERS'
     | 'SETTINGS'
+    | 'BRANDING'
     | 'FINANCES'
   >((initialTab as any) || 'REQUEST_MODERATION');
 
@@ -90,6 +104,24 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({ onNavigate, in
   const [cuteCatSettings, setCuteCatSettings] = useState<CuteCatAssistantSettings>(() =>
     marketplaceStore.getCuteCatSettings()
   );
+
+  // Site Branding & Favicon Management Form State
+  const [brandingForm, setBrandingForm] = useState({
+    siteTitle: settings.siteTitle || DEFAULT_SITE_TITLE,
+    siteName: settings.siteName || DEFAULT_SITE_NAME,
+    siteTagline: settings.siteTagline || DEFAULT_SITE_TAGLINE,
+    siteDescription: settings.siteDescription || DEFAULT_SITE_DESCRIPTION,
+    themeColor: settings.themeColor || '#7c3aed',
+    showTaglineInBrowserTitle: settings.showTaglineInBrowserTitle ?? true
+  });
+  const [customFaviconUrlInput, setCustomFaviconUrlInput] = useState(
+    settings.faviconType === 'custom_url' ? settings.faviconUrl : ''
+  );
+  const [faviconUploadPreview, setFaviconUploadPreview] = useState<string>(
+    settings.customFaviconUpload || ''
+  );
+  const [brandingSuccessMsg, setBrandingSuccessMsg] = useState<string | null>(null);
+  const [copiedDataUri, setCopiedDataUri] = useState(false);
 
   // Feed Banner Slider Form State
   const [isAddingFeedSlide, setIsAddingFeedSlide] = useState(false);
@@ -711,6 +743,112 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({ onNavigate, in
     }
   };
 
+  // Branding & Favicon Management Handlers
+  const handleSaveBrandingInfo = (e: React.FormEvent) => {
+    e.preventDefault();
+    marketplaceStore.updateSiteBranding({
+      siteTitle: brandingForm.siteTitle.trim() || DEFAULT_SITE_TITLE,
+      siteName: brandingForm.siteName.trim() || DEFAULT_SITE_NAME,
+      siteTagline: brandingForm.siteTagline.trim() || DEFAULT_SITE_TAGLINE,
+      siteDescription: brandingForm.siteDescription.trim() || DEFAULT_SITE_DESCRIPTION,
+      themeColor: brandingForm.themeColor,
+      showTaglineInBrowserTitle: brandingForm.showTaglineInBrowserTitle
+    });
+    setBrandingSuccessMsg("সাইট টাইটেল ও ব্র্যান্ডিং সফলভাবে সেভ হয়েছে! ব্রাউজারের ট্যাবে সরাসরি চেক করুন।");
+    setTimeout(() => setBrandingSuccessMsg(null), 4000);
+  };
+
+  const handleSetAiStudioTitlePreset = () => {
+    const aiTitle = "qaaga.com is Bangladesh's verified multi-service super marketplace .";
+    const aiTagline = "Bangladesh's verified multi-service super marketplace";
+    setBrandingForm(prev => ({
+      ...prev,
+      siteTitle: aiTitle,
+      siteName: "qaaga.com",
+      siteTagline: aiTagline
+    }));
+    marketplaceStore.updateSiteBranding({
+      siteTitle: aiTitle,
+      siteName: "qaaga.com",
+      siteTagline: aiTagline
+    });
+    setBrandingSuccessMsg("AI Studio টাইটেল প্রিসেট সেট করা হয়েছে!");
+    setTimeout(() => setBrandingSuccessMsg(null), 4000);
+  };
+
+  const handleSelectFaviconPreset = (presetId: string) => {
+    marketplaceStore.setFaviconPreset(presetId);
+    setFaviconUploadPreview('');
+    setBrandingSuccessMsg("নতুন ফেভিকন সফলভাবে সিলেক্ট ও অ্যাপ্লাই করা হয়েছে!");
+    setTimeout(() => setBrandingSuccessMsg(null), 4000);
+  };
+
+  const handleFileUploadFavicon = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      alert("Favicon file size must be less than 2MB.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (uploadEvent) => {
+      const base64 = uploadEvent.target?.result as string;
+      if (base64) {
+        setFaviconUploadPreview(base64);
+        marketplaceStore.uploadCustomFavicon(base64);
+        setBrandingSuccessMsg("কাস্টম ফেভিকন ফাইল সফলভাবে আপলোড ও অ্যাপ্লাই হয়েছে!");
+        setTimeout(() => setBrandingSuccessMsg(null), 4000);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleApplyCustomFaviconUrl = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customFaviconUrlInput.trim()) return;
+    marketplaceStore.setCustomFaviconUrl(customFaviconUrlInput.trim());
+    setFaviconUploadPreview('');
+    setBrandingSuccessMsg("কাস্টম ফেভিকন URL সফলভাবে অ্যাপ্লাই হয়েছে!");
+    setTimeout(() => setBrandingSuccessMsg(null), 4000);
+  };
+
+  const handleRemoveFavicon = () => {
+    if (confirm("কাস্টম ফেভিকন মুছে অফিসিয়াল ডিফল্ট ফেভিকন ফিরিয়ে আনতে চান?")) {
+      marketplaceStore.removeCustomFavicon();
+      setFaviconUploadPreview('');
+      setCustomFaviconUrlInput('');
+      setBrandingSuccessMsg("ফেভিকন ডিফল্ট অবস্থায় রিমুভ ও রিসেট করা হয়েছে।");
+      setTimeout(() => setBrandingSuccessMsg(null), 4000);
+    }
+  };
+
+  const handleResetAllBranding = () => {
+    if (confirm("পুরো সাইট টাইটেল, ট্যাগলাইন এবং ফেভিকন ডিফল্ট AI Studio প্রিসেটে রিসেট করতে চান?")) {
+      marketplaceStore.resetSiteTitleAndBranding();
+      setBrandingForm({
+        siteTitle: DEFAULT_SITE_TITLE,
+        siteName: DEFAULT_SITE_NAME,
+        siteTagline: DEFAULT_SITE_TAGLINE,
+        siteDescription: DEFAULT_SITE_DESCRIPTION,
+        themeColor: '#7c3aed',
+        showTaglineInBrowserTitle: true
+      });
+      setFaviconUploadPreview('');
+      setCustomFaviconUrlInput('');
+      setBrandingSuccessMsg("সবকিছু ডিফল্ট অবস্থায় রিসেট করা হয়েছে!");
+      setTimeout(() => setBrandingSuccessMsg(null), 4000);
+    }
+  };
+
+  const handleCopyActiveFaviconUri = () => {
+    const activeHref = getActiveFaviconHref(settings);
+    navigator.clipboard.writeText(activeHref);
+    setCopiedDataUri(true);
+    setTimeout(() => setCopiedDataUri(false), 3000);
+  };
+
   // Metrics
   const totalGMV = bookings.reduce((acc, b) => acc + b.totalAmount, 0);
   const totalCommission = bookings.reduce((acc, b) => acc + b.platformCommission, 0);
@@ -785,6 +923,7 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({ onNavigate, in
           { id: 'SHOWCASES', label: `Category Showcases & Cards (${showcases.length})`, icon: LayoutGrid },
           { id: 'CATEGORIES', label: `Category Engine (${categories.length})`, icon: Layers },
           { id: 'PROVIDERS', label: `Provider Verification (${providers.length})`, icon: Users },
+          { id: 'BRANDING', label: 'Site Title & Favicon 🌐', icon: Globe },
           { id: 'SETTINGS', label: 'Escrow & System Settings', icon: Settings },
           { id: 'FINANCES', label: 'Escrow Ledger & GMV', icon: DollarSign }
         ].map((tab) => {
@@ -3407,56 +3546,440 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({ onNavigate, in
 
       {/* TAB 5: SETTINGS */}
       {activeTab === 'SETTINGS' && (
-        <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-xs space-y-5 max-w-2xl">
-          <h3 className="text-base font-bold text-slate-900">Escrow & Financial System Settings</h3>
+        <div className="space-y-6 max-w-4xl">
+          {/* Quick Branding Card */}
+          <div className="bg-gradient-to-r from-purple-900/90 via-indigo-900/90 to-slate-900 text-white rounded-3xl p-6 shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-purple-500/20 border border-purple-400/30 flex items-center justify-center text-purple-300 shrink-0">
+                <Globe size={24} />
+              </div>
+              <div>
+                <h4 className="text-base font-bold">Site Title & Custom Favicon Manager</h4>
+                <p className="text-xs text-purple-200 mt-0.5">
+                  Currently: <span className="font-semibold text-white">"{settings.siteTitle || DEFAULT_SITE_TITLE}"</span>
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setActiveTab('BRANDING')}
+              className="bg-white text-purple-950 hover:bg-purple-50 px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-xs shrink-0 cursor-pointer flex items-center gap-1.5"
+            >
+              <span>Manage Title & Favicon</span>
+              <ArrowRight size={14} />
+            </button>
+          </div>
 
-          <div className="space-y-4 text-xs">
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">
-                Default Booking Advance Deposit (%):
-              </label>
-              <input
-                type="number"
-                value={settings.defaultAdvancePercent}
-                onChange={(e) => marketplaceStore.updateSystemSettings({ defaultAdvancePercent: Number(e.target.value) })}
-                className="w-full p-2 bg-slate-50 border border-slate-300 rounded-xl font-bold"
-              />
-              <p className="text-[11px] text-slate-400 mt-0.5">Required deposit to unlock customer phone & address (Standard: 20%).</p>
+          <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-xs space-y-5 max-w-2xl">
+            <h3 className="text-base font-bold text-slate-900">Escrow & Financial System Settings</h3>
+
+            <div className="space-y-4 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Default Booking Advance Deposit (%):
+                </label>
+                <input
+                  type="number"
+                  value={settings.defaultAdvancePercent}
+                  onChange={(e) => marketplaceStore.updateSystemSettings({ defaultAdvancePercent: Number(e.target.value) })}
+                  className="w-full p-2 bg-slate-50 border border-slate-300 rounded-xl font-bold"
+                />
+                <p className="text-[11px] text-slate-400 mt-0.5">Required deposit to unlock customer phone & address (Standard: 20%).</p>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Platform Service Commission (%):
+                </label>
+                <input
+                  type="number"
+                  value={settings.platformCommissionPercent}
+                  onChange={(e) => marketplaceStore.updateSystemSettings({ platformCommissionPercent: Number(e.target.value) })}
+                  className="w-full p-2 bg-slate-50 border border-slate-300 rounded-xl font-bold"
+                />
+                <p className="text-[11px] text-slate-400 mt-0.5">QAAGA take rate on completed services (Standard: 10%).</p>
+              </div>
+
+              <div className="space-y-2 pt-2 border-t border-slate-100">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={settings.requireAdminRequestReview}
+                    onChange={(e) => marketplaceStore.updateSystemSettings({ requireAdminRequestReview: e.target.checked })}
+                    className="rounded text-teal-600"
+                  />
+                  <span className="font-bold text-slate-800">Enforce Admin Review on Customer Requests</span>
+                </label>
+
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={settings.requireAdminOfferReview}
+                    onChange={(e) => marketplaceStore.updateSystemSettings({ requireAdminOfferReview: e.target.checked })}
+                    className="rounded text-teal-600"
+                  />
+                  <span className="font-bold text-slate-800">Enforce Admin Review on Provider Quotations</span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB: SITE TITLE & FAVICON BRANDING MANAGER */}
+      {activeTab === 'BRANDING' && (
+        <div className="space-y-6">
+          {/* Success Toast Banner */}
+          {brandingSuccessMsg && (
+            <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 px-4 py-3 rounded-2xl flex items-center justify-between text-xs font-bold shadow-xs animate-fade-in">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 size={18} className="text-emerald-600 shrink-0" />
+                <span>{brandingSuccessMsg}</span>
+              </div>
+              <button
+                onClick={() => setBrandingSuccessMsg(null)}
+                className="text-emerald-700 hover:text-emerald-900 text-sm font-bold"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          {/* Browser Tab Simulation Preview */}
+          <div className="bg-slate-900 rounded-3xl p-5 border border-slate-800 shadow-xl space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-rose-500/80"></div>
+                <div className="w-3 h-3 rounded-full bg-amber-500/80"></div>
+                <div className="w-3 h-3 rounded-full bg-emerald-500/80"></div>
+                <span className="text-[11px] font-bold text-slate-400 ml-2">Live Browser Tab Simulation</span>
+              </div>
+              <span className="text-[10px] font-mono bg-slate-800 text-slate-300 px-2 py-0.5 rounded-md">
+                Live DOM Title & Link Rel="Icon"
+              </span>
             </div>
 
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">
-                Platform Service Commission (%):
-              </label>
-              <input
-                type="number"
-                value={settings.platformCommissionPercent}
-                onChange={(e) => marketplaceStore.updateSystemSettings({ platformCommissionPercent: Number(e.target.value) })}
-                className="w-full p-2 bg-slate-50 border border-slate-300 rounded-xl font-bold"
-              />
-              <p className="text-[11px] text-slate-400 mt-0.5">QAAGA take rate on completed services (Standard: 10%).</p>
+            {/* Realistic Chrome Tab Bar */}
+            <div className="bg-slate-950/80 rounded-2xl p-2.5 border border-slate-800 flex flex-col md:flex-row items-start md:items-center gap-3">
+              {/* Tab Item */}
+              <div className="bg-slate-900 text-slate-200 px-4 py-2 rounded-xl flex items-center gap-2.5 border border-slate-700 shadow-md min-w-[280px] max-w-full md:max-w-md">
+                <img
+                  src={getActiveFaviconHref(settings)}
+                  alt="Favicon Preview"
+                  className="w-4 h-4 rounded-sm shrink-0 object-contain shadow-xs"
+                />
+                <span className="text-xs font-bold text-slate-100 truncate flex-1">
+                  {brandingForm.siteTitle || DEFAULT_SITE_TITLE}
+                </span>
+                <span className="text-slate-500 hover:text-slate-300 text-xs cursor-pointer">✕</span>
+              </div>
+
+              {/* URL Address Bar */}
+              <div className="flex-1 w-full bg-slate-900/90 rounded-xl px-3 py-1.5 border border-slate-800 flex items-center gap-2 text-xs text-slate-400">
+                <Lock size={12} className="text-emerald-400 shrink-0" />
+                <span className="text-emerald-400 font-bold">https://</span>
+                <span className="text-slate-200 font-medium">qaaga.com</span>
+                <span className="text-slate-500">/</span>
+                <span className="text-[10px] text-purple-400 ml-auto font-mono bg-purple-950/60 px-2 py-0.5 rounded border border-purple-800/50">
+                  Verified Super Marketplace
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* LEFT COLUMN: Site Title & SEO Meta Configuration */}
+            <div className="lg:col-span-6 space-y-6">
+              <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-xs space-y-5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Globe size={20} className="text-purple-600" />
+                    <h3 className="text-base font-bold text-slate-900">Site Title & Name Configuration</h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleSetAiStudioTitlePreset}
+                    className="text-[11px] font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-2.5 py-1 rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+                  >
+                    <Sparkles size={12} />
+                    <span>AI Studio Title Preset</span>
+                  </button>
+                </div>
+
+                <form onSubmit={handleSaveBrandingInfo} className="space-y-4 text-xs">
+                  {/* Browser Document Title (Full) */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="font-bold text-slate-800">
+                        Browser Document Title (Window & Tab Name) *
+                      </label>
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        {brandingForm.siteTitle.length} chars
+                      </span>
+                    </div>
+                    <input
+                      type="text"
+                      value={brandingForm.siteTitle}
+                      onChange={(e) => setBrandingForm({ ...brandingForm, siteTitle: e.target.value })}
+                      placeholder="e.g. qaaga.com is Bangladesh's verified multi-service super marketplace ."
+                      className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 focus:bg-white focus:border-purple-600 focus:ring-1 focus:ring-purple-600"
+                      required
+                    />
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      This directly sets the <code className="bg-slate-100 px-1 py-0.5 rounded text-purple-700 font-mono">&lt;title&gt;</code> tag and the text shown on the browser tab.
+                    </p>
+                  </div>
+
+                  {/* Brand / Short Site Name */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-slate-800 mb-1">
+                        Brand Name:
+                      </label>
+                      <input
+                        type="text"
+                        value={brandingForm.siteName}
+                        onChange={(e) => setBrandingForm({ ...brandingForm, siteName: e.target.value })}
+                        placeholder="qaaga.com"
+                        className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-slate-800 mb-1">
+                        Theme / Accent Color:
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="color"
+                          value={brandingForm.themeColor}
+                          onChange={(e) => setBrandingForm({ ...brandingForm, themeColor: e.target.value })}
+                          className="w-9 h-9 p-0.5 rounded-lg border border-slate-300 cursor-pointer"
+                        />
+                        <input
+                          type="text"
+                          value={brandingForm.themeColor}
+                          onChange={(e) => setBrandingForm({ ...brandingForm, themeColor: e.target.value })}
+                          className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-mono text-slate-900"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Tagline */}
+                  <div>
+                    <label className="block font-bold text-slate-800 mb-1">
+                      Platform Tagline:
+                    </label>
+                    <input
+                      type="text"
+                      value={brandingForm.siteTagline}
+                      onChange={(e) => setBrandingForm({ ...brandingForm, siteTagline: e.target.value })}
+                      placeholder="Bangladesh's verified multi-service super marketplace"
+                      className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900"
+                    />
+                  </div>
+
+                  {/* Meta Description */}
+                  <div>
+                    <label className="block font-bold text-slate-800 mb-1">
+                      SEO Meta Description:
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={brandingForm.siteDescription}
+                      onChange={(e) => setBrandingForm({ ...brandingForm, siteDescription: e.target.value })}
+                      placeholder="QAAGA is Bangladesh's 1st verified multi-service super marketplace..."
+                      className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900"
+                    />
+                  </div>
+
+                  {/* Form Actions */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={handleResetAllBranding}
+                      className="text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-100 px-3 py-2 rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
+                    >
+                      <RotateCcw size={13} />
+                      <span>Reset to Factory Defaults</span>
+                    </button>
+
+                    <button
+                      type="submit"
+                      className="bg-purple-900 hover:bg-purple-800 text-white px-5 py-2.5 rounded-xl font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1.5 ml-auto"
+                    >
+                      <Check size={15} />
+                      <span>Save & Apply Title</span>
+                    </button>
+                  </div>
+                </form>
+              </div>
             </div>
 
-            <div className="space-y-2 pt-2 border-t border-slate-100">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={settings.requireAdminRequestReview}
-                  onChange={(e) => marketplaceStore.updateSystemSettings({ requireAdminRequestReview: e.target.checked })}
-                  className="rounded text-teal-600"
-                />
-                <span className="font-bold text-slate-800">Enforce Admin Review on Customer Requests</span>
-              </label>
+            {/* RIGHT COLUMN: Custom Favicon Hub (Upload, Presets & URL) */}
+            <div className="lg:col-span-6 space-y-6">
+              <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-xs space-y-5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Sparkles size={20} className="text-indigo-600" />
+                    <h3 className="text-base font-bold text-slate-900">Favicon Management Hub</h3>
+                  </div>
+                  <span className="text-[11px] font-bold bg-indigo-50 text-indigo-700 px-2.5 py-0.5 rounded-full border border-indigo-200">
+                    Active: {settings.faviconType.toUpperCase()}
+                  </span>
+                </div>
 
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={settings.requireAdminOfferReview}
-                  onChange={(e) => marketplaceStore.updateSystemSettings({ requireAdminOfferReview: e.target.checked })}
-                  className="rounded text-teal-600"
-                />
-                <span className="font-bold text-slate-800">Enforce Admin Review on Provider Quotations</span>
-              </label>
+                {/* Active Favicon Highlight Card */}
+                <div className="bg-gradient-to-r from-slate-50 to-indigo-50/50 p-4 rounded-2xl border border-slate-200 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-14 h-14 rounded-2xl bg-white p-2 border border-slate-200 shadow-xs flex items-center justify-center shrink-0">
+                      <img
+                        src={getActiveFaviconHref(settings)}
+                        alt="Current Favicon"
+                        className="w-10 h-10 object-contain rounded-md"
+                      />
+                    </div>
+                    <div>
+                      <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Active Browser Favicon</div>
+                      <h4 className="text-xs font-bold text-slate-900 mt-0.5">
+                        {settings.faviconType === 'preset'
+                          ? FAVICON_PRESETS.find(p => p.id === settings.faviconPresetId)?.name || 'QAAGA Official Preset'
+                          : settings.faviconType === 'custom_upload'
+                          ? 'Uploaded Custom Icon File'
+                          : 'Custom External Web Icon'}
+                      </h4>
+                      <div className="text-[10px] text-emerald-600 font-semibold flex items-center gap-1 mt-0.5">
+                        <CheckCircle size={11} />
+                        <span>Live in browser head tag</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleCopyActiveFaviconUri}
+                      className="p-2 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold cursor-pointer flex items-center gap-1"
+                      title="Copy Favicon URI"
+                    >
+                      <Copy size={13} />
+                      <span className="hidden sm:inline">{copiedDataUri ? 'Copied!' : 'Copy'}</span>
+                    </button>
+                    <button
+                      onClick={handleRemoveFavicon}
+                      className="p-2 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 text-xs font-bold cursor-pointer flex items-center gap-1"
+                      title="Remove custom favicon"
+                    >
+                      <Trash2 size={13} />
+                      <span className="hidden sm:inline">Remove</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* METHOD 1: Upload Custom Favicon File */}
+                <div className="space-y-3 pt-2">
+                  <label className="block text-xs font-bold text-slate-800">
+                    Option 1: Upload Custom Favicon File (PNG, JPG, SVG, ICO)
+                  </label>
+                  
+                  <label className="border-2 border-dashed border-slate-300 hover:border-purple-500 bg-slate-50 hover:bg-purple-50/40 rounded-2xl p-4 flex flex-col items-center justify-center text-center cursor-pointer transition-all">
+                    <input
+                      type="file"
+                      accept=".png,.jpg,.jpeg,.svg,.ico,.webp"
+                      onChange={handleFileUploadFavicon}
+                      className="hidden"
+                    />
+                    <UploadCloud size={24} className="text-purple-600 mb-1" />
+                    <span className="text-xs font-bold text-slate-900">Click or Drag & Drop to Upload Favicon</span>
+                    <span className="text-[10px] text-slate-500 mt-0.5">Recommended: 64x64 or 128x128 PNG/SVG with transparent background</span>
+                  </label>
+
+                  {faviconUploadPreview && (
+                    <div className="p-3 bg-slate-100 rounded-2xl flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <img src={faviconUploadPreview} alt="Upload preview" className="w-8 h-8 rounded-lg object-contain bg-white p-1 border border-slate-200" />
+                        <div>
+                          <div className="text-xs font-bold text-slate-900">Uploaded File Preview</div>
+                          <div className="text-[10px] text-emerald-600 font-semibold">Ready & Applied</div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={handleRemoveFavicon}
+                        className="text-xs font-bold text-rose-600 hover:text-rose-800"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* METHOD 2: Curated High-Definition Vector Presets */}
+                <div className="space-y-3 pt-2 border-t border-slate-100">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-bold text-slate-800">
+                      Option 2: Select from Curated Vector Presets (1-Click Apply)
+                    </label>
+                    <span className="text-[10px] text-slate-400">7 Custom SVG Icons</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {FAVICON_PRESETS.map((preset) => {
+                      const isSelected = settings.faviconType === 'preset' && settings.faviconPresetId === preset.id;
+                      return (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          onClick={() => handleSelectFaviconPreset(preset.id)}
+                          className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-3 cursor-pointer ${
+                            isSelected
+                              ? 'border-purple-600 bg-purple-50/60 ring-2 ring-purple-600/20 shadow-xs'
+                              : 'border-slate-200 bg-slate-50 hover:bg-white hover:border-slate-300'
+                          }`}
+                        >
+                          <div className="w-10 h-10 rounded-xl bg-white p-1 border border-slate-200 shadow-2xs flex items-center justify-center shrink-0">
+                            <img
+                              src={preset.svgDataUri}
+                              alt={preset.name}
+                              className="w-8 h-8 object-contain"
+                            />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5">
+                              <h4 className="text-xs font-bold text-slate-900 truncate">{preset.name}</h4>
+                              {isSelected && (
+                                <span className="w-2 h-2 rounded-full bg-purple-600 shrink-0"></span>
+                              )}
+                            </div>
+                            <p className="text-[10px] text-slate-500 truncate">{preset.nameBangla}</p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* METHOD 3: Direct Web Image URL */}
+                <div className="space-y-2 pt-2 border-t border-slate-100">
+                  <label className="block text-xs font-bold text-slate-800">
+                    Option 3: External Favicon Web Image URL
+                  </label>
+                  <form onSubmit={handleApplyCustomFaviconUrl} className="flex gap-2">
+                    <input
+                      type="url"
+                      value={customFaviconUrlInput}
+                      onChange={(e) => setCustomFaviconUrlInput(e.target.value)}
+                      placeholder="https://example.com/assets/favicon.png"
+                      className="flex-1 p-2 bg-slate-50 border border-slate-300 rounded-xl text-xs"
+                    />
+                    <button
+                      type="submit"
+                      className="bg-slate-900 hover:bg-slate-800 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition-colors cursor-pointer shrink-0"
+                    >
+                      Apply URL
+                    </button>
+                  </form>
+                </div>
+
+              </div>
             </div>
           </div>
         </div>
