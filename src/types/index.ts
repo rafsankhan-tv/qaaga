@@ -83,6 +83,8 @@ export interface ProviderProfile {
   availableHours: string;
   verificationStatus: 'PENDING' | 'VERIFIED' | 'REJECTED';
   nidDocumentUrl?: string;
+  nidNumber?: string;
+  tradeLicenseNumber?: string;
   certificates: string[];
   portfolioPhotos: string[];
   portfolioVideos: string[];
@@ -284,6 +286,7 @@ export interface NurseProfile {
   hourlyRate: number;
   dailyRate: number;
   monthlyPackageRate: number;
+  monthlyRate?: number;
   district: string;
   thana: string;
   area: string;
@@ -370,32 +373,41 @@ export interface HotelBooking {
 
 export interface SellerStore {
   id: string;
-  userId: string;
+  userId?: string;
   shopName: string;
   shopLogo: string;
   bannerImage?: string;
+  shopBanner?: string;
   ownerName?: string;
   phone: string;
   whatsapp?: string;
-  email: string;
+  email?: string;
   nidNumber?: string;
   tradeLicense?: string;
+  tradeLicenseNumber?: string;
   address: string;
   district: string;
-  thana: string;
+  thana?: string;
   area: string;
   bio?: string;
+  shopBio?: string;
   deliveryPolicy?: string;
   returnPolicy?: string;
   bankAccountInfo?: string;
+  bankAccountName?: string;
+  bankAccountNumber?: string;
+  bankName?: string;
+  bankRoutingNumber?: string;
   bkashMerchant?: string;
-  productCategories: string[];
-  approvalStatus: 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED';
+  bkashMerchantNumber?: string;
+  productCategories?: string[];
+  approvalStatus?: 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED';
+  isApproved?: boolean;
   isVerified: boolean;
   hasOfficialBadge?: boolean;
   rating: number;
   reviewCount: number;
-  totalSales: number;
+  totalSales?: number;
   totalProducts?: number;
   joinedDate?: string;
   responseTime?: string;
@@ -410,14 +422,18 @@ export interface SellerStore {
 export interface SellerPayoutRequest {
   id: string;
   sellerId: string;
-  sellerShopName: string;
+  sellerShopName?: string;
+  shopName?: string;
   amount: number;
-  paymentMethod: 'BKASH' | 'NAGAD' | 'BANK_TRANSFER';
-  accountNumber: string;
+  paymentMethod?: 'BKASH' | 'NAGAD' | 'BANK_TRANSFER' | string;
+  method?: 'BKASH' | 'NAGAD' | 'BANK_TRANSFER' | string;
+  accountNumber?: string;
+  accountDetails?: string;
   bankName?: string;
   accountHolderName?: string;
   status: 'PENDING' | 'APPROVED' | 'PAID' | 'REJECTED';
   adminNote?: string;
+  note?: string;
   transactionRef?: string;
   requestedAt: string;
   processedAt?: string;
@@ -426,12 +442,14 @@ export interface SellerPayoutRequest {
 export interface SellerReview {
   id: string;
   sellerId: string;
-  customerId: string;
+  customerId?: string;
   customerName: string;
   customerAvatar?: string;
   rating: number;
   comment: string;
   productTitle?: string;
+  productName?: string;
+  verifiedPurchase?: boolean;
   createdAt: string;
 }
 
@@ -445,6 +463,9 @@ export interface Product {
   price: number;
   discountPrice?: number;
   stock: number;
+  inStock?: boolean;
+  isFeatured?: boolean;
+  salesCount?: number;
   description: string;
   images: string[];
   videoUrl?: string;
@@ -573,6 +594,7 @@ export interface UsedProductListing {
   isNegotiable: boolean;
   district: string;
   area: string;
+  locationArea?: string;
   photos: string[];
   videoUrl?: string;
   isApproved: boolean;
@@ -749,6 +771,7 @@ export interface ShowcaseCardItem {
   ctaText: string; // e.g. "ওপেন করুন", "প্রোফাইল দেখুন", "বিস্তারিত দেখুন", "বুকিং করুন"
   description?: string; // Full description / specs for profile modal
   features?: string[]; // Deliverables or feature checklist
+  providerId?: string; // Provider or agency unique ID
   providerName?: string; // Provider or agency name
   providerRole?: string; // Role or designation
   providerAvatar?: string;

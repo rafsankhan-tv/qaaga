@@ -33,7 +33,18 @@ export const CuteCatAvatarSvg: React.FC<CuteCatAvatarSvgProps> = ({
   }
 
   // Color schemes based on skin
-  const skinColors = {
+  const skinColors: Record<string, {
+    body: string;
+    bodyLight: string;
+    bodyDark: string;
+    earsInner: string;
+    belly: string;
+    stripes: string;
+    eyes: string;
+    blush: string;
+    collar: string;
+    bell: string;
+  }> = {
     'orange-tabby': {
       body: '#FF9800',
       bodyLight: '#FFB74D',

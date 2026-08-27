@@ -50,10 +50,11 @@ import { CategoryShowcaseSection, ShowcaseCardItem } from '../types';
 
 interface HomeViewProps {
   onNavigate: (view: string, params?: any) => void;
-  onOpenSearch: () => void;
+  onOpenSearch?: () => void;
+  onOpenLocation?: () => void;
 }
 
-export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, onOpenSearch }) => {
+export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, onOpenSearch, onOpenLocation }) => {
   const { formattedLocation, setIsLocationModalOpen } = useLocation();
   const [heroSearchText, setHeroSearchText] = useState('');
   const [savedJobs, setSavedJobs] = useState<Record<string, boolean>>({});
@@ -125,8 +126,10 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, onOpenSearch }) 
     e.preventDefault();
     if (heroSearchText.trim()) {
       onNavigate('service_request', { searchQuery: heroSearchText.trim() });
-    } else {
+    } else if (onOpenSearch) {
       onOpenSearch();
+    } else {
+      onNavigate('service_request');
     }
   };
 

@@ -334,7 +334,10 @@ class MarketplaceStore {
         categoryShowcases: this.categoryShowcases,
         cartItems: this.cartItems,
         wishlist: this.wishlist,
-        supportConversations: this.supportConversations
+        supportConversations: this.supportConversations,
+        sellerStores: this.sellerStores,
+        sellerPayouts: this.sellerPayouts,
+        sellerReviews: this.sellerReviews
       };
       localStorage.setItem('qaaga_db_cache', JSON.stringify(data));
     } catch (e) {
@@ -372,6 +375,15 @@ class MarketplaceStore {
         }
         if (parsed.providers) this.providers = parsed.providers;
         if (parsed.products) this.products = parsed.products;
+        if (parsed.sellerStores && Array.isArray(parsed.sellerStores) && parsed.sellerStores.length > 0) {
+          this.sellerStores = parsed.sellerStores;
+        }
+        if (parsed.sellerPayouts && Array.isArray(parsed.sellerPayouts)) {
+          this.sellerPayouts = parsed.sellerPayouts;
+        }
+        if (parsed.sellerReviews && Array.isArray(parsed.sellerReviews)) {
+          this.sellerReviews = parsed.sellerReviews;
+        }
         if (parsed.categories) this.categories = parsed.categories;
         if (parsed.heroBanners) this.heroBanners = parsed.heroBanners;
         if (parsed.categoryShowcases && Array.isArray(parsed.categoryShowcases) && parsed.categoryShowcases.length > 0) {
@@ -412,6 +424,9 @@ class MarketplaceStore {
     this.hotels = [...SEED_HOTELS];
     this.hotelBookings = [];
     this.products = [...SEED_PRODUCTS];
+    this.sellerStores = [...SEED_SELLER_STORES];
+    this.sellerPayouts = [...SEED_SELLER_PAYOUTS];
+    this.sellerReviews = [...SEED_SELLER_REVIEWS];
     this.orders = [...SEED_ORDERS];
     this.wishlist = [
       { id: 'w-1', type: 'PRODUCT', itemId: 'prod-1', addedAt: new Date().toISOString() },
@@ -444,6 +459,15 @@ class MarketplaceStore {
   public getHotels() { return this.hotels; }
   public getHotelBookings() { return this.hotelBookings; }
   public getProducts() { return this.products; }
+  public getSellerStores() { return this.sellerStores; }
+  public getSellerPayouts(sellerId?: string) {
+    if (!sellerId) return this.sellerPayouts;
+    return this.sellerPayouts.filter(p => p.sellerId === sellerId);
+  }
+  public getSellerReviews(sellerId?: string) {
+    if (!sellerId) return this.sellerReviews;
+    return this.sellerReviews.filter(r => r.sellerId === sellerId);
+  }
   public getOrders() { return this.orders; }
   public getEbooks() { return this.ebooks; }
   public getEbookPurchases() { return this.ebookPurchases; }
@@ -468,6 +492,19 @@ class MarketplaceStore {
   }
   public getSettings() { return this.settings; }
   public getUsers() { return this.users; }
+
+  public addUser(user: UserProfile) {
+    this.users.push(user);
+    this.notify();
+  }
+
+  public updateUser(userId: string, data: Partial<UserProfile>) {
+    const idx = this.users.findIndex(u => u.id === userId);
+    if (idx !== -1) {
+      this.users[idx] = { ...this.users[idx], ...data, updatedAt: new Date().toISOString() };
+      this.notify();
+    }
+  }
 
   // --- CART MANAGEMENT ---
   public getCartItems() {
@@ -1827,19 +1864,6 @@ class MarketplaceStore {
     }
   }
 
-  public addProduct(product: Omit<Product, 'id' | 'createdAt' | 'rating' | 'reviewCount'>): Product {
-    const newProd: Product = {
-      ...product,
-      id: `prod-${Date.now().toString(36)}`,
-      rating: 5.0,
-      reviewCount: 1,
-      createdAt: new Date().toISOString()
-    };
-    this.products.unshift(newProd);
-    this.notify();
-    return newProd;
-  }
-
   public addProvider(profile: Omit<ProviderProfile, 'id' | 'completedJobs' | 'rating' | 'reviewCount' | 'createdAt'>): ProviderProfile {
     const newProv: ProviderProfile = {
       ...profile,
@@ -2170,6 +2194,359 @@ class MarketplaceStore {
     this.feedSlides = [...INITIAL_FEED_BANNER_SLIDES];
     this.notify();
   }
+
+  // ==========================================
+  // SELLER STORES & PRODUCT MANAGEMENT (FULL CRUD)
+  // ==========================================
+  public getProductById(id: string): Product | undefined {
+    return this.products.find(p => p.id === id);
+  }
+
+  public addProduct(prodData: Omit<Product, 'id' | 'createdAt'> & { id?: string; createdAt?: string }): Product {
+    const id = prodData.id || `prod-${Date.now().toString(36)}-${Math.floor(Math.random() * 1000)}`;
+    const newProd: Product = {
+      ...prodData,
+      id,
+      createdAt: prodData.createdAt || new Date().toISOString(),
+      rating: prodData.rating || 5.0,
+      reviewCount: prodData.reviewCount || 0,
+      salesCount: prodData.salesCount || 0
+    };
+    this.products.unshift(newProd);
+
+    // Update seller store product count
+    if (newProd.sellerId) {
+      const store = this.sellerStores.find(s => s.id === newProd.sellerId || s.userId === newProd.sellerId);
+      if (store) {
+        store.totalProducts = (store.totalProducts || 0) + 1;
+      }
+    }
+
+    this.notify();
+    return newProd;
+  }
+
+  public updateProduct(id: string, updates: Partial<Product>): boolean {
+    const idx = this.products.findIndex(p => p.id === id);
+    if (idx === -1) return false;
+    this.products[idx] = {
+      ...this.products[idx],
+      ...updates
+    };
+    this.notify();
+    return true;
+  }
+
+  public deleteProduct(id: string): boolean {
+    const prod = this.products.find(p => p.id === id);
+    if (!prod) return false;
+    
+    if (prod.sellerId) {
+      const store = this.sellerStores.find(s => s.id === prod.sellerId || s.userId === prod.sellerId);
+      if (store && store.totalProducts && store.totalProducts > 0) {
+        store.totalProducts -= 1;
+      }
+    }
+
+    this.products = this.products.filter(p => p.id !== id);
+    this.notify();
+    return true;
+  }
+
+  public toggleProductFeatured(id: string): boolean {
+    const prod = this.products.find(p => p.id === id);
+    if (!prod) return false;
+    prod.isFeatured = !prod.isFeatured;
+    this.notify();
+    return prod.isFeatured;
+  }
+
+  public toggleProductInStock(id: string): boolean {
+    const prod = this.products.find(p => p.id === id);
+    if (!prod) return false;
+    prod.inStock = !prod.inStock;
+    if (!prod.inStock) {
+      prod.stock = 0;
+    } else if (prod.stock === 0) {
+      prod.stock = 10;
+    }
+    this.notify();
+    return prod.inStock;
+  }
+
+  // --- SELLER STORE CRUD ---
+  public getSellerStoreById(id: string): SellerStore | undefined {
+    return this.sellerStores.find(s => s.id === id || s.userId === id);
+  }
+
+  public getSellerStoreByUserId(userId: string): SellerStore | undefined {
+    return this.sellerStores.find(s => s.userId === userId || s.id === userId);
+  }
+
+  public createSellerStore(storeData: Omit<SellerStore, 'id' | 'createdAt'> & { id?: string }): SellerStore {
+    const id = storeData.id || `seller-${Date.now().toString(36)}`;
+    const newStore: SellerStore = {
+      ...storeData,
+      id,
+      rating: storeData.rating || 5.0,
+      reviewCount: storeData.reviewCount || 0,
+      totalSales: storeData.totalSales || 0,
+      totalProducts: storeData.totalProducts || 0,
+      availableBalance: storeData.availableBalance || 0,
+      pendingBalance: storeData.pendingBalance || 0,
+      approvalStatus: storeData.approvalStatus || 'APPROVED',
+      isVerified: storeData.isVerified ?? true,
+      hasOfficialBadge: storeData.hasOfficialBadge ?? true,
+      createdAt: new Date().toISOString()
+    };
+    this.sellerStores.unshift(newStore);
+    this.notify();
+    return newStore;
+  }
+
+  public updateSellerStore(id: string, updates: Partial<SellerStore>): boolean {
+    const idx = this.sellerStores.findIndex(s => s.id === id || s.userId === id);
+    if (idx === -1) return false;
+    this.sellerStores[idx] = {
+      ...this.sellerStores[idx],
+      ...updates,
+      updatedAt: new Date().toISOString()
+    };
+
+    // If shop name changed, update product seller shop names
+    if (updates.shopName) {
+      this.products.forEach(p => {
+        if (p.sellerId === id || p.sellerId === this.sellerStores[idx].userId) {
+          p.sellerShopName = updates.shopName!;
+        }
+      });
+    }
+
+    this.notify();
+    return true;
+  }
+
+  public deleteSellerStore(id: string): boolean {
+    const idx = this.sellerStores.findIndex(s => s.id === id || s.userId === id);
+    if (idx === -1) return false;
+    this.sellerStores.splice(idx, 1);
+    this.notify();
+    return true;
+  }
+
+  public verifySellerStore(id: string, isVerified: boolean): boolean {
+    const store = this.sellerStores.find(s => s.id === id || s.userId === id);
+    if (!store) return false;
+    store.isVerified = isVerified;
+    store.hasOfficialBadge = isVerified;
+    this.notify();
+    return true;
+  }
+
+  public updateSellerApprovalStatus(id: string, status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED'): boolean {
+    const store = this.sellerStores.find(s => s.id === id || s.userId === id);
+    if (!store) return false;
+    store.approvalStatus = status;
+    this.notify();
+    return true;
+  }
+
+  public getSellerProducts(sellerId: string): Product[] {
+    return this.products.filter(p => p.sellerId === sellerId || p.sellerId === `user-${sellerId}`);
+  }
+
+  public getSellerOrders(sellerId: string): ProductOrder[] {
+    return this.orders.filter(o => 
+      o.items.some(item => {
+        const prod = this.products.find(p => p.id === item.productId);
+        return prod && (prod.sellerId === sellerId || prod.sellerId === `user-${sellerId}`);
+      })
+    );
+  }
+
+  public addSellerReview(reviewData: Omit<SellerReview, 'id' | 'createdAt'>): SellerReview {
+    const id = `srev-${Date.now().toString(36)}`;
+    const newRev: SellerReview = {
+      ...reviewData,
+      id,
+      createdAt: new Date().toISOString()
+    };
+    this.sellerReviews.unshift(newRev);
+
+    // Update store rating
+    const store = this.sellerStores.find(s => s.id === reviewData.sellerId || s.userId === reviewData.sellerId);
+    if (store) {
+      const sellerRevs = this.sellerReviews.filter(r => r.sellerId === reviewData.sellerId);
+      const totalScore = sellerRevs.reduce((acc, r) => acc + r.rating, 0);
+      store.reviewCount = sellerRevs.length;
+      store.rating = Number((totalScore / sellerRevs.length).toFixed(2));
+    }
+
+    this.notify();
+    return newRev;
+  }
+
+  public requestSellerPayout(payoutData: Omit<SellerPayoutRequest, 'id' | 'status' | 'requestedAt'>): SellerPayoutRequest {
+    const id = `payout-${Date.now().toString(36)}`;
+    const newPayout: SellerPayoutRequest = {
+      ...payoutData,
+      id,
+      status: 'PENDING',
+      requestedAt: new Date().toISOString()
+    };
+    this.sellerPayouts.unshift(newPayout);
+
+    // Adjust balances
+    const store = this.sellerStores.find(s => s.id === payoutData.sellerId || s.userId === payoutData.sellerId);
+    if (store && store.availableBalance !== undefined) {
+      store.availableBalance = Math.max(0, store.availableBalance - payoutData.amount);
+      store.pendingBalance = (store.pendingBalance || 0) + payoutData.amount;
+    }
+
+    this.notify();
+    return newPayout;
+  }
+
+  public processSellerPayout(payoutId: string, status: 'APPROVED' | 'PAID' | 'REJECTED', adminNote?: string, transactionRef?: string): boolean {
+    const payout = this.sellerPayouts.find(p => p.id === payoutId);
+    if (!payout) return false;
+
+    payout.status = status;
+    if (adminNote) payout.adminNote = adminNote;
+    if (transactionRef) payout.transactionRef = transactionRef;
+    payout.processedAt = new Date().toISOString();
+
+    const store = this.sellerStores.find(s => s.id === payout.sellerId || s.userId === payout.sellerId);
+    if (store) {
+      if (status === 'PAID') {
+        store.pendingBalance = Math.max(0, (store.pendingBalance || 0) - payout.amount);
+      } else if (status === 'REJECTED') {
+        store.pendingBalance = Math.max(0, (store.pendingBalance || 0) - payout.amount);
+        store.availableBalance = (store.availableBalance || 0) + payout.amount;
+      }
+    }
+
+    this.notify();
+    return true;
+  }
+
+  // --- SELLER CHAT CHANNELS ---
+  public getOrCreateSellerChat(sellerId: string, customerId: string, customerName: string, customerAvatar?: string) {
+    const channelId = `chat-seller-${sellerId}`;
+    let conv = this.supportConversations.find(c => c.id === channelId);
+    const store = this.getSellerStoreById(sellerId);
+    const shopName = store ? store.shopName : 'অফিসিয়াল সেলার';
+    const shopLogo = store?.shopLogo || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=150&q=80';
+
+    if (!conv) {
+      conv = {
+        id: channelId,
+        channelName: `${shopName} (সরাসরি চ্যাট)`,
+        avatar: shopLogo,
+        role: 'Verified Shop Seller',
+        online: true,
+        messages: [
+          {
+            id: `msg-${Date.now()}-welcome`,
+            senderId: sellerId,
+            senderName: shopName,
+            senderRole: 'SELLER',
+            text: `আসসালামু আলাইকুম! ${shopName}-এ স্বাগতম। আপনি প্রোডাক্ট স্টক, ওয়ারেন্টি বা যেকোনো স্পেসিফিকেশন সম্পর্কে জানতে এখানে বার্তা দিতে পারেন।`,
+            createdAt: new Date().toISOString(),
+            isSupport: false
+          }
+        ]
+      };
+      this.supportConversations.unshift(conv);
+      this.notify();
+    }
+    return conv;
+  }
+
+  public sendSellerChatMessage(channelId: string, text: string, senderId: string, senderName: string, senderRole: string, attachmentUrl?: string) {
+    const conv = this.supportConversations.find(c => c.id === channelId);
+    if (!conv) return;
+
+    const newMsg = {
+      id: `msg-${Date.now().toString(36)}`,
+      senderId,
+      senderName,
+      senderRole,
+      text,
+      createdAt: new Date().toISOString(),
+      attachmentUrl,
+      isSupport: false
+    };
+
+    conv.messages.push(newMsg);
+    this.notify();
+
+    // Auto reply from seller if sender is customer
+    if (senderRole !== 'SELLER') {
+      setTimeout(() => {
+        conv?.messages.push({
+          id: `msg-rep-${Date.now().toString(36)}`,
+          senderId: 'seller-auto',
+          senderName: conv.channelName.split('(')[0].trim(),
+          senderRole: 'SELLER',
+          text: `ধন্যবাদ ${senderName}! আপনার বার্তাটি পেয়েছি। আমরা আপনার অর্ডার বা অনুসন্ধানটি গুরুত্বের সাথে দেখছি। খুব শীঘ্রই যোগাযোগ করছি।`,
+          createdAt: new Date().toISOString(),
+          isSupport: false
+        });
+        this.notify();
+      }, 1200);
+    }
+  }
+
+  public getAllSellerPayouts(): SellerPayoutRequest[] {
+    return this.sellerPayouts;
+  }
+
+  public addSellerStore(storeData: Omit<SellerStore, 'id' | 'createdAt'> & { id?: string }): SellerStore {
+    return this.createSellerStore(storeData);
+  }
+
+  public toggleSellerVerification(id: string): boolean {
+    const store = this.sellerStores.find(s => s.id === id || s.userId === id);
+    if (!store) return false;
+    store.isVerified = !store.isVerified;
+    this.notify();
+    return store.isVerified;
+  }
+
+  public toggleSellerApproval(id: string): boolean {
+    const store = this.sellerStores.find(s => s.id === id || s.userId === id);
+    if (!store) return false;
+    const isApproved = store.approvalStatus === 'APPROVED';
+    store.approvalStatus = isApproved ? 'SUSPENDED' : 'APPROVED';
+    store.isApproved = !isApproved;
+    this.notify();
+    return !isApproved;
+  }
+
+  public toggleSellerOfficialBadge(id: string): boolean {
+    const store = this.sellerStores.find(s => s.id === id || s.userId === id);
+    if (!store) return false;
+    store.hasOfficialBadge = !store.hasOfficialBadge;
+    this.notify();
+    return !!store.hasOfficialBadge;
+  }
+
+  public updateOrderStatus(orderId: string, status: any, noteOrTracking?: string, courierPartner?: string): boolean {
+    const order = this.orders.find(o => o.id === orderId || o.orderNumber === orderId);
+    if (!order) return false;
+    order.orderStatus = status;
+    if (noteOrTracking) {
+      order.adminNote = noteOrTracking;
+    }
+    if (courierPartner) {
+      order.courierPartner = courierPartner;
+    }
+    order.updatedAt = new Date().toISOString();
+    this.notify();
+    return true;
+  }
 }
 
 export const marketplaceStore = new MarketplaceStore();
+

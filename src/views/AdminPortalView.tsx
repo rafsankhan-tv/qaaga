@@ -38,7 +38,15 @@ import {
   UploadCloud,
   RotateCcw,
   Copy,
-  CheckCircle
+  CheckCircle,
+  Store,
+  BadgeCheck,
+  Phone,
+  MapPin,
+  Package,
+  CreditCard,
+  Building2,
+  PhoneCall
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { marketplaceStore } from '../services/marketplaceStore';
@@ -63,7 +71,9 @@ import {
   ShowcaseCardItem,
   CuteCatAssistantSettings,
   CatQuickChip,
-  FeedBannerSlide
+  FeedBannerSlide,
+  SellerStore,
+  SellerPayoutRequest
 } from '../types';
 
 interface AdminPortalViewProps {
@@ -77,6 +87,8 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({ onNavigate, in
   const [activeTab, setActiveTab] = useState<
     | 'REQUEST_MODERATION'
     | 'OFFER_MODERATION'
+    | 'SELLERS'
+    | 'SELLER_PAYOUTS'
     | 'BANNERS'
     | 'FEED_SLIDER'
     | 'SHOWCASES'
@@ -104,6 +116,41 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({ onNavigate, in
   const [cuteCatSettings, setCuteCatSettings] = useState<CuteCatAssistantSettings>(() =>
     marketplaceStore.getCuteCatSettings()
   );
+  const [sellerStores, setSellerStores] = useState<SellerStore[]>(() =>
+    marketplaceStore.getSellerStores()
+  );
+  const [sellerPayouts, setSellerPayouts] = useState<SellerPayoutRequest[]>(() =>
+    marketplaceStore.getAllSellerPayouts()
+  );
+
+  // Seller Management Modal & Form State
+  const [isSellerModalOpen, setIsSellerModalOpen] = useState(false);
+  const [editingSellerId, setEditingSellerId] = useState<string | null>(null);
+  const [sellerSearch, setSellerSearch] = useState('');
+  const [sellerForm, setSellerForm] = useState({
+    shopName: '',
+    ownerName: '',
+    phone: '',
+    whatsapp: '',
+    district: 'ঢাকা',
+    area: 'মিরপুর',
+    address: '',
+    shopBio: '',
+    shopLogo: '',
+    shopBanner: '',
+    isVerified: true,
+    isApproved: true,
+    hasOfficialBadge: false,
+    tradeLicenseNumber: '',
+    deliveryPolicy: 'ঢাকা সিটিতে ২৪-৪৮ ঘণ্টা, সারাদেশে ৭২ ঘণ্টা',
+    returnPolicy: '৭ দিনের সহজ রিপ্লেসমেন্ট গ্যারান্টি'
+  });
+
+  // Payout Moderation Modal State
+  const [selectedPayoutForProcess, setSelectedPayoutForProcess] = useState<SellerPayoutRequest | null>(null);
+  const [payoutProcessStatus, setPayoutProcessStatus] = useState<'APPROVED' | 'PAID' | 'REJECTED'>('PAID');
+  const [payoutTrxRef, setPayoutTrxRef] = useState('');
+  const [payoutAdminNote, setPayoutAdminNote] = useState('');
 
   // Site Branding & Favicon Management Form State
   const [brandingForm, setBrandingForm] = useState({
@@ -177,6 +224,7 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({ onNavigate, in
   const [isAddingShowcase, setIsAddingShowcase] = useState(false);
   const [editingShowcaseId, setEditingShowcaseId] = useState<string | null>(null);
   const [showcaseForm, setShowcaseForm] = useState<Omit<CategoryShowcaseSection, 'id' | 'items'>>({
+    categoryKey: 'home_service',
     titleBangla: '',
     titleEnglish: '',
     subtitleBangla: '',
@@ -187,6 +235,7 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({ onNavigate, in
     tagGroup: 'HOME_SERVICE',
     viewAllTargetView: 'service_request',
     viewAllButtonTextBangla: 'সব সার্ভিস ও রেট দেখুন',
+    isFeatured: false,
     isActive: true,
     order: 1
   });
@@ -236,6 +285,8 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({ onNavigate, in
       const updatedShowcases = marketplaceStore.getCategoryShowcases();
       setShowcases(updatedShowcases);
       setCuteCatSettings(marketplaceStore.getCuteCatSettings());
+      setSellerStores(marketplaceStore.getSellerStores());
+      setSellerPayouts(marketplaceStore.getAllSellerPayouts());
 
       // Keep selected showcase in sync if open
       if (selectedShowcaseForItems) {
@@ -246,6 +297,113 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({ onNavigate, in
     const unsub = marketplaceStore.subscribe(update);
     return unsub;
   }, [selectedShowcaseForItems?.id]);
+
+  // Seller Management Handlers
+  const handleStartAddSeller = () => {
+    setEditingSellerId(null);
+    setSellerForm({
+      shopName: '',
+      ownerName: '',
+      phone: '',
+      whatsapp: '',
+      district: 'ঢাকা',
+      area: 'মিরপুর',
+      address: '',
+      shopBio: '',
+      shopLogo: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=200&q=80',
+      shopBanner: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=1600&q=80',
+      isVerified: true,
+      isApproved: true,
+      hasOfficialBadge: false,
+      tradeLicenseNumber: `TRAD/DNCC/${Math.floor(100000 + Math.random() * 900000)}/2024`,
+      deliveryPolicy: 'ঢাকা সিটিতে ২৪-৪৮ ঘণ্টা, সারাদেশে ৭২ ঘণ্টা ক্যাশ অন ডেলিভারি।',
+      returnPolicy: '৭ দিনের মধ্যে সহজ ফ্রি রিপ্লেসমেন্ট গ্যারান্টি।'
+    });
+    setIsSellerModalOpen(true);
+  };
+
+  const handleStartEditSeller = (seller: SellerStore) => {
+    setEditingSellerId(seller.id);
+    setSellerForm({
+      shopName: seller.shopName,
+      ownerName: seller.ownerName || '',
+      phone: seller.phone,
+      whatsapp: seller.whatsapp || seller.phone,
+      district: seller.district || 'ঢাকা',
+      area: seller.area || 'মিরপুর',
+      address: seller.address || '',
+      shopBio: seller.shopBio || '',
+      shopLogo: seller.shopLogo || '',
+      shopBanner: seller.shopBanner || '',
+      isVerified: seller.isVerified,
+      isApproved: seller.isApproved ?? true,
+      hasOfficialBadge: seller.hasOfficialBadge || false,
+      tradeLicenseNumber: seller.tradeLicenseNumber || '',
+      deliveryPolicy: seller.deliveryPolicy || '',
+      returnPolicy: seller.returnPolicy || ''
+    });
+    setIsSellerModalOpen(true);
+  };
+
+  const handleSaveSeller = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!sellerForm.shopName.trim() || !sellerForm.ownerName.trim()) return;
+
+    if (editingSellerId) {
+      marketplaceStore.updateSellerStore(editingSellerId, sellerForm);
+    } else {
+      marketplaceStore.addSellerStore({
+        ...sellerForm,
+        rating: 5.0,
+        reviewCount: 0,
+        availableBalance: 0,
+        pendingBalance: 0
+      });
+    }
+
+    setIsSellerModalOpen(false);
+    setEditingSellerId(null);
+  };
+
+  const handleDeleteSeller = (sellerId: string, shopName: string) => {
+    if (confirm(`Are you sure you want to remove merchant store "${shopName}" from the platform?`)) {
+      marketplaceStore.deleteSellerStore(sellerId);
+    }
+  };
+
+  const handleToggleSellerVerify = (sellerId: string) => {
+    marketplaceStore.toggleSellerVerification(sellerId);
+  };
+
+  const handleToggleSellerApproval = (sellerId: string) => {
+    marketplaceStore.toggleSellerApproval(sellerId);
+  };
+
+  const handleToggleSellerOfficialBadge = (sellerId: string) => {
+    marketplaceStore.toggleSellerOfficialBadge(sellerId);
+  };
+
+  // Payout Moderation Handlers
+  const handleOpenProcessPayout = (payout: SellerPayoutRequest) => {
+    setSelectedPayoutForProcess(payout);
+    setPayoutProcessStatus('PAID');
+    setPayoutTrxRef(`TXN-${Date.now().toString(36).toUpperCase()}`);
+    setPayoutAdminNote('অ্যাডমিন কর্তৃক অনুমোদিত ও পেমেন্ট সম্পন্ন হয়েছে।');
+  };
+
+  const handleConfirmProcessPayout = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPayoutForProcess) return;
+
+    marketplaceStore.processSellerPayout(
+      selectedPayoutForProcess.id,
+      payoutProcessStatus,
+      payoutTrxRef,
+      payoutAdminNote
+    );
+
+    setSelectedPayoutForProcess(null);
+  };
 
   const pendingRequests = requests.filter((r) => r.status === 'ADMIN_REVIEW');
   const pendingOffers = offers.filter((o) => o.status === 'ADMIN_REVIEW');
@@ -458,6 +616,7 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({ onNavigate, in
   const handleStartAddShowcase = () => {
     setEditingShowcaseId(null);
     setShowcaseForm({
+      categoryKey: 'home_service',
       titleBangla: '',
       titleEnglish: '',
       subtitleBangla: '',
@@ -468,6 +627,7 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({ onNavigate, in
       tagGroup: 'HOME_SERVICE',
       viewAllTargetView: 'service_request',
       viewAllButtonTextBangla: 'সব সার্ভিস ও রেট দেখুন',
+      isFeatured: false,
       isActive: true,
       order: showcases.length + 1
     });
@@ -477,6 +637,7 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({ onNavigate, in
   const handleStartEditShowcase = (sec: CategoryShowcaseSection) => {
     setEditingShowcaseId(sec.id);
     setShowcaseForm({
+      categoryKey: sec.categoryKey || 'home_service',
       titleBangla: sec.titleBangla,
       titleEnglish: sec.titleEnglish,
       subtitleBangla: sec.subtitleBangla || '',
@@ -488,6 +649,7 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({ onNavigate, in
       viewAllTargetView: sec.viewAllTargetView,
       viewAllTargetParams: sec.viewAllTargetParams,
       viewAllButtonTextBangla: sec.viewAllButtonTextBangla,
+      isFeatured: sec.isFeatured || false,
       isActive: sec.isActive !== false,
       order: sec.order
     });
@@ -917,6 +1079,8 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({ onNavigate, in
         {[
           { id: 'REQUEST_MODERATION', label: `Customer Requests (${pendingRequests.length})`, icon: FileText },
           { id: 'OFFER_MODERATION', label: `Provider Offers (${pendingOffers.length})`, icon: Send },
+          { id: 'SELLERS', label: `Merchant Stores (${sellerStores.length}) 🏪`, icon: Store },
+          { id: 'SELLER_PAYOUTS', label: `Seller Payouts (${sellerPayouts.filter(p => p.status === 'PENDING').length}) 💳`, icon: CreditCard },
           { id: 'BANNERS', label: `Hero Banners & Slider (${heroBanners.length})`, icon: Sparkles },
           { id: 'FEED_SLIDER', label: `Feed Slider & Live Hub (${feedSlides.length}) 📢`, icon: Sparkles },
           { id: 'CUTE_CAT', label: `Cute Cat Assistant (${cuteCatSettings.isEnabled ? 'Active' : 'Off'}) 🐾`, icon: Smile },
@@ -3981,6 +4145,516 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({ onNavigate, in
 
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB: SELLERS & MERCHANTS MANAGEMENT */}
+      {activeTab === 'SELLERS' && (
+        <div className="space-y-4">
+          <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs flex flex-col sm:flex-row justify-between items-center gap-3">
+            <div className="relative w-full sm:w-80">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={sellerSearch}
+                onChange={(e) => setSellerSearch(e.target.value)}
+                placeholder="দোকানের নাম, মালিক বা ফোন নম্বর খুঁজুন..."
+                className="w-full bg-slate-50 pl-9 pr-4 py-2 text-xs rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-[#4e20b8]"
+              />
+            </div>
+
+            <button
+              onClick={handleStartAddSeller}
+              className="px-4 py-2.5 bg-[#4e20b8] hover:bg-[#3d1696] text-white font-bold text-xs rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer active:scale-95 whitespace-nowrap"
+            >
+              <PlusCircle size={15} />
+              <span>+ নতুন সেলার / মার্চেন্ট যোগ করুন</span>
+            </button>
+          </div>
+
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xs overflow-hidden">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-sm text-slate-900">রেজিস্টার্ড মার্চেন্ট ও শপ তালিকা ({sellerStores.length})</h3>
+                <p className="text-xs text-slate-500">ভেরিফিকেশন ব্যাজ, অনুমোদন ও প্রোফাইল ব্যবস্থাপনা</p>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase text-[10px] tracking-wider font-bold">
+                  <tr>
+                    <th className="p-4">মার্চেন্ট ও শপ</th>
+                    <th className="p-4">স্বত্বাধিকারী ও যোগাযোগ</th>
+                    <th className="p-4">ঠিকানা ও লাইসেন্স</th>
+                    <th className="p-4">রেটিং ও ব্যালেন্স</th>
+                    <th className="p-4">স্ট্যাটাস ও ব্যাজ</th>
+                    <th className="p-4 text-right">অ্যাকশন</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {sellerStores
+                    .filter(s =>
+                      s.shopName.toLowerCase().includes(sellerSearch.toLowerCase()) ||
+                      (s.ownerName || '').toLowerCase().includes(sellerSearch.toLowerCase()) ||
+                      s.phone.includes(sellerSearch)
+                    )
+                    .map(seller => (
+                      <tr key={seller.id} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="p-4">
+                          <div className="flex items-center gap-3">
+                            <img
+                              src={seller.shopLogo || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=100&q=80'}
+                              alt={seller.shopName}
+                              className="w-12 h-12 rounded-2xl object-cover border border-slate-200 shrink-0"
+                            />
+                            <div>
+                              <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                                <span>{seller.shopName}</span>
+                                {seller.isVerified && (
+                                  <span title="ভেরিফাইড মার্চেন্ট">
+                                    <BadgeCheck size={14} className="text-amber-500 fill-amber-100 shrink-0" />
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-[11px] text-slate-400 mt-0.5 line-clamp-1">
+                                {seller.shopBio || 'মার্কেটপ্লেস স্টোর'}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+
+                        <td className="p-4">
+                          <div className="font-bold text-slate-900">{seller.ownerName}</div>
+                          <div className="text-slate-500 font-mono text-[11px] mt-0.5">{seller.phone}</div>
+                        </td>
+
+                        <td className="p-4">
+                          <div className="text-slate-800 font-medium">{seller.area || seller.thana || 'মিরপুর'}, {seller.district || 'ঢাকা'}</div>
+                          <div className="text-[10px] text-slate-400 font-mono mt-0.5">{seller.tradeLicenseNumber || 'N/A'}</div>
+                        </td>
+
+                        <td className="p-4">
+                          <div className="font-bold text-amber-600 flex items-center gap-1">
+                            <Star size={13} className="fill-amber-400 text-amber-400" />
+                            <span>{seller.rating || 5.0} / ৫.০</span>
+                          </div>
+                          <div className="text-[11px] font-bold text-purple-700 mt-0.5">
+                            ব্যালেন্স: ৳ {(seller.availableBalance || 0).toLocaleString()}
+                          </div>
+                        </td>
+
+                        <td className="p-4 space-y-1">
+                          <button
+                            onClick={() => handleToggleSellerVerify(seller.id)}
+                            className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold block cursor-pointer transition-colors ${
+                              seller.isVerified
+                                ? 'bg-amber-100 text-amber-800 hover:bg-amber-200'
+                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                            }`}
+                          >
+                            {seller.isVerified ? '✓ ভেরিফাইড' : 'আন-ভেরিফাইড'}
+                          </button>
+
+                          <button
+                            onClick={() => handleToggleSellerOfficialBadge(seller.id)}
+                            className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold block cursor-pointer transition-colors ${
+                              seller.hasOfficialBadge
+                                ? 'bg-purple-100 text-purple-800 hover:bg-purple-200'
+                                : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                            }`}
+                          >
+                            {seller.hasOfficialBadge ? '★ অফিসিয়াল পার্টনার' : '+ পার্টনার ব্যাজ'}
+                          </button>
+                        </td>
+
+                        <td className="p-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => onNavigate('seller_store', { sellerId: seller.id })}
+                              className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
+                              title="স্টোরফ্রন্ট ভিজিট করুন"
+                            >
+                              <ExternalLink size={14} />
+                            </button>
+
+                            <button
+                              onClick={() => handleStartEditSeller(seller)}
+                              className="p-2 rounded-xl bg-purple-50 text-[#4e20b8] hover:bg-purple-100 text-xs font-bold transition-colors cursor-pointer"
+                              title="তথ্য এডিট করুন"
+                            >
+                              <Edit3 size={14} />
+                            </button>
+
+                            <button
+                              onClick={() => handleDeleteSeller(seller.id, seller.shopName)}
+                              className="p-2 rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-100 text-xs font-bold transition-colors cursor-pointer"
+                              title="মুছে ফেলুন"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB: SELLER PAYOUTS MODERATION */}
+      {activeTab === 'SELLER_PAYOUTS' && (
+        <div className="space-y-4">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xs overflow-hidden">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-sm text-slate-900">মার্চেন্ট উইথড্রয়াল ও পে-আউট অনুমোদন ({sellerPayouts.length})</h3>
+                <p className="text-xs text-slate-500">বিকাশ/নগদ/ব্যাংক ট্রান্সফারে টাকা পাঠিয়ে পেমেন্ট কনফার্ম করুন</p>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase text-[10px] tracking-wider font-bold">
+                  <tr>
+                    <th className="p-4">মার্চেন্ট শপ</th>
+                    <th className="p-4">পরিমাণ (BDT)</th>
+                    <th className="p-4">মেথড ও অ্যাকাউন্ট</th>
+                    <th className="p-4">তারিখ</th>
+                    <th className="p-4">স্ট্যাটাস & Trx</th>
+                    <th className="p-4 text-right">অ্যাকশন</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {sellerPayouts.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="p-8 text-center text-slate-400">
+                        কোনো উইথড্রয়াল রিকোয়েস্ট নেই।
+                      </td>
+                    </tr>
+                  ) : (
+                    sellerPayouts.map(payout => (
+                      <tr key={payout.id} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="p-4">
+                          <div className="font-bold text-slate-900">{payout.shopName}</div>
+                          <div className="text-[10px] text-slate-400 font-mono">ID: {payout.sellerId}</div>
+                        </td>
+
+                        <td className="p-4">
+                          <div className="font-black text-slate-900 text-sm">
+                            ৳ {payout.amount.toLocaleString()}
+                          </div>
+                        </td>
+
+                        <td className="p-4">
+                          <div className="font-bold text-purple-700">{payout.method}</div>
+                          <div className="text-slate-600 font-mono text-[11px] mt-0.5">{payout.accountDetails}</div>
+                          {payout.note && (
+                            <div className="text-[10px] text-slate-400 mt-0.5">নোট: {payout.note}</div>
+                          )}
+                        </td>
+
+                        <td className="p-4 text-slate-500">
+                          {new Date(payout.requestedAt).toLocaleDateString('bn-BD')}
+                        </td>
+
+                        <td className="p-4">
+                          <span className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] ${
+                            payout.status === 'PAID'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : payout.status === 'APPROVED'
+                              ? 'bg-blue-100 text-blue-800'
+                              : payout.status === 'REJECTED'
+                              ? 'bg-rose-100 text-rose-800'
+                              : 'bg-amber-100 text-amber-800'
+                          }`}>
+                            {payout.status}
+                          </span>
+                          {payout.transactionRef && (
+                            <div className="text-emerald-700 font-mono text-[10px] mt-1">
+                              Trx: {payout.transactionRef}
+                            </div>
+                          )}
+                        </td>
+
+                        <td className="p-4 text-right">
+                          {payout.status === 'PENDING' ? (
+                            <button
+                              onClick={() => handleOpenProcessPayout(payout)}
+                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs cursor-pointer shadow-xs"
+                            >
+                              প্রসেস করুন
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleOpenProcessPayout(payout)}
+                              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs cursor-pointer"
+                            >
+                              হালনাগাদ
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SELLER ADD / EDIT MODAL */}
+      {isSellerModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 space-y-4 max-h-[92vh] overflow-y-auto">
+            <div className="border-b border-slate-100 pb-3 flex items-start justify-between">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">
+                  {editingSellerId ? 'মার্চেন্ট প্রোফাইল সম্পাদনা (Edit Merchant Store)' : 'নতুন মার্চেন্ট স্টোর যুক্ত করুন (Add Seller Store)'}
+                </h3>
+                <p className="text-xs text-slate-500">qaaga.com মার্কেটপ্লেসের সকল ফিচার ও স্টোরফ্রন্ট অ্যাক্সেস দেওয়া হবে</p>
+              </div>
+              <button
+                onClick={() => setIsSellerModalOpen(false)}
+                className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-700 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveSeller} className="space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">দোকান / শপের নাম:</label>
+                  <input
+                    type="text"
+                    value={sellerForm.shopName}
+                    onChange={(e) => setSellerForm({ ...sellerForm, shopName: e.target.value })}
+                    placeholder="উদা: ঢাকা টেক অ্যান্ড টুলস"
+                    className="w-full bg-slate-50 p-2.5 rounded-xl border border-slate-200"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">মালিকের নাম:</label>
+                  <input
+                    type="text"
+                    value={sellerForm.ownerName}
+                    onChange={(e) => setSellerForm({ ...sellerForm, ownerName: e.target.value })}
+                    placeholder="উদা: তারেক মাহমুদ"
+                    className="w-full bg-slate-50 p-2.5 rounded-xl border border-slate-200"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">ফোন নম্বর (সরাসরি কল):</label>
+                  <input
+                    type="text"
+                    value={sellerForm.phone}
+                    onChange={(e) => setSellerForm({ ...sellerForm, phone: e.target.value })}
+                    placeholder="017XXXXXXXX"
+                    className="w-full bg-slate-50 p-2.5 rounded-xl border border-slate-200 font-mono"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">হোয়াটসঅ্যাপ নম্বর:</label>
+                  <input
+                    type="text"
+                    value={sellerForm.whatsapp}
+                    onChange={(e) => setSellerForm({ ...sellerForm, whatsapp: e.target.value })}
+                    placeholder="017XXXXXXXX"
+                    className="w-full bg-slate-50 p-2.5 rounded-xl border border-slate-200 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">জেলা ও থানা / এলাকা:</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="text"
+                      value={sellerForm.district}
+                      onChange={(e) => setSellerForm({ ...sellerForm, district: e.target.value })}
+                      placeholder="জেলা"
+                      className="w-full bg-slate-50 p-2.5 rounded-xl border border-slate-200"
+                    />
+                    <input
+                      type="text"
+                      value={sellerForm.area}
+                      onChange={(e) => setSellerForm({ ...sellerForm, area: e.target.value })}
+                      placeholder="এলাকা"
+                      className="w-full bg-slate-50 p-2.5 rounded-xl border border-slate-200"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">ট্রেড লাইসেন্স নম্বর:</label>
+                  <input
+                    type="text"
+                    value={sellerForm.tradeLicenseNumber}
+                    onChange={(e) => setSellerForm({ ...sellerForm, tradeLicenseNumber: e.target.value })}
+                    placeholder="TRAD/DNCC/XXXXX"
+                    className="w-full bg-slate-50 p-2.5 rounded-xl border border-slate-200 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">শপ লোগো ইমেজ URL:</label>
+                <input
+                  type="text"
+                  value={sellerForm.shopLogo}
+                  onChange={(e) => setSellerForm({ ...sellerForm, shopLogo: e.target.value })}
+                  className="w-full bg-slate-50 p-2.5 rounded-xl border border-slate-200 font-mono text-[11px]"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">শপ কভার ব্যানার URL:</label>
+                <input
+                  type="text"
+                  value={sellerForm.shopBanner}
+                  onChange={(e) => setSellerForm({ ...sellerForm, shopBanner: e.target.value })}
+                  className="w-full bg-slate-50 p-2.5 rounded-xl border border-slate-200 font-mono text-[11px]"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">শপ পরিচিতি ও বায়ো:</label>
+                <textarea
+                  rows={2}
+                  value={sellerForm.shopBio}
+                  onChange={(e) => setSellerForm({ ...sellerForm, shopBio: e.target.value })}
+                  className="w-full bg-slate-50 p-2.5 rounded-xl border border-slate-200"
+                />
+              </div>
+
+              <div className="flex items-center gap-6 pt-2">
+                <label className="flex items-center gap-2 font-bold text-slate-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={sellerForm.isVerified}
+                    onChange={(e) => setSellerForm({ ...sellerForm, isVerified: e.target.checked })}
+                    className="rounded text-[#4e20b8]"
+                  />
+                  <span>ভেরিফাইড ব্যাজ একটিভ</span>
+                </label>
+
+                <label className="flex items-center gap-2 font-bold text-slate-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={sellerForm.hasOfficialBadge}
+                    onChange={(e) => setSellerForm({ ...sellerForm, hasOfficialBadge: e.target.checked })}
+                    className="rounded text-[#4e20b8]"
+                  />
+                  <span>অফিসিয়াল পার্টনার ব্যাজ</span>
+                </label>
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsSellerModalOpen(false)}
+                  className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold cursor-pointer"
+                >
+                  বাতিল
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl bg-[#4e20b8] hover:bg-[#3d1696] text-white font-bold cursor-pointer shadow-md"
+                >
+                  {editingSellerId ? 'সংরক্ষণ করুন' : 'মার্চেন্ট যুক্ত করুন'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* PAYOUT PROCESS MODAL */}
+      {selectedPayoutForProcess && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div className="border-b border-slate-100 pb-3 flex items-start justify-between">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">পে-আউট অনুমোদন ও ট্রানজেকশন</h3>
+                <p className="text-xs text-slate-500">
+                  মার্চেন্ট: <strong>{selectedPayoutForProcess.shopName}</strong> &bull; পরিমাণ: <strong>৳ {selectedPayoutForProcess.amount.toLocaleString()}</strong>
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedPayoutForProcess(null)}
+                className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-700 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmProcessPayout} className="space-y-3.5 text-xs">
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
+                <div className="text-slate-500">পেমেন্ট মেথড: <strong className="text-purple-700">{selectedPayoutForProcess.method}</strong></div>
+                <div className="text-slate-700 font-mono font-bold">{selectedPayoutForProcess.accountDetails}</div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">স্ট্যাটাস আপডেট:</label>
+                <select
+                  value={payoutProcessStatus}
+                  onChange={(e) => setPayoutProcessStatus(e.target.value as any)}
+                  className="w-full bg-slate-50 p-2.5 rounded-xl border border-slate-200 font-bold"
+                >
+                  <option value="PAID">PAID (টাকা পরিশোধ সম্পন্ন)</option>
+                  <option value="APPROVED">APPROVED (অনুমোদিত - অপেক্ষমান)</option>
+                  <option value="REJECTED">REJECTED (বাতিল)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">ট্রানজেকশন রেফারেন্স / TrxID:</label>
+                <input
+                  type="text"
+                  value={payoutTrxRef}
+                  onChange={(e) => setPayoutTrxRef(e.target.value)}
+                  placeholder="TXN-XXXXXX"
+                  className="w-full bg-slate-50 p-2.5 rounded-xl border border-slate-200 font-mono font-bold text-emerald-800"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">অ্যাডমিন নোট:</label>
+                <input
+                  type="text"
+                  value={payoutAdminNote}
+                  onChange={(e) => setPayoutAdminNote(e.target.value)}
+                  className="w-full bg-slate-50 p-2.5 rounded-xl border border-slate-200"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedPayoutForProcess(null)}
+                  className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold cursor-pointer"
+                >
+                  বাতিল
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer shadow-md"
+                >
+                  নিশ্চিত করুন
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

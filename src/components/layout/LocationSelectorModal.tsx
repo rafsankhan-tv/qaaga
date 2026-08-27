@@ -4,7 +4,15 @@ import { X, MapPin, Search, Check, ChevronRight } from 'lucide-react';
 import { BANGLADESH_LOCATIONS, POPULAR_AREAS } from '../../data/bangladeshLocations';
 import { useLocation } from '../../context/LocationContext';
 
-export const LocationSelectorModal: React.FC = () => {
+interface LocationSelectorModalProps {
+  isOpen?: boolean;
+  onClose?: () => void;
+}
+
+export const LocationSelectorModal: React.FC<LocationSelectorModalProps> = ({
+  isOpen: propIsOpen,
+  onClose: propOnClose,
+}) => {
   const { selectedLocation, setLocation, isLocationModalOpen, setIsLocationModalOpen } = useLocation();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -12,7 +20,13 @@ export const LocationSelectorModal: React.FC = () => {
   const [activeDistrict, setActiveDistrict] = useState(selectedLocation.district || 'Dhaka');
   const [activeThana, setActiveThana] = useState(selectedLocation.thana || 'Gulshan');
 
-  if (!isLocationModalOpen) return null;
+  const isOpen = propIsOpen !== undefined ? propIsOpen : isLocationModalOpen;
+  const handleClose = () => {
+    if (propOnClose) propOnClose();
+    setIsLocationModalOpen(false);
+  };
+
+  if (!isOpen) return null;
 
   const currentDivData = BANGLADESH_LOCATIONS.find((d) => d.division === activeDivision);
   const currentDistData = currentDivData?.districts.find((d) => d.name === activeDistrict);

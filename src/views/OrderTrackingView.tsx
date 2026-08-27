@@ -30,9 +30,11 @@ import { ProductOrder, OrderTrackingStep } from '../types';
 interface OrderTrackingViewProps {
   onNavigate: (view: string, params?: any) => void;
   orderId?: string;
+  initialOrderId?: string;
 }
 
-export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({ onNavigate, orderId }) => {
+export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({ onNavigate, orderId, initialOrderId }) => {
+  const effectiveOrderId = orderId || initialOrderId;
   const { currentUser } = useAuth();
 
   const [tick, setTick] = useState(0);
@@ -44,17 +46,17 @@ export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({ onNavigate
   const userOrders = marketplaceStore.getUserOrders(currentUser?.id);
 
   // Search state
-  const [searchQuery, setSearchQuery] = useState(orderId || '');
-  const [selectedOrderId, setSelectedOrderId] = useState<string>(orderId || (userOrders[0]?.id || ''));
+  const [searchQuery, setSearchQuery] = useState(effectiveOrderId || '');
+  const [selectedOrderId, setSelectedOrderId] = useState<string>(effectiveOrderId || (userOrders[0]?.id || ''));
 
   useEffect(() => {
-    if (orderId) {
-      setSelectedOrderId(orderId);
-      setSearchQuery(orderId);
+    if (effectiveOrderId) {
+      setSelectedOrderId(effectiveOrderId);
+      setSearchQuery(effectiveOrderId);
     } else if (userOrders.length > 0 && !selectedOrderId) {
       setSelectedOrderId(userOrders[0].id);
     }
-  }, [orderId, userOrders]);
+  }, [effectiveOrderId, userOrders]);
 
   // Selected Order
   const activeOrder: ProductOrder | undefined =

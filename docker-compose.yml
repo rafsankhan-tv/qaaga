@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  # 1. Main QAAGA Super Marketplace Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: qaaga_marketplace_app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-qaaga_user}:${POSTGRES_PASSWORD:-qaaga_secure_pass_2026}@postgres:5432/${POSTGRES_DB:-qaaga_db}?schema=public
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - JWT_SECRET=${JWT_SECRET:-qaaga_jwt_secret_production_key_random_64_bytes}
+      - APP_URL=${APP_URL:-https://qaaga.com}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - qaaga_network
+
+  # 2. Production PostgreSQL Database (Version 16 Alpine)
+  postgres:
+    image: postgres:16-alpine
+    container_name: qaaga_postgres_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-qaaga_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-qaaga_secure_pass_2026}
+      POSTGRES_DB: ${POSTGRES_DB:-qaaga_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./src/db/schema.sql:/docker-entrypoint-initdb.d/01-init.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-qaaga_user} -d ${POSTGRES_DB:-qaaga_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - qaaga_network
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  qaaga_network:
+    driver: bridge

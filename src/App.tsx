@@ -21,6 +21,7 @@ import { EbooksView } from './views/EbooksView';
 import { UsedProductsView } from './views/UsedProductsView';
 import { JobsView } from './views/JobsView';
 import { SellerDashboardView } from './views/SellerDashboardView';
+import { SellerStorefrontView } from './views/SellerStorefrontView';
 import { RoleRegistrationView } from './views/RoleRegistrationView';
 import { FeedView } from './views/FeedView';
 import { CartCheckoutView } from './views/CartCheckoutView';
@@ -181,6 +182,13 @@ const MainApp: React.FC = () => {
 
         {currentView === 'seller_dashboard' && (
           <SellerDashboardView onNavigate={handleNavigate} />
+        )}
+
+        {(currentView === 'seller_store' || currentView === 'seller_storefront' || currentView === 'seller_profile') && (
+          <SellerStorefrontView
+            sellerId={viewParams?.sellerId}
+            onNavigate={handleNavigate}
+          />
         )}
 
         {currentView === 'partner_register' && (

@@ -41,7 +41,7 @@ export const NurseCaregiverView: React.FC<NurseCaregiverViewProps> = ({ onNaviga
       if (packageType === 'HOURLY') return selectedNurse.hourlyRate * durationCount * 4;
       if (packageType === 'DAILY_12H') return selectedNurse.dailyRate * durationCount;
       if (packageType === 'RESIDENTIAL_24H') return Math.round(selectedNurse.dailyRate * 1.7) * durationCount;
-      return selectedNurse.monthlyRate;
+      return selectedNurse.monthlyPackageRate || selectedNurse.monthlyRate || 25000;
     }
     if (selectedCaregiver) {
       if (packageType === 'DAILY_12H') return selectedCaregiver.dailyRate * durationCount;
