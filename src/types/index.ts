@@ -739,6 +739,72 @@ export interface PlatformSystemSettings {
   customFaviconUpload?: string; // Base64 data URL
   themeColor?: string;
   showTaglineInBrowserTitle?: boolean;
+
+  // Optional Services Integrations (Disabled by default, configurable via Admin Dashboard)
+  integrations?: OptionalIntegrationsSettings;
+}
+
+export interface OptionalIntegrationsSettings {
+  gemini: {
+    enabled: boolean;
+    apiKey: string;
+    model: string;
+    temperature: number;
+  };
+  fastapiAiService: {
+    enabled: boolean;
+    serviceUrl: string;
+    secretKey: string;
+  };
+  smsGateway: {
+    enabled: boolean;
+    provider: 'greenweb' | 'elitbuzz' | 'alphanet' | 'custom';
+    apiKey: string;
+    senderId: string;
+    endpointUrl?: string;
+  };
+  bkashPayment: {
+    enabled: boolean;
+    appKey: string;
+    appSecret: string;
+    username: string;
+    password: string;
+    isSandbox: boolean;
+  };
+  nagadPayment: {
+    enabled: boolean;
+    merchantId: string;
+    publicKey: string;
+    privateKey: string;
+    isSandbox: boolean;
+  };
+  sslcommerz: {
+    enabled: boolean;
+    storeId: string;
+    storePassword: string;
+    isLive: boolean;
+  };
+  stripe: {
+    enabled: boolean;
+    publishableKey: string;
+    secretKey: string;
+  };
+  cloudStorage: {
+    enabled: boolean;
+    provider: 's3' | 'r2' | 'gcs';
+    bucketName: string;
+    region: string;
+    accessKeyId: string;
+    secretAccessKey: string;
+    endpointUrl?: string;
+    publicBaseUrl?: string;
+  };
+  redis: {
+    enabled: boolean;
+    connectionUrl: string;
+    token?: string;
+    useTls: boolean;
+  };
 }
 
 export interface HeroBannerSlide {

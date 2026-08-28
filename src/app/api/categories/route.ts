@@ -1,32 +1,30 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { serviceRegistry } from '../../../lib/serviceRegistry';
-import {
-  checkBruteForce,
-  safeJsonResponse,
-  handleSecureApiError,
-} from '@/lib/auth-security';
+import { NextRequest } from 'next/server';
+import { checkBruteForce, handleSecureApiError } from '@/lib/auth-security';
+import { createApiSuccess, createApiError, handleOptionsCors } from '@/lib/api-response';
+import { catalogService } from '@/services/business/catalog.service';
 
-export async function GET(request: NextRequest) {
+export async function OPTIONS() {
+  return handleOptionsCors();
+}
+
+export async function GET(req: NextRequest) {
   try {
-    const ip = request.headers.get('x-forwarded-for') || 'ip_cat';
-    const rateCheck = checkBruteForce(`cat_get_${ip}`, 120, 5 * 60 * 1000);
+    const ip = req.headers.get('x-forwarded-for') || 'ip_categories';
+    const rateCheck = checkBruteForce(`categories_get_${ip}`, 120, 60 * 1000);
     if (!rateCheck.allowed) {
-      return safeJsonResponse(
-        { success: false, message: 'Too many requests. Please try again shortly.' },
-        { status: 429 }
-      );
+      return createApiError('অতিরিক্ত রিকোয়েস্ট এসেছে। অনুগ্রহ করে কিছুক্ষণ অপেক্ষা করুন।', {
+        status: 429,
+        extraMeta: { retryAfterSeconds: rateCheck.retryAfterSeconds },
+      });
     }
 
-    const modules = serviceRegistry.getActiveModules();
-    const response = safeJsonResponse({
-      success: true,
-      total: modules.length,
-      data: modules,
+    const categories = catalogService.getCategories();
+    return createApiSuccess({
+      categories,
+      total: categories.length,
     });
-
-    response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-revalidate=300');
-    return response;
   } catch (error: any) {
-    return handleSecureApiError(error, 'Fetching marketplace categories');
+    return handleSecureApiError(error, 'Categories fetch transport layer');
   }
 }
+

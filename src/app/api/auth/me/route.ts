@@ -1,25 +1,40 @@
-import { NextRequest, NextResponse } from "next/server";
-import { authenticateRequest, ROLE_PERMISSIONS, safeJsonResponse, handleSecureApiError } from "@/lib/auth-security";
-import { marketplaceStore } from "@/services/marketplaceStore";
+import { NextRequest } from 'next/server';
+import { authenticateRequest, checkBruteForce, ROLE_PERMISSIONS, handleSecureApiError } from '@/lib/auth-security';
+import { createApiSuccess, createApiError, handleOptionsCors } from '@/lib/api-response';
+import { authService } from '@/services/business/auth.service';
+
+export async function OPTIONS() {
+  return handleOptionsCors();
+}
 
 export async function GET(req: NextRequest) {
   try {
+    const ip = req.headers.get('x-forwarded-for') || 'ip_me';
+    const rateCheck = checkBruteForce(`me_${ip}`, 120, 60 * 1000);
+    if (!rateCheck.allowed) {
+      return createApiError('অতিরিক্ত রিকোয়েস্ট এসেছে। অনুগ্রহ করে কিছুক্ষণ অপেক্ষা করুন।', {
+        status: 429,
+        extraMeta: { retryAfterSeconds: rateCheck.retryAfterSeconds },
+      });
+    }
+
     const auth = await authenticateRequest(req);
     if (!auth.authenticated || !auth.user) {
-      return auth.errorResponse || safeJsonResponse({ error: "Unauthorized" }, { status: 401 });
+      return createApiError('Unauthorized: Please log in with valid credentials or Bearer token.', {
+        status: 401,
+        code: 'UNAUTHORIZED',
+      });
     }
 
-    const users = marketplaceStore.getUsers();
-    const user = users.find((u) => u.id === auth.user?.userId);
-
+    const user = await authService.getUserProfile(auth.user.userId);
     if (!user) {
-      return safeJsonResponse({ error: "User session is invalid or user not found" }, { status: 404 });
+      return createApiError('User session is invalid or user not found', { status: 404 });
     }
 
-    const activeRole = auth.user.activeRole || user.activeRole || "CUSTOMER";
+    const activeRole = auth.user.activeRole || user.activeRole || 'CUSTOMER';
     const permissions = ROLE_PERMISSIONS[activeRole] || [];
 
-    return safeJsonResponse({
+    return createApiSuccess({
       authenticated: true,
       user: {
         id: user.id,
@@ -36,6 +51,6 @@ export async function GET(req: NextRequest) {
       permissions,
     });
   } catch (error: any) {
-    return handleSecureApiError(error, "Fetch session profile");
+    return handleSecureApiError(error, 'Fetch session profile');
   }
 }

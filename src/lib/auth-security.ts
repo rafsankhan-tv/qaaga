@@ -314,6 +314,11 @@ export function hasAnyRole(userRoles: UserRole[], allowedRoles: UserRole[]): boo
   return allowedRoles.some((role) => userRoles.includes(role));
 }
 
+export function hasRequiredRole(userRoleOrRoles: UserRole | UserRole[], allowedRoles: UserRole[]): boolean {
+  const roles = Array.isArray(userRoleOrRoles) ? userRoleOrRoles : [userRoleOrRoles];
+  return hasAnyRole(roles, allowedRoles);
+}
+
 // ============================================================================
 // 6. PROTECTED ROUTE GUARDS & MIDDLEWARE HELPERS
 // ============================================================================

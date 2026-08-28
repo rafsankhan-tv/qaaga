@@ -1,57 +1,44 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { serviceRegistry } from '../../../lib/serviceRegistry';
-import {
-  checkBruteForce,
-  sanitizeString,
-  safeJsonResponse,
-  handleSecureApiError,
-} from '@/lib/auth-security';
+import { NextRequest } from 'next/server';
 import { ServicesQuerySchema } from '@/lib/validation';
+import { checkBruteForce, handleSecureApiError } from '@/lib/auth-security';
+import { createApiSuccess, createApiError, handleOptionsCors } from '@/lib/api-response';
+import { catalogService } from '@/services/business/catalog.service';
 
-export async function GET(request: NextRequest) {
+export async function OPTIONS() {
+  return handleOptionsCors();
+}
+
+export async function GET(req: NextRequest) {
   try {
-    const ip = request.headers.get('x-forwarded-for') || 'ip_svc';
-    const rateCheck = checkBruteForce(`svc_get_${ip}`, 100, 5 * 60 * 1000);
+    const ip = req.headers.get('x-forwarded-for') || 'ip_services';
+    const rateCheck = checkBruteForce(`services_get_${ip}`, 120, 60 * 1000);
     if (!rateCheck.allowed) {
-      return safeJsonResponse(
-        { success: false, message: 'Too many requests. Please try again shortly.' },
-        { status: 429 }
-      );
+      return createApiError('অতিরিক্ত রিকোয়েস্ট এসেছে। অনুগ্রহ করে কিছুক্ষণ অপেক্ষা করুন।', {
+        status: 429,
+        extraMeta: { retryAfterSeconds: rateCheck.retryAfterSeconds },
+      });
     }
 
-    const { searchParams } = new URL(request.url);
-    const categoryGroup = searchParams.get('categoryGroup');
-    const search = searchParams.get('search');
+    const { searchParams } = new URL(req.url);
+    const rawQuery = {
+      categoryGroup: searchParams.get('categoryGroup') || undefined,
+      search: searchParams.get('search') || undefined,
+    };
 
-    const validationResult = ServicesQuerySchema.safeParse({ categoryGroup, search });
-    if (!validationResult.success) {
-      return safeJsonResponse(
-        { success: false, message: 'Invalid query parameters' },
-        { status: 400 }
-      );
+    const queryResult = ServicesQuerySchema.safeParse(rawQuery);
+    if (!queryResult.success) {
+      return createApiError('Invalid query parameters', { status: 400 });
     }
 
-    const cleanSearch = search ? sanitizeString(search).toLowerCase() : null;
-    const cleanCategoryGroup = categoryGroup ? sanitizeString(categoryGroup) : null;
+    const { categoryGroup, search } = queryResult.data;
+    const modules = catalogService.getServiceModules(search, categoryGroup);
 
-    let modules = cleanSearch
-      ? serviceRegistry.searchModules(cleanSearch)
-      : serviceRegistry.getActiveModules();
-
-    if (cleanCategoryGroup) {
-      modules = modules.filter((s) => s.categoryGroup === cleanCategoryGroup);
-    }
-
-    const response = safeJsonResponse({
-      success: true,
+    return createApiSuccess({
+      services: modules,
       total: modules.length,
-      filters: { categoryGroup: cleanCategoryGroup, search: cleanSearch },
-      data: modules,
     });
-
-    response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=120');
-    return response;
   } catch (error: any) {
-    return handleSecureApiError(error, 'Fetching marketplace services');
+    return handleSecureApiError(error, 'Services catalog transport layer');
   }
 }
+

@@ -1,10 +1,10 @@
 # ==============================================================================
 # QAAGA Super Marketplace — Production Multi-Stage Dockerfile
-# Optimized for Node.js 22 LTS, Fast Build Times, Minimal Attack Surface & Scalability
+# Optimized for Node.js 24 LTS & Next.js 16, Fast Build Times, Minimal Attack Surface & Scalability
 # ==============================================================================
 
 # 1. Base Stage
-FROM node:22-alpine AS base
+FROM node:24-alpine AS base
 WORKDIR /app
 RUN apk add --no-cache libc6-compat
 ENV NODE_ENV=production
@@ -21,7 +21,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Run production build (Vite client build + esbuild server bundle)
+# Run production Next.js build
 RUN npm run build
 
 # 4. Production Runner Stage
@@ -38,7 +38,8 @@ RUN addgroup --system --gid 1001 nodejs && \
 
 # Copy built application assets
 COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/public ./public
 COPY --from=builder /app/node_modules ./node_modules
 
 # Ensure proper permissions
@@ -50,5 +51,5 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1
 
-# Start production server
-CMD ["node", "dist/server.cjs"]
+# Start production Next.js server
+CMD ["npx", "next", "start", "-p", "3000"]

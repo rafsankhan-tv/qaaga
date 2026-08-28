@@ -1,79 +1,79 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from 'next/server';
 import {
   authenticateRequest,
-  signAuthToken,
   setAuthCookie,
+  checkBruteForce,
   validateOriginAndCSRF,
   parseJsonWithLimit,
-  safeJsonResponse,
   handleSecureApiError,
-} from "@/lib/auth-security";
-import { RoleSwitchSchema } from "@/lib/validation";
-import { UserRole } from "@/types";
+} from '@/lib/auth-security';
+import { createApiSuccess, createApiError, handleOptionsCors } from '@/lib/api-response';
+import { RoleSwitchSchema } from '@/lib/validation';
+import { authService } from '@/services/business/auth.service';
+import { UserRole } from '@/types';
+
+export async function OPTIONS() {
+  return handleOptionsCors();
+}
 
 export async function POST(req: NextRequest) {
   try {
-    // 1. CSRF & Origin Validation
     if (!validateOriginAndCSRF(req)) {
-      return safeJsonResponse(
-        { error: "Invalid request origin or CSRF check failed." },
-        { status: 403 }
-      );
+      return createApiError('Invalid request origin or CSRF check failed.', { status: 403 });
     }
 
-    // 2. Authentication Check
+    const ip = req.headers.get('x-forwarded-for') || 'ip_switch_role';
+    const rateCheck = checkBruteForce(`switch_role_${ip}`, 30, 5 * 60 * 1000);
+    if (!rateCheck.allowed) {
+      return createApiError('অতিরিক্ত রোল পরিবর্তনের চেষ্টা। কিছুক্ষণ পর চেষ্টা করুন।', {
+        status: 429,
+        extraMeta: { retryAfterSeconds: rateCheck.retryAfterSeconds },
+      });
+    }
+
     const auth = await authenticateRequest(req);
     if (!auth.authenticated || !auth.user) {
-      return auth.errorResponse || safeJsonResponse({ error: "Unauthorized" }, { status: 401 });
+      return createApiError('Unauthorized: Session or token required', { status: 401 });
     }
 
-    // 3. Request Size Limit
     const jsonResult = await parseJsonWithLimit(req, 16 * 1024);
     if (!jsonResult.success) {
       return jsonResult.errorResponse!;
     }
 
-    // 4. Zod Validation
     const validationResult = RoleSwitchSchema.safeParse(jsonResult.data);
     if (!validationResult.success) {
-      return safeJsonResponse(
-        { error: validationResult.error.issues[0]?.message || "Invalid role specified." },
-        { status: 400 }
-      );
+      return createApiError(validationResult.error.issues[0]?.message || 'Invalid role specified.', {
+        status: 400,
+      });
     }
 
     const { targetRole } = validationResult.data;
+    const result = await authService.switchRole(auth.user, targetRole as UserRole);
 
-    // 5. Privilege Escalation Prevention (User must own the role or be SUPER_ADMIN)
-    const userRoles = auth.user.roles || [];
-    const isSuperAdmin = userRoles.includes("SUPER_ADMIN");
-
-    if (!isSuperAdmin && !userRoles.includes(targetRole as UserRole)) {
-      return safeJsonResponse(
-        { error: `Forbidden: You do not possess the role '${targetRole}'. Please register as a partner first.` },
-        { status: 403 }
-      );
+    if (!result.success) {
+      return createApiError(result.message, {
+        status: result.statusCode || 403,
+        code: result.errorCode || 'FORBIDDEN',
+      });
     }
 
-    // 6. Issue refreshed secure JWT session with updated active role
-    const updatedToken = signAuthToken({
-      userId: auth.user.userId,
-      phone: auth.user.phone,
-      email: auth.user.email,
-      fullName: auth.user.fullName,
-      roles: auth.user.roles,
-      activeRole: targetRole as UserRole,
-    });
+    const response = createApiSuccess(
+      {
+        activeRole: targetRole,
+        token: result.token,
+      },
+      {
+        message: result.message,
+      }
+    );
 
-    const response = safeJsonResponse({
-      success: true,
-      activeRole: targetRole,
-      message: `রোল পরিবর্তন সফল: ${targetRole}`,
-    });
+    if (result.token) {
+      setAuthCookie(response, result.token);
+    }
 
-    setAuthCookie(response, updatedToken);
     return response;
   } catch (error: any) {
-    return handleSecureApiError(error, "Role switch authorization");
+    return handleSecureApiError(error, 'Role switch transport layer');
   }
 }

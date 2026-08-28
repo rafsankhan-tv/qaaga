@@ -370,7 +370,11 @@ class MarketplaceStore {
         if (parsed.settings) {
           this.settings = {
             ...INITIAL_SYSTEM_SETTINGS,
-            ...parsed.settings
+            ...parsed.settings,
+            integrations: {
+              ...INITIAL_SYSTEM_SETTINGS.integrations,
+              ...(parsed.settings.integrations || {})
+            }
           };
         }
         if (parsed.providers) this.providers = parsed.providers;
@@ -1768,6 +1772,17 @@ class MarketplaceStore {
   // --- ADMIN SYSTEM CONTROLS & BRANDING ---
   public updateSystemSettings(newSettings: Partial<PlatformSystemSettings>) {
     this.settings = { ...this.settings, ...newSettings };
+    this.notify();
+  }
+
+  public updateIntegrations(updates: Partial<PlatformSystemSettings['integrations']>) {
+    this.settings = {
+      ...this.settings,
+      integrations: {
+        ...(this.settings.integrations || INITIAL_SYSTEM_SETTINGS.integrations!),
+        ...updates
+      } as any
+    };
     this.notify();
   }
 

@@ -183,6 +183,57 @@ export const ReviewSchema = z.object({
   comment: z.string().min(3, "মন্তব্য লিখুন").max(1000)
 });
 
+// 11. Calculate Fee Schema
+export const CalculateFeeSchema = z.object({
+  basePrice: z.number().nonnegative("বেস প্রাইস ০ বা তার বেশি হতে হবে").max(10000000),
+  isUrgent: z.boolean().optional().default(false)
+});
+
+// 12. Query Parameter Validation Schemas
+export const ProductQuerySchema = z.object({
+  id: z.string().max(80).optional(),
+  category: z.string().max(80).optional(),
+  search: z.string().max(100).optional(),
+  sellerId: z.string().max(80).optional(),
+  page: z.coerce.number().int().min(1).default(1).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(20).optional()
+});
+
+export const DoctorQuerySchema = z.object({
+  id: z.string().max(80).optional(),
+  specialty: z.string().max(100).optional(),
+  district: z.string().max(100).optional(),
+  search: z.string().max(100).optional()
+});
+
+export const NurseQuerySchema = z.object({
+  area: z.string().max(100).optional(),
+  shiftType: z.string().max(100).optional()
+});
+
+export const HotelQuerySchema = z.object({
+  location: z.string().max(150).optional(),
+  search: z.string().max(100).optional()
+});
+
+export const EbookQuerySchema = z.object({
+  id: z.string().max(80).optional(),
+  category: z.string().max(100).optional(),
+  search: z.string().max(100).optional()
+});
+
+export const OrderQuerySchema = z.object({
+  orderId: z.string().max(100).optional(),
+  page: z.coerce.number().int().min(1).default(1).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(20).optional()
+});
+
+export const ServiceRequestQuerySchema = z.object({
+  categoryId: z.string().max(80).optional(),
+  status: z.string().max(50).optional(),
+  district: z.string().max(100).optional()
+});
+
 export type UserRegisterInput = z.infer<typeof UserRegisterSchema>;
 export type UserLoginInput = z.infer<typeof UserLoginSchema>;
 export type ServiceRequestInput = z.infer<typeof ServiceRequestSchema>;
@@ -193,3 +244,4 @@ export type SellerStoreInput = z.infer<typeof SellerStoreSchema>;
 export type SellerPayoutInput = z.infer<typeof SellerPayoutSchema>;
 export type ProductCreateInput = z.infer<typeof ProductCreateSchema>;
 export type ReviewInput = z.infer<typeof ReviewSchema>;
+export type CalculateFeeInput = z.infer<typeof CalculateFeeSchema>;

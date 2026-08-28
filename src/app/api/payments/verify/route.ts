@@ -1,80 +1,59 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from 'next/server';
+import { PaymentVerifySchema } from '@/lib/validation';
 import {
   checkBruteForce,
-  sanitizeString,
   validateOriginAndCSRF,
   parseJsonWithLimit,
-  safeJsonResponse,
   handleSecureApiError,
-} from "@/lib/auth-security";
-import { PaymentVerifySchema } from "@/lib/validation";
+} from '@/lib/auth-security';
+import { createApiSuccess, createApiError, handleOptionsCors } from '@/lib/api-response';
+import { paymentService } from '@/services/business/payment.service';
+
+export async function OPTIONS() {
+  return handleOptionsCors();
+}
 
 export async function POST(req: NextRequest) {
   try {
-    // 1. Origin / CSRF Validation
     if (!validateOriginAndCSRF(req)) {
-      return safeJsonResponse(
-        { success: false, message: "Invalid request origin or CSRF check failed." },
-        { status: 403 }
-      );
+      return createApiError('Invalid request origin or CSRF check failed.', { status: 403 });
     }
 
-    // 2. IP Rate Limiting (Max 25 verification calls per 10 minutes)
-    const ip = req.headers.get("x-forwarded-for") || "ip_pay";
-    const rateCheck = checkBruteForce(`pay_${ip}`, 25, 10 * 60 * 1000);
+    const ip = req.headers.get('x-forwarded-for') || 'ip_pay';
+    const rateCheck = checkBruteForce(`pay_${ip}`, 30, 10 * 60 * 1000);
     if (!rateCheck.allowed) {
-      return safeJsonResponse(
-        {
-          success: false,
-          message: "অতিরিক্ত পেমেন্ট রিকোয়েস্ট তৈরি হয়েছে। কিছুক্ষণ পর চেষ্টা করুন।",
-          retryAfterSeconds: rateCheck.retryAfterSeconds,
-        },
-        { status: 429 }
-      );
+      return createApiError('অতিরিক্ত পেমেন্ট রিকোয়েস্ট তৈরি হয়েছে। কিছুক্ষণ পর চেষ্টা করুন।', {
+        status: 429,
+        extraMeta: { retryAfterSeconds: rateCheck.retryAfterSeconds },
+      });
     }
 
-    // 3. Request Size Limit (Max 64KB)
     const jsonResult = await parseJsonWithLimit(req, 64 * 1024);
     if (!jsonResult.success) {
       return jsonResult.errorResponse!;
     }
 
-    // 4. Zod Schema Validation
     const validationResult = PaymentVerifySchema.safeParse(jsonResult.data);
     if (!validationResult.success) {
-      const errorMsg = validationResult.error.issues.map((i) => i.message).join(", ");
-      return safeJsonResponse(
-        { success: false, message: errorMsg },
-        { status: 400 }
-      );
+      const errorMsg = validationResult.error.issues.map((i) => i.message).join(', ');
+      return createApiError(errorMsg, { status: 400, code: 'VALIDATION_ERROR' });
     }
 
-    const { transactionId, paymentMethod, amount, bookingId, serviceType } = validationResult.data;
+    // Business Logic Service
+    const result = await paymentService.verifyPayment(validationResult.data);
 
-    // 5. Anti-Tamper Transaction Code Sanitization
-    const cleanTrx = sanitizeString(transactionId).replace(/[^A-Za-z0-9_-]/g, "").toUpperCase();
-    const cleanGateway = sanitizeString(paymentMethod);
-    const cleanBookingId = bookingId ? sanitizeString(bookingId) : undefined;
-    const cleanServiceType = serviceType ? sanitizeString(serviceType) : undefined;
+    if (!result.success) {
+      return createApiError(result.message, {
+        status: result.statusCode || 400,
+        code: result.errorCode,
+      });
+    }
 
-    const verificationRecord = {
-      verified: true,
-      transactionId: cleanTrx,
-      gateway: cleanGateway,
-      amountPaid: amount,
-      bookingId: cleanBookingId,
-      serviceType: cleanServiceType,
-      verifiedAt: new Date().toISOString(),
-      status: "COMPLETED",
-      referenceCode: `QAAGA-${Date.now().toString(36).toUpperCase()}`,
-    };
-
-    return safeJsonResponse({
-      success: true,
-      message: "পেমেন্ট সফলভাবে ভেরিফাই সম্পন্ন হয়েছে।",
-      data: verificationRecord,
+    return createApiSuccess(result.data, {
+      message: result.message,
+      status: result.statusCode || 200,
     });
   } catch (error: any) {
-    return handleSecureApiError(error, "Payment verification processing");
+    return handleSecureApiError(error, 'Payment verification transport layer');
   }
 }

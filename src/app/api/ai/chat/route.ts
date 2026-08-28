@@ -1,103 +1,48 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenAI } from '@google/genai';
+import { NextRequest } from 'next/server';
+import { AIChatGenericSchema } from '@/lib/validation';
 import {
   checkBruteForce,
-  sanitizeString,
+  validateOriginAndCSRF,
   parseJsonWithLimit,
-  safeJsonResponse,
   handleSecureApiError,
 } from '@/lib/auth-security';
-import { AIChatGenericSchema } from '@/lib/validation';
+import { createApiSuccess, createApiError, handleOptionsCors } from '@/lib/api-response';
+import { aiService } from '@/services/business/ai.service';
 
-let aiClient: GoogleGenAI | null = null;
-function getAIClient(): GoogleGenAI | null {
-  if (!aiClient && process.env.GEMINI_API_KEY) {
-    aiClient = new GoogleGenAI({
-      apiKey: process.env.GEMINI_API_KEY,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build',
-        },
-      },
-    });
-  }
-  return aiClient;
+export async function OPTIONS() {
+  return handleOptionsCors();
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(req: NextRequest) {
   try {
-    // 1. IP Rate Limiting (Max 30 chats per 5 minutes)
-    const ip = request.headers.get('x-forwarded-for') || 'ip_aichat';
-    const rateCheck = checkBruteForce(`aichat_${ip}`, 30, 5 * 60 * 1000);
-    if (!rateCheck.allowed) {
-      return safeJsonResponse(
-        { reply: 'অতিরিক্ত বার্তার কারণে সাময়িক বিরতি। কিছুক্ষণ পর আবার চেষ্টা করুন।' },
-        { status: 429 }
-      );
+    if (!validateOriginAndCSRF(req)) {
+      return createApiError('Invalid request origin or CSRF check failed.', { status: 403 });
     }
 
-    // 2. Request Size Limit (Max 64KB)
-    const jsonResult = await parseJsonWithLimit(request, 64 * 1024);
+    const ip = req.headers.get('x-forwarded-for') || 'ip_ai';
+    const rateCheck = checkBruteForce(`ai_${ip}`, 30, 5 * 60 * 1000);
+    if (!rateCheck.allowed) {
+      return createApiError('অতিরিক্ত মেসেজ পাঠানো হয়েছে। কিছুক্ষণ অপেক্ষা করুন।', {
+        status: 429,
+        extraMeta: { retryAfterSeconds: rateCheck.retryAfterSeconds },
+      });
+    }
+
+    const jsonResult = await parseJsonWithLimit(req, 128 * 1024);
     if (!jsonResult.success) {
       return jsonResult.errorResponse!;
     }
 
-    // 3. Zod Input Validation
     const validationResult = AIChatGenericSchema.safeParse(jsonResult.data);
     if (!validationResult.success) {
-      return safeJsonResponse(
-        { reply: validationResult.error.issues[0]?.message || 'অবৈধ বার্তা ফরম্যাট।' },
-        { status: 400 }
-      );
+      return createApiError(validationResult.error.issues[0]?.message || 'Invalid chat parameters', {
+        status: 400,
+      });
     }
 
-    const { message, assistantType, history } = validationResult.data;
-    const cleanMessage = sanitizeString(message);
-
-    const systemPrompt =
-      assistantType === 'CAT'
-        ? 'আপনি হলেন কিউট ক্যাট (Cute Cat) - QAAGA সুপার প্ল্যাটফর্মের একটি অতি আদুরে, মিষ্টি ও সাহায্যকারী কিটেন। আপনি মিষ্টি বাংলায় কথা বলেন এবং মিউ মিউ (Meow!) করে উৎসাহ দেন।'
-        : 'আপনি হলেন সুচি (Suchi AI) - QAAGA সুপার মার্কেটপ্লেসের বুদ্ধিমান বাংলা এআই অ্যাসিস্ট্যান্ট। আপনি ব্যবহারকারীদের হোম সার্ভিস, ডাক্তার সিরিয়াল, নার্সিং সেবা, হোটেল বুকিং, অনলাইন কেনাকাটা ও ইবুক সংক্রান্ত তথ্য ও পরামর্শ দিয়ে থাকেন।';
-
-    const ai = getAIClient();
-    if (ai) {
-      try {
-        const contents: any[] = [];
-        if (Array.isArray(history) && history.length > 0) {
-          for (const h of history.slice(-4)) {
-            contents.push({
-              role: h.role === 'user' ? 'user' : 'model',
-              parts: [{ text: sanitizeString(h.content) }],
-            });
-          }
-        }
-
-        contents.push({
-          role: 'user',
-          parts: [{ text: `${systemPrompt}\n\nUser Question: ${cleanMessage}` }],
-        });
-
-        const response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash',
-          contents: contents,
-        });
-
-        return safeJsonResponse({
-          reply: response.text || 'আমি কীভাবে আপনাকে সাহায্য করতে পারি?',
-        });
-      } catch (genErr) {
-        console.warn('Gemini generic API error, using smart fallback:', genErr);
-      }
-    }
-
-    // Smart Local Fallback
-    const localReply =
-      assistantType === 'CAT'
-        ? `মিউউউ! 🐾 আমি আপনার সাথে আছি! "${cleanMessage}" নিয়ে কোনো চিন্তা করবেন না, QAAGA তে সব সেবা হাতের নাগালে!`
-        : `ধন্যবাদ আপনার বার্তার জন্য! "${cleanMessage}" সংক্রান্ত যেকোনো সেবা বা তথ্যের জন্য QAAGA প্ল্যাটফর্মে সার্ভিস রিকোয়েস্ট দিন বা অনুসন্ধান করুন।`;
-
-    return safeJsonResponse({ reply: localReply });
+    const result = await aiService.processGenericChat(validationResult.data);
+    return createApiSuccess(result);
   } catch (error: any) {
-    return handleSecureApiError(error, 'AI generic chat route');
+    return handleSecureApiError(error, 'Generic AI chat transport layer');
   }
 }

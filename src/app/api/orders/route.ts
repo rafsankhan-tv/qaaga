@@ -1,61 +1,103 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { OrderCheckoutSchema } from '@/lib/validation';
 import {
   checkBruteForce,
-  sanitizeString,
-  sanitizeObject,
   validateOriginAndCSRF,
   parseJsonWithLimit,
-  safeJsonResponse,
   handleSecureApiError,
   extractAuthTokenFromRequest,
   verifyAuthToken,
 } from '@/lib/auth-security';
+import { createApiSuccess, createApiError, handleOptionsCors } from '@/lib/api-response';
+import { orderService } from '@/services/business/order.service';
 
-export async function POST(request: NextRequest) {
+export async function OPTIONS() {
+  return handleOptionsCors();
+}
+
+export async function GET(req: NextRequest) {
   try {
-    // 1. Origin / CSRF Validation
-    if (!validateOriginAndCSRF(request)) {
-      return safeJsonResponse(
-        { success: false, message: 'Invalid request origin or CSRF check failed.' },
-        { status: 403 }
-      );
+    const token = extractAuthTokenFromRequest(req);
+    let authenticatedUserId: string | null = null;
+    let isSuperAdmin = false;
+
+    if (token) {
+      const payload = verifyAuthToken(token);
+      if (payload) {
+        authenticatedUserId = payload.userId;
+        isSuperAdmin = payload.roles.includes('SUPER_ADMIN');
+      }
     }
 
-    // 2. IP Rate Limiting (Max 20 orders per 10 minutes per IP)
-    const ip = request.headers.get('x-forwarded-for') || 'ip_order';
-    const rateCheck = checkBruteForce(`order_${ip}`, 20, 10 * 60 * 1000);
-    if (!rateCheck.allowed) {
-      return safeJsonResponse(
-        {
-          success: false,
-          message: 'অতিরিক্ত অর্ডার রিকোয়েস্ট তৈরি করা হয়েছে। কিছুক্ষণ পর চেষ্টা করুন।',
-          retryAfterSeconds: rateCheck.retryAfterSeconds,
+    const { searchParams } = new URL(req.url);
+    const orderId = searchParams.get('orderId');
+    const page = parseInt(searchParams.get('page') || '1', 10);
+    const limit = parseInt(searchParams.get('limit') || '20', 10);
+
+    if (orderId) {
+      const order = await orderService.getOrderById(orderId, authenticatedUserId || undefined, isSuperAdmin);
+      if (!order) {
+        return createApiError('অর্ডারটি পাওয়া যায়নি।', { status: 404 });
+      }
+      return createApiSuccess({ order });
+    }
+
+    if (authenticatedUserId && !isSuperAdmin) {
+      const orders = await orderService.listUserOrders(authenticatedUserId);
+      return createApiSuccess({ orders, total: orders.length });
+    }
+
+    const result = await orderService.listAllOrders(limit, page);
+    return createApiSuccess(
+      { orders: result.orders },
+      {
+        pagination: {
+          page,
+          limit,
+          total: result.total,
+          totalPages: Math.ceil(result.total / limit),
+          hasNextPage: page * limit < result.total,
+          hasPrevPage: page > 1,
         },
-        { status: 429 }
-      );
+      }
+    );
+  } catch (error: any) {
+    return handleSecureApiError(error, 'Listing orders');
+  }
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    // 1. Origin / CSRF Validation (Mobile & Same-Origin friendly)
+    if (!validateOriginAndCSRF(req)) {
+      return createApiError('Invalid request origin or CSRF check failed.', { status: 403 });
+    }
+
+    // 2. IP Rate Limiting (20 orders per 10 minutes per IP)
+    const ip = req.headers.get('x-forwarded-for') || 'ip_order';
+    const rateCheck = checkBruteForce(`order_${ip}`, 25, 10 * 60 * 1000);
+    if (!rateCheck.allowed) {
+      return createApiError('অতিরিক্ত অর্ডার রিকোয়েস্ট তৈরি করা হয়েছে। কিছুক্ষণ পর চেষ্টা করুন।', {
+        status: 429,
+        extraMeta: { retryAfterSeconds: rateCheck.retryAfterSeconds },
+      });
     }
 
     // 3. Request Size Limit (Max 256KB for order payload)
-    const jsonResult = await parseJsonWithLimit(request, 256 * 1024);
+    const jsonResult = await parseJsonWithLimit(req, 256 * 1024);
     if (!jsonResult.success) {
       return jsonResult.errorResponse!;
     }
 
-    // 4. Strict Zod Schema Validation
+    // 4. Strict Zod Validation
     const validationResult = OrderCheckoutSchema.safeParse(jsonResult.data);
     if (!validationResult.success) {
       const errorMsg = validationResult.error.issues.map((i) => i.message).join(', ');
-      return safeJsonResponse(
-        { success: false, message: errorMsg, error: errorMsg },
-        { status: 400 }
-      );
+      return createApiError(errorMsg, { status: 400, code: 'VALIDATION_ERROR' });
     }
 
-    const validatedData = validationResult.data;
-
-    // 5. Optional Auth Token Context & IDOR Security
-    const token = extractAuthTokenFromRequest(request);
+    // 5. Check Auth Token for Customer ID Association
+    const token = extractAuthTokenFromRequest(req);
     let authenticatedUserId: string | null = null;
     if (token) {
       const userPayload = verifyAuthToken(token);
@@ -64,44 +106,24 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 6. Generate Cryptographically Safe Order Identifiers
-    const randomSuffix = Math.floor(100000 + Math.random() * 900000);
-    const orderId = `ORD-${Date.now().toString().slice(-4)}${randomSuffix}`;
-    const trackingCode = `QAAGA-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    // 6. Invoke Business Logic Service Layer
+    const result = await orderService.createOrder(validationResult.data, authenticatedUserId);
 
-    // 7. Sanitize all user-controlled text fields
-    const sanitizedCustomerName = sanitizeString(validatedData.customerName);
-    const sanitizedCustomerPhone = sanitizeString(validatedData.customerPhone);
-    const sanitizedShippingAddress = sanitizeString(validatedData.shippingAddress);
-    const sanitizedDistrict = sanitizeString(validatedData.district);
-    const sanitizedArea = sanitizeString(validatedData.area);
-    const sanitizedItems = sanitizeObject(validatedData.items);
+    if (!result.success) {
+      return createApiError(result.message, {
+        status: result.statusCode || 400,
+        code: result.errorCode,
+      });
+    }
 
-    const safeOrder = {
-      orderId,
-      trackingCode,
-      status: 'PENDING',
-      customerId: authenticatedUserId || undefined,
-      customerName: sanitizedCustomerName,
-      customerPhone: sanitizedCustomerPhone,
-      shippingAddress: sanitizedShippingAddress,
-      district: sanitizedDistrict,
-      area: sanitizedArea,
-      items: sanitizedItems,
-      subtotal: validatedData.subtotal,
-      deliveryFee: validatedData.deliveryFee,
-      discountAmount: validatedData.discountAmount,
-      totalAmount: validatedData.totalAmount,
-      paymentMethod: validatedData.paymentMethod,
-      createdAt: new Date().toISOString(),
-    };
-
-    return safeJsonResponse({
-      success: true,
-      message: 'অর্ডার সফলভাবে গ্রহণ করা হয়েছে।',
-      order: safeOrder,
-    });
+    return createApiSuccess(
+      { order: result.order },
+      {
+        message: result.message,
+        status: result.statusCode || 201,
+      }
+    );
   } catch (error: any) {
-    return handleSecureApiError(error, 'Order checkout processing');
+    return handleSecureApiError(error, 'Order checkout transport layer');
   }
 }

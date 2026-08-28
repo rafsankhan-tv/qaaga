@@ -15,7 +15,8 @@ import {
   ServiceRequest,
   ProviderOffer,
   Booking,
-  PlatformSystemSettings
+  PlatformSystemSettings,
+  OptionalIntegrationsSettings
 } from '../types';
 import {
   DEFAULT_SITE_TITLE,
@@ -24,6 +25,69 @@ import {
   DEFAULT_SITE_DESCRIPTION,
   FAVICON_PRESETS
 } from './faviconPresets';
+
+export const DEFAULT_OPTIONAL_INTEGRATIONS: OptionalIntegrationsSettings = {
+  gemini: {
+    enabled: false,
+    apiKey: '',
+    model: 'gemini-2.5-flash',
+    temperature: 0.7
+  },
+  fastapiAiService: {
+    enabled: false,
+    serviceUrl: '',
+    secretKey: ''
+  },
+  smsGateway: {
+    enabled: false,
+    provider: 'greenweb',
+    apiKey: '',
+    senderId: 'QAAGA',
+    endpointUrl: ''
+  },
+  bkashPayment: {
+    enabled: false,
+    appKey: '',
+    appSecret: '',
+    username: '',
+    password: '',
+    isSandbox: true
+  },
+  nagadPayment: {
+    enabled: false,
+    merchantId: '',
+    publicKey: '',
+    privateKey: '',
+    isSandbox: true
+  },
+  sslcommerz: {
+    enabled: false,
+    storeId: '',
+    storePassword: '',
+    isLive: false
+  },
+  stripe: {
+    enabled: false,
+    publishableKey: '',
+    secretKey: ''
+  },
+  cloudStorage: {
+    enabled: false,
+    provider: 's3',
+    bucketName: '',
+    region: 'ap-southeast-1',
+    accessKeyId: '',
+    secretAccessKey: '',
+    endpointUrl: '',
+    publicBaseUrl: ''
+  },
+  redis: {
+    enabled: false,
+    connectionUrl: '',
+    token: '',
+    useTls: false
+  }
+};
 
 export const INITIAL_SYSTEM_SETTINGS: PlatformSystemSettings = {
   defaultAdvancePercent: 20,
@@ -49,7 +113,10 @@ export const INITIAL_SYSTEM_SETTINGS: PlatformSystemSettings = {
   faviconUrl: FAVICON_PRESETS[0].svgDataUri,
   customFaviconUpload: '',
   themeColor: '#7c3aed',
-  showTaglineInBrowserTitle: true
+  showTaglineInBrowserTitle: true,
+
+  // Optional Services Integrations (Disabled by default, configurable via Admin Dashboard)
+  integrations: { ...DEFAULT_OPTIONAL_INTEGRATIONS }
 };
 
 export const SEED_USERS: UserProfile[] = [

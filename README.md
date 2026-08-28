@@ -204,9 +204,9 @@ VPS সার্ভারে আপনি **Docker Compose** অথবা **PM2 
 
 ### পদ্ধতি খ: PM2 ও Nginx দিয়ে সরাসরি ডেপ্লয়
 
-১. **Node.js 20 LTS ও PM2 ইন্সটল করুন**:
+১. **Node.js 24 LTS ও PM2 ইন্সটল করুন**:
    ```bash
-   curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+   curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
    sudo apt install -y nodejs nginx postgresql postgresql-contrib
    sudo npm install -g pm2
    ```
@@ -220,7 +220,7 @@ VPS সার্ভারে আপনি **Docker Compose** অথবা **PM2 
 
 ৩. **PM2 দিয়ে ব্যাকগ্রাউন্ডে রান করুন**:
    ```bash
-   pm2 start dist/server.cjs --name "qaaga-app"
+   pm2 start npm --name "qaaga-app" -- start
    pm2 save
    pm2 startup
    ```

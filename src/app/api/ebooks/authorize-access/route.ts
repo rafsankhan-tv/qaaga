@@ -1,91 +1,66 @@
-import { NextRequest, NextResponse } from "next/server";
-import crypto from "crypto";
+import { NextRequest } from 'next/server';
+import { EbookAuthorizeSchema } from '@/lib/validation';
 import {
+  authenticateRequest,
   checkBruteForce,
   validateOriginAndCSRF,
   parseJsonWithLimit,
-  safeJsonResponse,
   handleSecureApiError,
-  extractAuthTokenFromRequest,
-  verifyAuthToken,
-} from "@/lib/auth-security";
-import { EbookAuthorizeSchema } from "@/lib/validation";
+} from '@/lib/auth-security';
+import { createApiSuccess, createApiError, handleOptionsCors } from '@/lib/api-response';
+import { ebookService } from '@/services/business/ebook.service';
 
-const EBOOK_SIGNING_KEY = process.env.EBOOK_TOKEN_SECRET || process.env.JWT_SECRET || "qaaga-ebook-secure-signing-secret-2026";
+export async function OPTIONS() {
+  return handleOptionsCors();
+}
 
 export async function POST(req: NextRequest) {
   try {
-    // 1. Origin / CSRF Validation
     if (!validateOriginAndCSRF(req)) {
-      return safeJsonResponse(
-        { authorized: false, message: "Invalid request origin or CSRF check failed." },
-        { status: 403 }
-      );
+      return createApiError('Invalid request origin or CSRF check failed.', { status: 403 });
     }
 
-    // 2. IP Rate Limiting (Max 30 book access requests per 10 minutes)
-    const ip = req.headers.get("x-forwarded-for") || "ip_ebook";
-    const rateCheck = checkBruteForce(`ebook_${ip}`, 30, 10 * 60 * 1000);
+    const ip = req.headers.get('x-forwarded-for') || 'ip_ebook_auth';
+    const rateCheck = checkBruteForce(`ebook_auth_${ip}`, 30, 5 * 60 * 1000);
     if (!rateCheck.allowed) {
-      return safeJsonResponse(
-        {
-          authorized: false,
-          message: "অতিরিক্ত ইবুক অ্যাক্সেস রিকোয়েস্ট। কিছুক্ষণ পর চেষ্টা করুন।",
-          retryAfterSeconds: rateCheck.retryAfterSeconds,
-        },
-        { status: 429 }
-      );
+      return createApiError('অতিরিক্ত রিকোয়েস্ট এসেছে। কিছুক্ষণ পর চেষ্টা করুন।', {
+        status: 429,
+        extraMeta: { retryAfterSeconds: rateCheck.retryAfterSeconds },
+      });
     }
 
-    // 3. Request Size Limit (Max 32KB)
+    const auth = await authenticateRequest(req);
+    const sessionUserId = auth.authenticated && auth.user ? auth.user.userId : undefined;
+    const isSuperAdmin = auth.user?.roles.includes('SUPER_ADMIN') || false;
+
     const jsonResult = await parseJsonWithLimit(req, 32 * 1024);
     if (!jsonResult.success) {
       return jsonResult.errorResponse!;
     }
 
-    // 4. Zod Schema Validation
     const validationResult = EbookAuthorizeSchema.safeParse(jsonResult.data);
     if (!validationResult.success) {
-      return safeJsonResponse(
-        { authorized: false, message: validationResult.error.issues[0]?.message || "Invalid parameters." },
-        { status: 400 }
-      );
+      return createApiError(validationResult.error.issues[0]?.message || 'Invalid parameters', {
+        status: 400,
+      });
     }
 
-    const { ebookId, userId } = validationResult.data;
+    // Business Logic Service
+    const result = await ebookService.authorizeAccess(validationResult.data, sessionUserId, isSuperAdmin);
 
-    // 5. Check Session / Identity (IDOR Protection)
-    const sessionToken = extractAuthTokenFromRequest(req);
-    if (sessionToken) {
-      const userPayload = verifyAuthToken(sessionToken);
-      if (userPayload && userPayload.userId !== userId && !userPayload.roles.includes("SUPER_ADMIN")) {
-        // User cannot request access for another user ID
-        return safeJsonResponse(
-          { authorized: false, message: "Forbidden: Session identity mismatch." },
-          { status: 403 }
-        );
-      }
+    if (!result.authorized) {
+      return createApiError(result.message || 'Access denied', {
+        status: result.statusCode || 403,
+      });
     }
 
-    // 6. Generate Cryptographically Signed HMAC Token with Expiry
-    const timestamp = Date.now();
-    const expiryTimestamp = timestamp + 3600 * 1000; // 1 hour validity
-    const rawPayload = `${userId}:${ebookId}:${expiryTimestamp}`;
-    const signature = crypto
-      .createHmac("sha256", EBOOK_SIGNING_KEY)
-      .update(rawPayload)
-      .digest("hex")
-      .substring(0, 32);
-
-    const secureReaderToken = `EBK_${Buffer.from(rawPayload).toString("base64")}.${signature}`;
-
-    return safeJsonResponse({
+    return createApiSuccess({
       authorized: true,
-      secureReaderToken,
-      expiresIn: 3600,
-      readerUrl: `/reader/ebook/${encodeURIComponent(ebookId)}?token=${encodeURIComponent(secureReaderToken)}`,
+      secureReaderToken: result.secureReaderToken,
+      expiresIn: result.expiresIn,
+      readerUrl: result.readerUrl,
     });
   } catch (error: any) {
-    return handleSecureApiError(error, "Ebook authorization processing");
+    return handleSecureApiError(error, 'Ebook authorization transport layer');
   }
 }

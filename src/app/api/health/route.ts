@@ -1,9 +1,19 @@
-import { NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { dbService } from '../../../db/database';
-import { safeJsonResponse, handleSecureApiError } from '@/lib/auth-security';
+import { checkBruteForce, safeJsonResponse, handleSecureApiError } from '@/lib/auth-security';
+import { createApiError } from '@/lib/api-response';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const ip = req.headers.get('x-forwarded-for') || 'ip_health';
+    const rateCheck = checkBruteForce(`health_${ip}`, 120, 60 * 1000);
+    if (!rateCheck.allowed) {
+      return createApiError('Too many health check requests.', {
+        status: 429,
+        extraMeta: { retryAfterSeconds: rateCheck.retryAfterSeconds },
+      });
+    }
+
     const dbHealth = await dbService.checkHealth();
 
     // Sanitized public health data (hides sensitive internal connection strings/passwords)
@@ -19,7 +29,7 @@ export async function GET() {
       status: 'ok',
       platform: 'QAAGA Super Marketplace',
       framework: 'Next.js 16 (App Router)',
-      runtime: 'Node.js LTS (v22)',
+      runtime: 'Node.js LTS (v24)',
       securityStatus: 'HARDENED',
       database: sanitizedDbHealth,
       timestamp: new Date().toISOString(),
@@ -28,3 +38,4 @@ export async function GET() {
     return handleSecureApiError(error, 'Health check route');
   }
 }
+

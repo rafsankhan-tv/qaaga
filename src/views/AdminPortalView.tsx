@@ -46,13 +46,15 @@ import {
   Package,
   CreditCard,
   Building2,
-  PhoneCall
+  PhoneCall,
+  Plug
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { marketplaceStore } from '../services/marketplaceStore';
 import { RenderCategoryIcon } from '../components/CategoryIconHelper';
 import { CuteCatAvatarSvg } from '../components/CuteCatAvatarSvg';
 import { CUTE_CAT_SKIN_PRESETS } from '../data/cuteCatData';
+import { AdminIntegrationsSettings } from '../components/admin/AdminIntegrationsSettings';
 import {
   FAVICON_PRESETS,
   getActiveFaviconHref,
@@ -96,9 +98,12 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({ onNavigate, in
     | 'CATEGORIES'
     | 'PROVIDERS'
     | 'SETTINGS'
+    | 'INTEGRATIONS'
     | 'BRANDING'
     | 'FINANCES'
   >((initialTab as any) || 'REQUEST_MODERATION');
+
+  const [settingsSubTab, setSettingsSubTab] = useState<'escrow' | 'integrations'>('escrow');
 
   const [requests, setRequests] = useState(() => marketplaceStore.getRequests());
   const [offers, setOffers] = useState(() => marketplaceStore.getOffers());
@@ -1089,6 +1094,7 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({ onNavigate, in
           { id: 'PROVIDERS', label: `Provider Verification (${providers.length})`, icon: Users },
           { id: 'BRANDING', label: 'Site Title & Favicon 🌐', icon: Globe },
           { id: 'SETTINGS', label: 'Escrow & System Settings', icon: Settings },
+          { id: 'INTEGRATIONS', label: 'Integrations (APIs) 🔌', icon: Plug },
           { id: 'FINANCES', label: 'Escrow Ledger & GMV', icon: DollarSign }
         ].map((tab) => {
           const Icon = tab.icon;
@@ -3710,83 +3716,119 @@ export const AdminPortalView: React.FC<AdminPortalViewProps> = ({ onNavigate, in
 
       {/* TAB 5: SETTINGS */}
       {activeTab === 'SETTINGS' && (
-        <div className="space-y-6 max-w-4xl">
-          {/* Quick Branding Card */}
-          <div className="bg-gradient-to-r from-purple-900/90 via-indigo-900/90 to-slate-900 text-white rounded-3xl p-6 shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-purple-500/20 border border-purple-400/30 flex items-center justify-center text-purple-300 shrink-0">
-                <Globe size={24} />
-              </div>
-              <div>
-                <h4 className="text-base font-bold">Site Title & Custom Favicon Manager</h4>
-                <p className="text-xs text-purple-200 mt-0.5">
-                  Currently: <span className="font-semibold text-white">"{settings.siteTitle || DEFAULT_SITE_TITLE}"</span>
-                </p>
-              </div>
-            </div>
+        <div className="space-y-6">
+          {/* Sub Navigation inside Settings */}
+          <div className="flex items-center gap-2 border-b border-slate-200 pb-3">
             <button
-              onClick={() => setActiveTab('BRANDING')}
-              className="bg-white text-purple-950 hover:bg-purple-50 px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-xs shrink-0 cursor-pointer flex items-center gap-1.5"
+              onClick={() => setSettingsSubTab('escrow')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                settingsSubTab === 'escrow'
+                  ? 'bg-slate-900 text-white shadow-xs'
+                  : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+              }`}
             >
-              <span>Manage Title & Favicon</span>
-              <ArrowRight size={14} />
+              Escrow & Financial Controls
+            </button>
+            <button
+              onClick={() => setSettingsSubTab('integrations')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                settingsSubTab === 'integrations'
+                  ? 'bg-slate-900 text-white shadow-xs'
+                  : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              <Plug size={14} />
+              <span>Integrations & Optional Services</span>
             </button>
           </div>
 
-          <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-xs space-y-5 max-w-2xl">
-            <h3 className="text-base font-bold text-slate-900">Escrow & Financial System Settings</h3>
-
-            <div className="space-y-4 text-xs">
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Default Booking Advance Deposit (%):
-                </label>
-                <input
-                  type="number"
-                  value={settings.defaultAdvancePercent}
-                  onChange={(e) => marketplaceStore.updateSystemSettings({ defaultAdvancePercent: Number(e.target.value) })}
-                  className="w-full p-2 bg-slate-50 border border-slate-300 rounded-xl font-bold"
-                />
-                <p className="text-[11px] text-slate-400 mt-0.5">Required deposit to unlock customer phone & address (Standard: 20%).</p>
+          {settingsSubTab === 'escrow' ? (
+            <div className="space-y-6 max-w-4xl">
+              {/* Quick Branding Card */}
+              <div className="bg-gradient-to-r from-purple-900/90 via-indigo-900/90 to-slate-900 text-white rounded-3xl p-6 shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-purple-500/20 border border-purple-400/30 flex items-center justify-center text-purple-300 shrink-0">
+                    <Globe size={24} />
+                  </div>
+                  <div>
+                    <h4 className="text-base font-bold">Site Title & Custom Favicon Manager</h4>
+                    <p className="text-xs text-purple-200 mt-0.5">
+                      Currently: <span className="font-semibold text-white">"{settings.siteTitle || DEFAULT_SITE_TITLE}"</span>
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setActiveTab('BRANDING')}
+                  className="bg-white text-purple-950 hover:bg-purple-50 px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-xs shrink-0 cursor-pointer flex items-center gap-1.5"
+                >
+                  <span>Manage Title & Favicon</span>
+                  <ArrowRight size={14} />
+                </button>
               </div>
 
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Platform Service Commission (%):
-                </label>
-                <input
-                  type="number"
-                  value={settings.platformCommissionPercent}
-                  onChange={(e) => marketplaceStore.updateSystemSettings({ platformCommissionPercent: Number(e.target.value) })}
-                  className="w-full p-2 bg-slate-50 border border-slate-300 rounded-xl font-bold"
-                />
-                <p className="text-[11px] text-slate-400 mt-0.5">QAAGA take rate on completed services (Standard: 10%).</p>
-              </div>
+              <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-xs space-y-5 max-w-2xl">
+                <h3 className="text-base font-bold text-slate-900">Escrow & Financial System Settings</h3>
 
-              <div className="space-y-2 pt-2 border-t border-slate-100">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={settings.requireAdminRequestReview}
-                    onChange={(e) => marketplaceStore.updateSystemSettings({ requireAdminRequestReview: e.target.checked })}
-                    className="rounded text-teal-600"
-                  />
-                  <span className="font-bold text-slate-800">Enforce Admin Review on Customer Requests</span>
-                </label>
+                <div className="space-y-4 text-xs">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      Default Booking Advance Deposit (%):
+                    </label>
+                    <input
+                      type="number"
+                      value={settings.defaultAdvancePercent}
+                      onChange={(e) => marketplaceStore.updateSystemSettings({ defaultAdvancePercent: Number(e.target.value) })}
+                      className="w-full p-2 bg-slate-50 border border-slate-300 rounded-xl font-bold"
+                    />
+                    <p className="text-[11px] text-slate-400 mt-0.5">Required deposit to unlock customer phone & address (Standard: 20%).</p>
+                  </div>
 
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={settings.requireAdminOfferReview}
-                    onChange={(e) => marketplaceStore.updateSystemSettings({ requireAdminOfferReview: e.target.checked })}
-                    className="rounded text-teal-600"
-                  />
-                  <span className="font-bold text-slate-800">Enforce Admin Review on Provider Quotations</span>
-                </label>
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      Platform Service Commission (%):
+                    </label>
+                    <input
+                      type="number"
+                      value={settings.platformCommissionPercent}
+                      onChange={(e) => marketplaceStore.updateSystemSettings({ platformCommissionPercent: Number(e.target.value) })}
+                      className="w-full p-2 bg-slate-50 border border-slate-300 rounded-xl font-bold"
+                    />
+                    <p className="text-[11px] text-slate-400 mt-0.5">QAAGA take rate on completed services (Standard: 10%).</p>
+                  </div>
+
+                  <div className="space-y-2 pt-2 border-t border-slate-100">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={settings.requireAdminRequestReview}
+                        onChange={(e) => marketplaceStore.updateSystemSettings({ requireAdminRequestReview: e.target.checked })}
+                        className="rounded text-teal-600"
+                      />
+                      <span className="font-bold text-slate-800">Enforce Admin Review on Customer Requests</span>
+                    </label>
+
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={settings.requireAdminOfferReview}
+                        onChange={(e) => marketplaceStore.updateSystemSettings({ requireAdminOfferReview: e.target.checked })}
+                        className="rounded text-teal-600"
+                      />
+                      <span className="font-bold text-slate-800">Enforce Admin Review on Provider Quotations</span>
+                    </label>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
+          ) : (
+            <AdminIntegrationsSettings settings={settings} />
+          )}
         </div>
+      )}
+
+      {/* TAB: DIRECT INTEGRATIONS & APIS */}
+      {activeTab === 'INTEGRATIONS' && (
+        <AdminIntegrationsSettings settings={settings} />
       )}
 
       {/* TAB: SITE TITLE & FAVICON BRANDING MANAGER */}
