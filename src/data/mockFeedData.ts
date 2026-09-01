@@ -1,4 +1,4 @@
-import { FeedPost, UserFollow, FeedBannerSlide } from '../types';
+import type { FeedPost, UserFollow, FeedBannerSlide } from '../types/index.ts';
 
 export const INITIAL_FEED_BANNER_SLIDES: FeedBannerSlide[] = [
   {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { LocationProvider } from './context/LocationContext';
 import { Header } from './components/layout/Header';
@@ -6,31 +6,40 @@ import { Footer } from './components/layout/Footer';
 import { MobileNav } from './components/layout/MobileNav';
 import { GlobalSearchModal } from './components/layout/GlobalSearchModal';
 import { LocationSelectorModal } from './components/layout/LocationSelectorModal';
-
-// Views
-import { HomeView } from './views/HomeView';
-import { ServiceRequestFormView } from './views/ServiceRequestFormView';
-import { CustomerDashboardView } from './views/CustomerDashboardView';
-import { ProviderDashboardView } from './views/ProviderDashboardView';
-import { AdminPortalView } from './views/AdminPortalView';
-import { DoctorsView } from './views/DoctorsView';
-import { NurseCaregiverView } from './views/NurseCaregiverView';
-import { HotelsView } from './views/HotelsView';
-import { ProductsView } from './views/ProductsView';
-import { EbooksView } from './views/EbooksView';
-import { UsedProductsView } from './views/UsedProductsView';
-import { JobsView } from './views/JobsView';
-import { SellerDashboardView } from './views/SellerDashboardView';
-import { SellerStorefrontView } from './views/SellerStorefrontView';
-import { RoleRegistrationView } from './views/RoleRegistrationView';
-import { FeedView } from './views/FeedView';
-import { CartCheckoutView } from './views/CartCheckoutView';
-import { OrderTrackingView } from './views/OrderTrackingView';
-import { WishlistView } from './views/WishlistView';
 import { CuteCatRunner } from './components/CuteCatRunner';
 import { FloatingHelpWidget } from './components/common/FloatingHelpWidget';
 import { FeedProfileModal } from './components/feed/FeedProfileModal';
 import { marketplaceStore } from './services/marketplaceStore';
+
+// Primary Instant Landing View
+import { HomeView } from './views/HomeView';
+
+// Code-split dynamic views for superior initial page performance
+const ServiceRequestFormView = lazy(() => import('./views/ServiceRequestFormView').then(m => ({ default: m.ServiceRequestFormView })));
+const CustomerDashboardView = lazy(() => import('./views/CustomerDashboardView').then(m => ({ default: m.CustomerDashboardView })));
+const ProviderDashboardView = lazy(() => import('./views/ProviderDashboardView').then(m => ({ default: m.ProviderDashboardView })));
+const AdminPortalView = lazy(() => import('./views/AdminPortalView').then(m => ({ default: m.AdminPortalView })));
+const DoctorsView = lazy(() => import('./views/DoctorsView').then(m => ({ default: m.DoctorsView })));
+const NurseCaregiverView = lazy(() => import('./views/NurseCaregiverView').then(m => ({ default: m.NurseCaregiverView })));
+const HotelsView = lazy(() => import('./views/HotelsView').then(m => ({ default: m.HotelsView })));
+const ProductsView = lazy(() => import('./views/ProductsView').then(m => ({ default: m.ProductsView })));
+const JobsView = lazy(() => import('./views/JobsView').then(m => ({ default: m.JobsView })));
+const SellerDashboardView = lazy(() => import('./views/SellerDashboardView').then(m => ({ default: m.SellerDashboardView })));
+const SellerStorefrontView = lazy(() => import('./views/SellerStorefrontView').then(m => ({ default: m.SellerStorefrontView })));
+const RoleRegistrationView = lazy(() => import('./views/RoleRegistrationView').then(m => ({ default: m.RoleRegistrationView })));
+const FeedView = lazy(() => import('./views/FeedView').then(m => ({ default: m.FeedView })));
+const CartCheckoutView = lazy(() => import('./views/CartCheckoutView').then(m => ({ default: m.CartCheckoutView })));
+const OrderTrackingView = lazy(() => import('./views/OrderTrackingView').then(m => ({ default: m.OrderTrackingView })));
+const WishlistView = lazy(() => import('./views/WishlistView').then(m => ({ default: m.WishlistView })));
+
+const ViewLoadingFallback = () => (
+  <div className="w-full min-h-[50vh] flex items-center justify-center py-20">
+    <div className="flex flex-col items-center gap-3">
+      <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+      <p className="text-sm font-medium text-slate-500 font-hind">লোড হচ্ছে...</p>
+    </div>
+  </div>
+);
 
 const MainApp: React.FC = () => {
   const { activeRole } = useAuth();
@@ -96,126 +105,128 @@ const MainApp: React.FC = () => {
 
       {/* Main View Router */}
       <main className="flex-1 w-full max-w-full overflow-x-clip">
-        {currentView === 'home' && (
-          <HomeView
-            onNavigate={handleNavigate}
-            onOpenLocation={() => setIsLocationOpen(true)}
-          />
-        )}
+        <Suspense fallback={<ViewLoadingFallback />}>
+          {currentView === 'home' && (
+            <HomeView
+              onNavigate={handleNavigate}
+              onOpenLocation={() => setIsLocationOpen(true)}
+            />
+          )}
 
-        {currentView === 'service_request' && (
-          <ServiceRequestFormView
-            initialCategoryId={viewParams.categoryId}
-            initialProviderId={viewParams.providerId}
-            onNavigate={handleNavigate}
-          />
-        )}
+          {currentView === 'service_request' && (
+            <ServiceRequestFormView
+              initialCategoryId={viewParams.categoryId}
+              initialProviderId={viewParams.providerId}
+              onNavigate={handleNavigate}
+            />
+          )}
 
-        {currentView === 'customer_dashboard' && (
-          <CustomerDashboardView onNavigate={handleNavigate} />
-        )}
+          {currentView === 'customer_dashboard' && (
+            <CustomerDashboardView onNavigate={handleNavigate} />
+          )}
 
-        {currentView === 'provider_dashboard' && (
-          <ProviderDashboardView onNavigate={handleNavigate} />
-        )}
+          {currentView === 'provider_dashboard' && (
+            <ProviderDashboardView onNavigate={handleNavigate} />
+          )}
 
-        {(currentView === 'admin_portal' || currentView === 'admin') && (
-          <AdminPortalView
-            initialTab={viewParams.tab}
-            onNavigate={handleNavigate}
-          />
-        )}
+          {(currentView === 'admin_portal' || currentView === 'admin') && (
+            <AdminPortalView
+              initialTab={viewParams.tab}
+              onNavigate={handleNavigate}
+            />
+          )}
 
-        {currentView === 'doctors' && (
-          <DoctorsView
-            initialDoctorId={viewParams.doctorId}
-            onNavigate={handleNavigate}
-          />
-        )}
+          {currentView === 'doctors' && (
+            <DoctorsView
+              initialDoctorId={viewParams.doctorId}
+              onNavigate={handleNavigate}
+            />
+          )}
 
-        {currentView === 'nurses' && (
-          <NurseCaregiverView onNavigate={handleNavigate} />
-        )}
+          {currentView === 'nurses' && (
+            <NurseCaregiverView onNavigate={handleNavigate} />
+          )}
 
-        {currentView === 'hotels' && (
-          <HotelsView onNavigate={handleNavigate} />
-        )}
+          {currentView === 'hotels' && (
+            <HotelsView onNavigate={handleNavigate} />
+          )}
 
-        {currentView === 'products' && (
-          <ProductsView
-            onNavigate={handleNavigate}
-            initialTab={viewParams.tab || 'all'}
-          />
-        )}
+          {currentView === 'products' && (
+            <ProductsView
+              onNavigate={handleNavigate}
+              initialTab={viewParams.tab || 'all'}
+            />
+          )}
 
-        {currentView === 'ebooks' && (
-          <ProductsView
-            onNavigate={handleNavigate}
-            initialTab="ebooks"
-          />
-        )}
+          {currentView === 'ebooks' && (
+            <ProductsView
+              onNavigate={handleNavigate}
+              initialTab="ebooks"
+            />
+          )}
 
-        {currentView === 'used_products' && (
-          <ProductsView
-            onNavigate={handleNavigate}
-            initialTab="used"
-          />
-        )}
+          {currentView === 'used_products' && (
+            <ProductsView
+              onNavigate={handleNavigate}
+              initialTab="used"
+            />
+          )}
 
-        {currentView === 'blogs' && (
-          <ProductsView
-            onNavigate={handleNavigate}
-            initialTab="blogs"
-          />
-        )}
+          {currentView === 'blogs' && (
+            <ProductsView
+              onNavigate={handleNavigate}
+              initialTab="blogs"
+            />
+          )}
 
-        {currentView === 'jobs' && (
-          <JobsView onNavigate={handleNavigate} />
-        )}
+          {currentView === 'jobs' && (
+            <JobsView onNavigate={handleNavigate} />
+          )}
 
-        {currentView === 'feed' && (
-          <FeedView
-            onNavigate={handleNavigate}
-            initialTab={viewParams.tab || 'following'}
-          />
-        )}
+          {currentView === 'feed' && (
+            <FeedView
+              onNavigate={handleNavigate}
+              initialTab={viewParams.tab || 'following'}
+            />
+          )}
 
-        {currentView === 'seller_dashboard' && (
-          <SellerDashboardView onNavigate={handleNavigate} />
-        )}
+          {currentView === 'seller_dashboard' && (
+            <SellerDashboardView onNavigate={handleNavigate} />
+          )}
 
-        {(currentView === 'seller_store' || currentView === 'seller_storefront' || currentView === 'seller_profile') && (
-          <SellerStorefrontView
-            sellerId={viewParams?.sellerId}
-            onNavigate={handleNavigate}
-          />
-        )}
+          {(currentView === 'seller_store' || currentView === 'seller_storefront' || currentView === 'seller_profile') && (
+            <SellerStorefrontView
+              sellerId={viewParams?.sellerId}
+              onNavigate={handleNavigate}
+            />
+          )}
 
-        {currentView === 'partner_register' && (
-          <RoleRegistrationView onNavigate={handleNavigate} />
-        )}
+          {currentView === 'partner_register' && (
+            <RoleRegistrationView onNavigate={handleNavigate} />
+          )}
 
-        {(currentView === 'checkout' || currentView === 'cart_checkout' || currentView === 'cart') && (
-          <CartCheckoutView
-            onNavigate={handleNavigate}
-            instantProduct={viewParams?.instantProduct}
-            instantQuantity={viewParams?.instantQuantity || 1}
-          />
-        )}
+          {(currentView === 'checkout' || currentView === 'cart_checkout' || currentView === 'cart') && (
+            <CartCheckoutView
+              onNavigate={handleNavigate}
+              instantProduct={viewParams?.instantProduct}
+              instantQuantity={viewParams?.instantQuantity || 1}
+            />
+          )}
 
-        {(currentView === 'track_order' || currentView === 'order_tracking' || currentView === 'track') && (
-          <OrderTrackingView
-            initialOrderId={viewParams?.orderId || viewParams?.orderNumber}
-            onNavigate={handleNavigate}
-          />
-        )}
+          {(currentView === 'track_order' || currentView === 'order_tracking' || currentView === 'track') && (
+            <OrderTrackingView
+              initialOrderId={viewParams?.orderId || viewParams?.orderNumber}
+              onNavigate={handleNavigate}
+            />
+          )}
 
-        {(currentView === 'wishlist' || currentView === 'whitelist') && (
-          <WishlistView
-            onNavigate={handleNavigate}
-            onBuyNow={(prod) => handleNavigate('checkout', { instantProduct: prod, instantQuantity: 1 })}
-          />
-        )}
+          {(currentView === 'wishlist' || currentView === 'whitelist') && (
+            <WishlistView
+              onNavigate={handleNavigate}
+              onBuyNow={(prod) => handleNavigate('checkout', { instantProduct: prod, instantQuantity: 1 })}
+            />
+          )}
+        </Suspense>
       </main>
 
       {/* Global Footer */}

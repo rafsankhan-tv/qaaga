@@ -1,4 +1,4 @@
-import { CategoryShowcaseSection } from '../types';
+import type { CategoryShowcaseSection } from '../types/index.ts';
 
 export const INITIAL_CATEGORY_SHOWCASES: CategoryShowcaseSection[] = [
   // 1. Website Design

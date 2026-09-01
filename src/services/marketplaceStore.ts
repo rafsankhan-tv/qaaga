@@ -1,4 +1,4 @@
-import {
+import type {
   ServiceRequest,
   ProviderOffer,
   Booking,
@@ -40,7 +40,7 @@ import {
   BlogPost,
   WishlistItem,
   OrderTrackingStep
-} from '../types';
+} from '../types/index.ts';
 
 import {
   INITIAL_SYSTEM_SETTINGS,
@@ -60,15 +60,15 @@ import {
   SEED_SERVICE_REQUESTS,
   SEED_OFFERS,
   SEED_BOOKINGS
-} from '../data/mockSeedData';
+} from '../data/mockSeedData.ts';
 
-import { applyFaviconAndTitle, FAVICON_PRESETS, DEFAULT_SITE_TITLE } from '../data/faviconPresets';
-import { SEED_FEED_POSTS, SEED_FOLLOWS, INITIAL_FEED_BANNER_SLIDES } from '../data/mockFeedData';
-import { SEED_BLOG_POSTS } from '../data/mockBlogData';
-import { SEED_ORDERS, generateDefaultTrackingTimeline } from '../data/mockOrderData';
-import { MARKETPLACE_CATEGORIES } from '../data/categoriesData';
-import { INITIAL_CATEGORY_SHOWCASES } from '../data/categoryShowcasesData';
-import { INITIAL_CUTE_CAT_SETTINGS } from '../data/cuteCatData';
+import { applyFaviconAndTitle, FAVICON_PRESETS, DEFAULT_SITE_TITLE } from '../data/faviconPresets.ts';
+import { SEED_FEED_POSTS, SEED_FOLLOWS, INITIAL_FEED_BANNER_SLIDES } from '../data/mockFeedData.ts';
+import { SEED_BLOG_POSTS } from '../data/mockBlogData.ts';
+import { SEED_ORDERS, generateDefaultTrackingTimeline } from '../data/mockOrderData.ts';
+import { MARKETPLACE_CATEGORIES } from '../data/categoriesData.ts';
+import { INITIAL_CATEGORY_SHOWCASES } from '../data/categoryShowcasesData.ts';
+import { INITIAL_CUTE_CAT_SETTINGS } from '../data/cuteCatData.ts';
 
 export const DEFAULT_HERO_BANNERS: HeroBannerSlide[] = [
   {

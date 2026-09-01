@@ -1,4 +1,4 @@
-import { FaviconPreset, PlatformSystemSettings } from '../types';
+import type { FaviconPreset, PlatformSystemSettings } from '../types/index.ts';
 
 export const DEFAULT_SITE_TITLE = "qaaga.com is Bangladesh's verified multi-service super marketplace";
 export const DEFAULT_SITE_NAME = "qaaga.com";

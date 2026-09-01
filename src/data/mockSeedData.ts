@@ -1,4 +1,4 @@
-import {
+import type {
   UserProfile,
   ProviderProfile,
   DoctorProfile,
@@ -17,14 +17,14 @@ import {
   Booking,
   PlatformSystemSettings,
   OptionalIntegrationsSettings
-} from '../types';
+} from '../types/index.ts';
 import {
   DEFAULT_SITE_TITLE,
   DEFAULT_SITE_NAME,
   DEFAULT_SITE_TAGLINE,
   DEFAULT_SITE_DESCRIPTION,
   FAVICON_PRESETS
-} from './faviconPresets';
+} from './faviconPresets.ts';
 
 export const DEFAULT_OPTIONAL_INTEGRATIONS: OptionalIntegrationsSettings = {
   gemini: {

@@ -1,4 +1,4 @@
-import { ProductOrder, OrderTrackingStep } from '../types';
+import type { ProductOrder, OrderTrackingStep } from '../types/index.ts';
 
 export const generateDefaultTrackingTimeline = (
   orderDate: string,

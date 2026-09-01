@@ -4,7 +4,10 @@
  * Pagination Helpers, Slow-Query Profiling, and Safe Migrations.
  */
 
-import { Pool, PoolClient, QueryResultRow } from 'pg';
+import pg from 'pg';
+import type { PoolClient, QueryResultRow, Pool as PgPool } from 'pg';
+
+const { Pool } = pg;
 
 export interface DbQueryResult<T extends QueryResultRow = any> {
   rows: T[];
@@ -37,7 +40,7 @@ export interface PaginatedResponse<T> {
 }
 
 class DatabaseService {
-  private pool: Pool | null = null;
+  private pool: PgPool | null = null;
   private isConfigured: boolean = false;
   private readonly slowQueryThresholdMs = 150;
 
@@ -170,6 +173,13 @@ class DatabaseService {
       console.error('Failed to initialize PostgreSQL pool:', err);
       this.isConfigured = false;
     }
+  }
+
+  /**
+   * Check if PostgreSQL connection pool is initialized and configured
+   */
+  public isDatabaseConfigured(): boolean {
+    return this.isConfigured && this.pool !== null;
   }
 
   /**

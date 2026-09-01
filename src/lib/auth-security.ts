@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { NextRequest, NextResponse } from 'next/server';
-import { UserRole } from '../types';
+import { NextRequest, NextResponse } from 'next/server.js';
+import type { UserRole } from '../types/index.ts';
 
 /**
  * QAAGA Super Marketplace — Enterprise Auth & Production Security Suite
@@ -138,7 +138,7 @@ const rateLimitStore = new Map<string, RateLimitRecord>();
 
 // Clean up stale rate limits every 15 minutes
 if (typeof setInterval !== 'undefined') {
-  setInterval(() => {
+  const timer = setInterval(() => {
     const now = Date.now();
     for (const [key, record] of rateLimitStore.entries()) {
       if (record.lockedUntil && record.lockedUntil < now && now - record.firstAttemptTime > 30 * 60 * 1000) {
@@ -146,6 +146,9 @@ if (typeof setInterval !== 'undefined') {
       }
     }
   }, 15 * 60 * 1000);
+  if (timer && typeof timer.unref === 'function') {
+    timer.unref();
+  }
 }
 
 export interface RateLimitResult {
@@ -554,7 +557,8 @@ export function sanitizeString(input: string): string {
   if (!input || typeof input !== 'string') return '';
   return input
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '') // Strip script tags
-    .replace(/[<>]/g, '') // Strip HTML tags to prevent XSS
+    .replace(/<\/?[a-zA-Z][^>]*>/gi, '') // Strip HTML tags
+    .replace(/[<>]/g, '') // Strip stray angle brackets
     .trim();
 }
 
@@ -593,9 +597,99 @@ export function safeJsonResponse(data: any, init?: ResponseInit): NextResponse {
   return applySecurityHeaders(res);
 }
 
+// ============================================================================
+// 11. IDEMPOTENCY KEY PROTECTION & DISTRIBUTED RATE LIMITING
+// ============================================================================
+
+const idempotencyCache = new Map<string, { status: number; body: any; timestamp: number }>();
+const IDEMPOTENCY_TTL_MS = 60 * 1000; // 1 minute
+
+export function checkIdempotencyKey(key?: string | null): {
+  isDuplicate: boolean;
+  cachedResponse?: { status: number; body: any };
+} {
+  if (!key || typeof key !== 'string' || !key.trim()) {
+    return { isDuplicate: false };
+  }
+
+  const cleanKey = key.trim();
+  const now = Date.now();
+  const existing = idempotencyCache.get(cleanKey);
+
+  if (existing) {
+    if (now - existing.timestamp < IDEMPOTENCY_TTL_MS) {
+      return {
+        isDuplicate: true,
+        cachedResponse: { status: existing.status, body: existing.body },
+      };
+    }
+    idempotencyCache.delete(cleanKey);
+  }
+
+  return { isDuplicate: false };
+}
+
+export function saveIdempotencyResult(key: string | null | undefined, status: number, body: any): void {
+  if (!key || typeof key !== 'string' || !key.trim()) return;
+  idempotencyCache.set(key.trim(), { status, body, timestamp: Date.now() });
+
+  // Cleanup old keys periodically
+  if (idempotencyCache.size > 2000) {
+    const now = Date.now();
+    for (const [k, v] of idempotencyCache.entries()) {
+      if (now - v.timestamp > IDEMPOTENCY_TTL_MS) {
+        idempotencyCache.delete(k);
+      }
+    }
+  }
+}
+
+// ============================================================================
+// 12. STRUCTURED AUDIT & ERROR LOGGING (Masks PII/Keys)
+// ============================================================================
+
+export interface StructuredLogMeta {
+  requestId?: string;
+  userId?: string;
+  ip?: string;
+  durationMs?: number;
+  [key: string]: any;
+}
+
+export function logSecurityEvent(
+  level: 'info' | 'warn' | 'error',
+  event: string,
+  meta?: StructuredLogMeta
+): void {
+  const sanitizedMeta = meta ? { ...meta } : {};
+  // Strip any accidental sensitive tokens
+  delete sanitizedMeta.password;
+  delete sanitizedMeta.passwordHash;
+  delete sanitizedMeta.token;
+  delete sanitizedMeta.jwt;
+  delete sanitizedMeta.apiKey;
+
+  const logPayload = {
+    timestamp: new Date().toISOString(),
+    level,
+    event,
+    ...sanitizedMeta,
+  };
+
+  if (level === 'error') {
+    console.error(JSON.stringify(logPayload));
+  } else if (level === 'warn') {
+    console.warn(JSON.stringify(logPayload));
+  } else {
+    console.log(JSON.stringify(logPayload));
+  }
+}
+
 export function handleSecureApiError(error: any, context: string = 'Operation failed'): NextResponse {
   // Prevent leaking stack traces, database schema details or internal credentials
-  console.error(`[API Security Error] ${context}:`, error?.message || error);
+  logSecurityEvent('error', `API Security Error in ${context}`, {
+    errorMessage: error?.message || String(error),
+  });
   return applySecurityHeaders(
     NextResponse.json(
       {

@@ -1,4 +1,4 @@
-import { CuteCatAssistantSettings } from '../types';
+import type { CuteCatAssistantSettings } from '../types/index.ts';
 
 export interface CuteCatSkinPreset {
   id: 'orange-tabby' | 'white-kitty' | 'calico-neko' | 'lucky-black' | 'custom';

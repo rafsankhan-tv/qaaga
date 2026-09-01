@@ -1,4 +1,4 @@
-import { ServiceCategory } from '../types';
+import type { ServiceCategory } from '../types/index.ts';
 
 export const MARKETPLACE_CATEGORIES: ServiceCategory[] = [
   {

@@ -1,6 +1,11 @@
-import { marketplaceStore } from '../services/marketplaceStore';
-import { serviceRegistry } from '../lib/serviceRegistry';
+import { marketplaceStore } from '../services/marketplaceStore.ts';
+import { serviceRegistry } from '../lib/serviceRegistry.ts';
+import { dbService } from '../db/database.ts';
 import {
+  assertProductionWriteAllowed,
+  handleRepositoryWriteError,
+} from '../lib/persistence-policy.ts';
+import type {
   Product,
   DoctorProfile,
   NurseProfile,
@@ -10,7 +15,7 @@ import {
   UsedProductListing,
   ServiceCategory,
   HeroBannerSlide,
-} from '../types';
+} from '../types/index.ts';
 
 /**
  * Data Access Layer (Repository Pattern) - Catalog Repository
@@ -50,7 +55,32 @@ export class CatalogRepository {
   }
 
   addProduct(productData: Parameters<typeof marketplaceStore.addProduct>[0]): Product {
-    return marketplaceStore.addProduct(productData);
+    assertProductionWriteAllowed('Add product to catalog');
+    const product = marketplaceStore.addProduct(productData);
+    if (dbService.isDatabaseConfigured()) {
+      dbService
+        .query(
+          `INSERT INTO products (id, seller_id, title, description, category, price, discount_price, stock_quantity, images, is_active, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
+           ON CONFLICT (id) DO NOTHING`,
+          [
+            product.id,
+            product.sellerId,
+            product.title,
+            product.description,
+            product.category,
+            product.price,
+            product.discountPrice || null,
+            product.stock,
+            JSON.stringify(product.images),
+            product.inStock,
+          ]
+        )
+        .catch((err) => {
+          handleRepositoryWriteError('Add product to database', err);
+        });
+    }
+    return product;
   }
 
   getDoctors(filters?: { specialty?: string; district?: string; search?: string }): DoctorProfile[] {

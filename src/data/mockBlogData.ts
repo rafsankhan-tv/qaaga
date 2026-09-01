@@ -1,4 +1,4 @@
-import { BlogPost } from '../types';
+import type { BlogPost } from '../types/index.ts';
 
 export const SEED_BLOG_POSTS: BlogPost[] = [
   {
