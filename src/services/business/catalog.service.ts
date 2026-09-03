@@ -19,6 +19,22 @@ export class CatalogService {
     return catalogRepository.getCategories();
   }
 
+  async getCategoriesAsync(): Promise<ServiceCategory[]> {
+    return catalogRepository.getCategoriesAsync();
+  }
+
+  async createCategory(cat: ServiceCategory): Promise<ServiceCategory> {
+    return catalogRepository.createCategory(cat);
+  }
+
+  async updateCategory(id: string, updates: Partial<ServiceCategory>): Promise<ServiceCategory | null> {
+    return catalogRepository.updateCategory(id, updates);
+  }
+
+  async deleteCategory(id: string): Promise<boolean> {
+    return catalogRepository.deleteCategory(id);
+  }
+
   getServiceModules(query?: string | null, categoryGroup?: string | null) {
     let modules = query
       ? catalogRepository.searchServiceModules(query)

@@ -1,5 +1,7 @@
 import { marketplaceStore } from '../services/marketplaceStore.ts';
 import { dbService } from '../db/database.ts';
+import { SEED_PROVIDERS, SEED_SERVICE_REQUESTS, SEED_OFFERS } from '../data/mockSeedData.ts';
+import { userRepository } from './user.repository.ts';
 import type { ServiceRequest, ProviderOffer, Booking, ServiceRequestStatus, ProviderOfferStatus } from '../types/index.ts';
 import {
   assertProductionWriteAllowed,
@@ -11,9 +13,100 @@ import {
  * Fully PostgreSQL-backed with ACID compliance and memory fallback for dev/demo.
  */
 export class ServiceRepository {
+  async seedServiceDataIfEmpty(): Promise<void> {
+    if (!dbService.isDatabaseConfigured()) return;
+    try {
+      await userRepository.seedUsersIfEmpty();
+
+      const provCheck = await dbService.query(`SELECT COUNT(*) as count FROM provider_profiles`);
+      if (parseInt(provCheck.rows[0]?.count || '0', 10) === 0) {
+        for (const p of SEED_PROVIDERS) {
+          await dbService.query(
+            `INSERT INTO provider_profiles (
+              id, user_id, name, phone, category_id, title, bio, experience_years,
+              hourly_rate, district, area, avatar_url, is_verified, is_available,
+              rating, review_count, completed_jobs, created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, true, true, $13, $14, $15, NOW(), NOW())
+            ON CONFLICT (id) DO NOTHING`,
+            [
+              p.id,
+              p.userId,
+              p.fullName,
+              p.phone,
+              p.serviceCategoryIds[0] || 'cat-ac-repair',
+              p.businessName || p.fullName,
+              p.description,
+              p.experienceYears || 5,
+              p.minServiceCharge || 500,
+              p.district || 'Dhaka',
+              p.thana || 'Mirpur',
+              p.avatarUrl || '',
+              p.rating || 5.0,
+              p.reviewCount || 0,
+              p.completedJobs || 0,
+            ]
+          );
+        }
+      }
+
+      const reqCheck = await dbService.query(`SELECT COUNT(*) as count FROM service_requests`);
+      if (parseInt(reqCheck.rows[0]?.count || '0', 10) === 0) {
+        for (const r of SEED_SERVICE_REQUESTS) {
+          await dbService.query(
+            `INSERT INTO service_requests (
+              id, customer_id, customer_name, customer_phone, category_id, title, description, budget,
+              preferred_date, preferred_time, district, area, address, status,
+              created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW(), NOW())
+            ON CONFLICT (id) DO NOTHING`,
+            [
+              r.id,
+              r.customerId,
+              r.customerName || 'Customer',
+              r.customerPhone || '+8801700000000',
+              r.categoryId,
+              r.title,
+              r.description,
+              r.budget,
+              r.preferredDate || new Date().toISOString().split('T')[0],
+              r.preferredTime || '10:00 AM',
+              r.district,
+              r.thana || r.area || 'Mirpur',
+              r.address,
+              r.status || 'SUBMITTED',
+            ]
+          );
+        }
+      }
+
+      const offCheck = await dbService.query(`SELECT COUNT(*) as count FROM service_offers`);
+      if (parseInt(offCheck.rows[0]?.count || '0', 10) === 0) {
+        for (const o of SEED_OFFERS) {
+          await dbService.query(
+            `INSERT INTO service_offers (
+              id, request_id, provider_id, proposed_price, estimated_duration, message, status, created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, 'PENDING', NOW())
+            ON CONFLICT (id) DO NOTHING`,
+            [
+              o.id,
+              o.requestId,
+              o.providerId,
+              o.offeredPrice,
+              o.estimatedDuration,
+              o.offerMessage,
+            ]
+          );
+        }
+      }
+    } catch (err) {
+      console.warn('PostgreSQL seedServiceDataIfEmpty warning:', err);
+    }
+  }
+
   async findRequestById(id: string): Promise<ServiceRequest | null> {
     if (dbService.isDatabaseConfigured()) {
       try {
+        await this.seedServiceDataIfEmpty();
         const sql = `SELECT * FROM service_requests WHERE id = $1 LIMIT 1`;
         const res = await dbService.query(sql, [id]);
         if (res.rows.length > 0) {
@@ -36,6 +129,7 @@ export class ServiceRepository {
   }): Promise<ServiceRequest[]> {
     if (dbService.isDatabaseConfigured()) {
       try {
+        await this.seedServiceDataIfEmpty();
         const whereClauses: string[] = ['1=1'];
         const params: any[] = [];
         let pIdx = 1;
@@ -160,6 +254,10 @@ export class ServiceRepository {
     });
     req.updatedAt = new Date().toISOString();
     return req;
+  }
+
+  async updateStatus(id: string, status: ServiceRequestStatus, note?: string): Promise<ServiceRequest | null> {
+    return this.updateRequestStatus(id, status, note);
   }
 
   async listOffers(requestId?: string): Promise<ProviderOffer[]> {

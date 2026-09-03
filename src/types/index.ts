@@ -439,6 +439,21 @@ export interface SellerPayoutRequest {
   processedAt?: string;
 }
 
+export type ReviewTargetType = 'PRODUCT' | 'SERVICE' | 'SELLER' | 'DOCTOR' | 'NURSE' | 'HOTEL' | 'EBOOK';
+
+export interface AppReview {
+  id: string;
+  targetType: ReviewTargetType;
+  targetId: string;
+  userId?: string;
+  userName: string;
+  userAvatar?: string;
+  rating: number;
+  comment: string;
+  isVerifiedPurchase: boolean;
+  createdAt: string;
+}
+
 export interface SellerReview {
   id: string;
   sellerId: string;

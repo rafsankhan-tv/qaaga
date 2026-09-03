@@ -1,5 +1,6 @@
 import { marketplaceStore } from '../services/marketplaceStore.ts';
 import { dbService } from '../db/database.ts';
+import { SEED_USERS } from '../data/mockSeedData.ts';
 import type { UserProfile, UserRole } from '../types/index.ts';
 import {
   assertProductionWriteAllowed,
@@ -12,9 +13,45 @@ import {
  * PostgreSQL-backed with in-memory sync and resilient fallback.
  */
 export class UserRepository {
+  async seedUsersIfEmpty(): Promise<void> {
+    if (!dbService.isDatabaseConfigured()) return;
+    try {
+      const check = await dbService.query(`SELECT COUNT(*) as count FROM users`);
+      const count = parseInt(check.rows[0]?.count || '0', 10);
+      if (count === 0) {
+        for (const u of SEED_USERS) {
+          await dbService.query(
+            `INSERT INTO users (
+              id, full_name, phone, email, role, district, area, address,
+              avatar_url, is_verified, is_active, created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true, $11, $12)
+            ON CONFLICT (id) DO NOTHING`,
+            [
+              u.id,
+              u.fullName,
+              u.phone,
+              u.email || null,
+              u.activeRole || u.roles[0] || 'CUSTOMER',
+              u.district || 'ঢাকা',
+              u.area || null,
+              u.address || null,
+              u.avatarUrl || null,
+              Boolean(u.isVerified),
+              u.createdAt || new Date().toISOString(),
+              u.updatedAt || new Date().toISOString(),
+            ]
+          );
+        }
+      }
+    } catch (err) {
+      console.warn('PostgreSQL seedUsersIfEmpty warning:', err);
+    }
+  }
+
   async findById(id: string): Promise<UserProfile | null> {
     if (dbService.isDatabaseConfigured()) {
       try {
+        await this.seedUsersIfEmpty();
         const sql = `SELECT * FROM users WHERE id = $1 LIMIT 1`;
         const res = await dbService.query(sql, [id]);
         if (res.rows.length > 0) {

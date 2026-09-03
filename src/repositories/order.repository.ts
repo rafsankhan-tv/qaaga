@@ -24,14 +24,14 @@ export class OrderRepository {
             customerId: row.customer_id,
             customerName: row.customer_name,
             customerPhone: row.customer_phone,
-            deliveryAddress: row.delivery_address || '',
-            district: row.delivery_district || row.district || 'ঢাকা',
+            deliveryAddress: row.shipping_address || row.delivery_address || '',
+            district: row.district || row.delivery_district || 'ঢাকা',
             thana: row.thana || 'মিরপুর',
             area: row.area || 'মিরপুর ১০',
             paymentMethod: row.payment_method || 'COD',
             paymentStatus: row.payment_status || 'PENDING',
             orderStatus: row.order_status || 'PENDING',
-            subtotal: Number(row.subtotal_amount || row.subtotal || 0),
+            subtotal: Number(row.subtotal || row.subtotal_amount || 0),
             deliveryFee: Number(row.delivery_fee || 0),
             discountAmount: Number(row.discount_amount || 0),
             totalAmount: Number(row.total_amount || 0),
@@ -60,14 +60,14 @@ export class OrderRepository {
             customerId: row.customer_id,
             customerName: row.customer_name,
             customerPhone: row.customer_phone,
-            deliveryAddress: row.delivery_address || '',
-            district: row.delivery_district || row.district || 'ঢাকা',
+            deliveryAddress: row.shipping_address || row.delivery_address || '',
+            district: row.district || row.delivery_district || 'ঢাকা',
             thana: row.thana || 'মিরপুর',
             area: row.area || 'মিরপুর ১০',
             paymentMethod: row.payment_method || 'COD',
             paymentStatus: row.payment_status || 'PENDING',
             orderStatus: row.order_status || 'PENDING',
-            subtotal: Number(row.subtotal_amount || row.subtotal || 0),
+            subtotal: Number(row.subtotal || row.subtotal_amount || 0),
             deliveryFee: Number(row.delivery_fee || 0),
             discountAmount: Number(row.discount_amount || 0),
             totalAmount: Number(row.total_amount || 0),
@@ -94,8 +94,13 @@ export class OrderRepository {
     if (dbService.isDatabaseConfigured()) {
       try {
         const sql = `
-          INSERT INTO orders (id, order_number, customer_id, customer_name, customer_phone, delivery_address, delivery_district, payment_method, payment_status, order_status, subtotal_amount, delivery_fee, discount_amount, total_amount, items, created_at, updated_at)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW(), NOW())
+          INSERT INTO orders (
+            id, order_number, customer_id, customer_name, customer_phone,
+            shipping_address, district, area,
+            payment_method, payment_status, order_status,
+            subtotal, delivery_fee, discount_amount, total_amount,
+            items, created_at, updated_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW(), NOW())
           ON CONFLICT (id) DO NOTHING
         `;
         const params = [
@@ -104,16 +109,17 @@ export class OrderRepository {
           order.customerId || null,
           order.customerName,
           order.customerPhone,
-          order.deliveryAddress,
+          order.deliveryAddress || 'মিরপুর, ঢাকা',
           order.district || 'ঢাকা',
-          order.paymentMethod,
+          order.area || order.thana || 'মিরপুর',
+          order.paymentMethod || 'COD',
           order.paymentStatus || 'PENDING',
-          order.orderStatus,
+          order.orderStatus || 'PENDING',
           order.subtotal,
-          order.deliveryFee,
+          order.deliveryFee || 0,
           order.discountAmount || 0,
           order.totalAmount,
-          JSON.stringify(order.items),
+          JSON.stringify(order.items || []),
         ];
         await dbService.query(sql, params);
       } catch (err) {

@@ -6,6 +6,14 @@
 
 import pg from 'pg';
 import type { PoolClient, QueryResultRow, Pool as PgPool } from 'pg';
+import dotenv from 'dotenv';
+
+try {
+  dotenv.config({ path: '.env.local' });
+  dotenv.config();
+} catch {
+  // Ignored in environments where dotenv is not required
+}
 
 const { Pool } = pg;
 
@@ -127,8 +135,11 @@ class DatabaseService {
 
     try {
       const isProduction = process.env.NODE_ENV === 'production';
+      const isLocalhost =
+        connectionString.includes('127.0.0.1') ||
+        connectionString.includes('localhost');
       const useSsl =
-        isProduction ||
+        (!isLocalhost && isProduction) ||
         connectionString.includes('sslmode=require') ||
         connectionString.includes('supabase') ||
         connectionString.includes('neon');

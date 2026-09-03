@@ -1857,9 +1857,72 @@ class MarketplaceStore {
     this.notify();
   }
 
-  public addCategory(cat: ServiceCategory) {
-    this.categories.push(cat);
+  public setCategories(categories: ServiceCategory[]) {
+    this.categories = categories;
+    this.saveToStorage();
     this.notify();
+  }
+
+  public addCategory(cat: ServiceCategory) {
+    const existingIndex = this.categories.findIndex((c) => c.id === cat.id);
+    if (existingIndex >= 0) {
+      this.categories[existingIndex] = cat;
+    } else {
+      this.categories.push(cat);
+    }
+    this.saveToStorage();
+    this.notify();
+    if (typeof window !== 'undefined') {
+      fetch('/api/categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cat),
+      }).catch((err) => console.warn('Could not persist category to server API:', err));
+    }
+  }
+
+  public updateCategory(id: string, updates: Partial<ServiceCategory>) {
+    const index = this.categories.findIndex((c) => c.id === id);
+    if (index >= 0) {
+      this.categories[index] = { ...this.categories[index], ...updates };
+      this.saveToStorage();
+      this.notify();
+      if (typeof window !== 'undefined') {
+        fetch('/api/categories', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, ...updates }),
+        }).catch((err) => console.warn('Could not persist category update to server API:', err));
+      }
+    }
+  }
+
+  public deleteCategory(id: string) {
+    this.categories = this.categories.filter((c) => c.id !== id);
+    this.saveToStorage();
+    this.notify();
+    if (typeof window !== 'undefined') {
+      fetch(`/api/categories?id=${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      }).catch((err) => console.warn('Could not persist category deletion to server API:', err));
+    }
+  }
+
+  public async syncCategoriesWithServer(): Promise<void> {
+    if (typeof window === 'undefined') return;
+    try {
+      const res = await fetch('/api/categories');
+      if (res.ok) {
+        const json = await res.json();
+        if (json?.data?.categories && Array.isArray(json.data.categories) && json.data.categories.length > 0) {
+          this.categories = json.data.categories;
+          this.saveToStorage();
+          this.notify();
+        }
+      }
+    } catch {
+      // Offline safe
+    }
   }
 
   public updateProviderStatus(providerId: string, status: 'VERIFIED' | 'REJECTED') {
@@ -2022,6 +2085,13 @@ class MarketplaceStore {
 
     this.feedPosts.unshift(newPost);
     this.notify();
+    if (typeof window !== 'undefined') {
+      fetch('/api/feed/posts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newPost),
+      }).catch((err) => console.warn('Could not persist feed post:', err));
+    }
     return newPost;
   }
 
@@ -2038,6 +2108,13 @@ class MarketplaceStore {
       post.likesCount += 1;
     }
     this.notify();
+    if (typeof window !== 'undefined') {
+      fetch('/api/feed/interactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'like', postId, userId }),
+      }).catch((err) => console.warn('Could not persist feed like:', err));
+    }
     return true;
   }
 
@@ -2064,6 +2141,21 @@ class MarketplaceStore {
 
     post.comments.push(newComment);
     this.notify();
+    if (typeof window !== 'undefined') {
+      fetch('/api/feed/interactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'comment',
+          postId,
+          userId: comment.userId,
+          userName: comment.userName,
+          userAvatar: comment.userAvatar,
+          userRole: comment.userRole,
+          commentText: comment.text.trim(),
+        }),
+      }).catch((err) => console.warn('Could not persist feed comment:', err));
+    }
     return newComment;
   }
 
@@ -2102,6 +2194,13 @@ class MarketplaceStore {
       // Unfollow
       this.follows.splice(existingIndex, 1);
       this.notify();
+      if (typeof window !== 'undefined') {
+        fetch('/api/feed/interactions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'follow', userId: followerId, targetId: target.id }),
+        }).catch((err) => console.warn('Could not persist unfollow:', err));
+      }
       return false; // Now unfollowed
     } else {
       // Follow
@@ -2119,6 +2218,25 @@ class MarketplaceStore {
       };
       this.follows.push(newFollow);
       this.notify();
+      if (typeof window !== 'undefined') {
+        fetch('/api/feed/interactions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'follow',
+            userId: followerId,
+            targetId: target.id,
+            targetMeta: {
+              name: target.name,
+              avatar: target.avatar,
+              role: target.role,
+              badge: target.badge,
+              category: target.category,
+              rating: target.rating,
+            },
+          }),
+        }).catch((err) => console.warn('Could not persist follow:', err));
+      }
       return true; // Now followed
     }
   }
