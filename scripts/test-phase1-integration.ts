@@ -40,9 +40,10 @@ async function runTest(
 }
 
 async function main() {
+  const targetUrl = process.env.DATABASE_URL ? process.env.DATABASE_URL.replace(/:[^:@]+@/, ':****@') : 'unconfigured';
   console.log('=================================================================');
   console.log('QAAGA PHASE 1: AUTOMATED INTEGRATION TEST SUITE (10 DOMAINS)');
-  console.log('Target: Live PostgreSQL Database (qaaga_db @ 127.0.0.1:5432)');
+  console.log(`Target: ${targetUrl}`);
   console.log('=================================================================\n');
 
   // Verify DB connectivity
