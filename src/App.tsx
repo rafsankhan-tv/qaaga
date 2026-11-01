@@ -93,7 +93,7 @@ const MainApp: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 selection:bg-blue-600 selection:text-white pb-20 sm:pb-24 md:pb-0 w-full max-w-full overflow-x-clip">
+    <div className="min-h-screen flex flex-col bg-white md:bg-slate-50 text-slate-900 selection:bg-[#FF5500] selection:text-white pb-20 sm:pb-24 md:pb-0 w-full max-w-full overflow-x-clip">
       
       {/* Global Navigation Header */}
       <Header
@@ -229,16 +229,20 @@ const MainApp: React.FC = () => {
         </Suspense>
       </main>
 
-      {/* Global Footer */}
-      <Footer onNavigate={handleNavigate} />
+      {/* Global Footer (Desktop + Non-Home Sub-Views) */}
+      <div className={currentView === 'home' ? 'hidden md:block' : ''}>
+        <Footer onNavigate={handleNavigate} />
+      </div>
 
-      {/* Floating Cat Assistant on All Non-Home Views */}
+      {/* Floating Cat Assistant on Desktop Non-Home Views */}
       {currentView !== 'home' && (
-        <CuteCatRunner
-          onNavigate={handleNavigate}
-          renderStage={false}
-          renderFloating={true}
-        />
+        <div className="hidden md:block">
+          <CuteCatRunner
+            onNavigate={handleNavigate}
+            renderStage={false}
+            renderFloating={true}
+          />
+        </div>
       )}
 
       {/* Floating 24/7 Multimodal Suchi Assistant & Direct Help Widget */}

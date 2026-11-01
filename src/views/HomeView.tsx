@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   MapPin,
   Search,
@@ -39,13 +39,16 @@ import {
   Layers,
   Heart,
   MessageSquare,
-  Newspaper
+  Newspaper,
+  LayoutGrid,
+  StretchHorizontal
 } from 'lucide-react';
 import { marketplaceStore } from '../services/marketplaceStore';
 import { useLocation } from '../context/LocationContext';
 import { RenderCategoryIcon } from '../components/CategoryIconHelper';
 import { CuteCatRunner } from '../components/CuteCatRunner';
 import { ShowcaseItemProfileModal } from '../components/ShowcaseItemProfileModal';
+import { MobileQaagaHome } from '../components/mobile/MobileQaagaHome';
 import { CategoryShowcaseSection, ShowcaseCardItem } from '../types';
 
 interface HomeViewProps {
@@ -70,10 +73,24 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, onOpenSearch, on
   );
   const [activeTagGroup, setActiveTagGroup] = useState<string>('ALL');
   const [categorySearchQuery, setCategorySearchQuery] = useState<string>('');
+  const [categoryViewMode, setCategoryViewMode] = useState<'horizontal' | 'vertical'>('horizontal');
 
   // Complete Profile & Booking Modal State
   const [selectedShowcaseItem, setSelectedShowcaseItem] = useState<ShowcaseCardItem | null>(null);
   const [selectedShowcaseSection, setSelectedShowcaseSection] = useState<CategoryShowcaseSection | null>(null);
+
+  // Category Showcase Horizontal Scroll Ref
+  const categoryScrollRef = useRef<HTMLDivElement>(null);
+
+  const scrollCategories = (direction: 'left' | 'right') => {
+    if (categoryScrollRef.current) {
+      const scrollAmount = 380;
+      categoryScrollRef.current.scrollBy({
+        left: direction === 'left' ? -scrollAmount : scrollAmount,
+        behavior: 'smooth'
+      });
+    }
+  };
 
   useEffect(() => {
     const updateStoreData = () => {
@@ -267,7 +284,14 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, onOpenSearch, on
   ];
 
   return (
-    <div className="space-y-8 pb-12 animate-fadeIn max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pt-4">
+    <>
+      {/* Mobile-First Qaaga Room Rental & Marketplace UI (<768px) */}
+      <div className="md:hidden">
+        <MobileQaagaHome onNavigate={onNavigate} />
+      </div>
+
+      {/* Desktop Multi-Column Super Marketplace Experience (>=768px) */}
+      <div className="hidden md:block space-y-8 pb-12 animate-fadeIn max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pt-4">
 
       {/* 1. HERO BANNER SECTION (Matched with photo layout) */}
       <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-purple-50/80 via-white to-orange-50/50 border border-purple-100/80 p-6 sm:p-10 lg:p-12 shadow-xs">
@@ -822,28 +846,82 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, onOpenSearch, on
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
-                ডাক্তার, হোটেল, টেকনিশিয়ান, কেনাকাটা ও জবস — সব সেবা কার্ড স্টাইলে সাজানো
+                ডাক্তার, হোটেল, টেকনিশিয়ান, কেনাকাটা ও জবস — সব সেবা কার্ড স্টাইলে সাজানো (বামে-ডানে বা উপর-নিচে স্ক্রোল করুন)
               </p>
             </div>
 
-            {/* Quick Search inside Categories */}
-            <div className="relative w-full sm:w-72">
-              <input
-                type="text"
-                value={categorySearchQuery}
-                onChange={(e) => setCategorySearchQuery(e.target.value)}
-                placeholder="যেকোনো সেবা বা ক্যাটাগরি খুঁজুন..."
-                className="w-full pl-9 pr-8 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-[#4e20b8] focus:ring-2 focus:ring-purple-100 outline-none transition-all"
-              />
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              {categorySearchQuery && (
+            {/* Quick Search inside Categories & Scroll Controls */}
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+              <div className="relative flex-1 sm:w-64">
+                <input
+                  type="text"
+                  value={categorySearchQuery}
+                  onChange={(e) => setCategorySearchQuery(e.target.value)}
+                  placeholder="যেকোনো সেবা বা ক্যাটাগরি খুঁজুন..."
+                  className="w-full pl-9 pr-8 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-[#4e20b8] focus:ring-2 focus:ring-purple-100 outline-none transition-all"
+                />
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                {categorySearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setCategorySearchQuery('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 hover:text-slate-600 cursor-pointer p-0.5"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {/* 2 Scrolling Modes Toggle: Horizontal vs Vertical */}
+              <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200/80">
                 <button
                   type="button"
-                  onClick={() => setCategorySearchQuery('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 hover:text-slate-600 cursor-pointer p-0.5"
+                  onClick={() => setCategoryViewMode('horizontal')}
+                  title="বামে-ডানে স্ক্রোল মোড (Horizontal Carousel)"
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                    categoryViewMode === 'horizontal'
+                      ? 'bg-white text-[#4e20b8] shadow-xs'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
                 >
-                  ✕
+                  <StretchHorizontal size={14} />
+                  <span className="hidden md:inline">ডানে-বামে</span>
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setCategoryViewMode('vertical')}
+                  title="উপর-নিচে স্ক্রোল মোড (Vertical Grid)"
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                    categoryViewMode === 'vertical'
+                      ? 'bg-white text-[#4e20b8] shadow-xs'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  <LayoutGrid size={14} />
+                  <span className="hidden md:inline">উপর-নিচে</span>
+                </button>
+              </div>
+
+              {/* Horizontal Scroll Navigation Arrows (Only in horizontal mode) */}
+              {categoryViewMode === 'horizontal' && (
+                <div className="hidden sm:flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => scrollCategories('left')}
+                    title="বামে স্ক্রোল করুন"
+                    className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-purple-100 text-slate-600 hover:text-[#4e20b8] border border-slate-200 flex items-center justify-center transition-all cursor-pointer shadow-2xs active:scale-95"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => scrollCategories('right')}
+                    title="ডানে স্ক্রোল করুন"
+                    className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-purple-100 text-slate-600 hover:text-[#4e20b8] border border-slate-200 flex items-center justify-center transition-all cursor-pointer shadow-2xs active:scale-95"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
               )}
             </div>
           </div>
@@ -890,11 +968,22 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, onOpenSearch, on
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
+          <div
+            ref={categoryScrollRef}
+            className={
+              categoryViewMode === 'horizontal'
+                ? "flex flex-row overflow-x-auto gap-4 sm:gap-5 pb-4 pt-1 scrollbar-none snap-x snap-mandatory scroll-smooth -mx-1 px-1"
+                : "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6 pt-1"
+            }
+          >
             {filteredShowcases.map((section) => (
               <div
                 key={section.id}
-                className="bg-white rounded-2xl border border-slate-200/90 overflow-hidden shadow-xs flex flex-col justify-between hover:border-purple-300/90 hover:shadow-md transition-all duration-200 group/card"
+                className={
+                  categoryViewMode === 'horizontal'
+                    ? "w-[320px] sm:w-[360px] md:w-[380px] shrink-0 snap-start bg-white rounded-2xl border border-slate-200/90 overflow-hidden shadow-xs flex flex-col justify-between hover:border-purple-300/90 hover:shadow-md transition-all duration-200 group/card"
+                    : "w-full bg-white rounded-2xl border border-slate-200/90 overflow-hidden shadow-xs flex flex-col justify-between hover:border-purple-300/90 hover:shadow-md transition-all duration-200 group/card"
+                }
               >
                 <div>
                   {/* Category Header */}
@@ -1120,6 +1209,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, onOpenSearch, on
         onNavigate={onNavigate}
       />
 
-    </div>
+      </div>
+    </>
   );
 };

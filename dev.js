@@ -1,4 +1,6 @@
 import { spawn } from 'child_process';
+import { existsSync, rmSync } from 'fs';
+import { resolve } from 'path';
 
 const rawArgs = process.argv.slice(2);
 const transformedArgs = [];
@@ -25,13 +27,28 @@ if (!transformedArgs.includes('-H') && !transformedArgs.includes('--hostname')) 
   transformedArgs.push('-H', '0.0.0.0');
 }
 
-const child = spawn('npx', ['next', 'dev', ...transformedArgs], {
+// Clear any stale Next.js 16 dev lockfile from abrupt restarts
+const lockPath = resolve(process.cwd(), '.next/dev/lock');
+if (existsSync(lockPath)) {
+  try {
+    rmSync(lockPath, { force: true });
+  } catch {
+    // ignore lock cleanup errors
+  }
+}
+
+const localNextBin = resolve(process.cwd(), 'node_modules/.bin/next');
+const cmd = existsSync(localNextBin) ? localNextBin : 'npx';
+const args = existsSync(localNextBin)
+  ? ['dev', ...transformedArgs]
+  : ['next', 'dev', ...transformedArgs];
+
+const child = spawn(cmd, args, {
   stdio: 'inherit',
   env: {
     ...process.env,
     PORT: '3000',
   },
-  shell: true,
 });
 
 process.on('SIGTERM', () => {

@@ -39,7 +39,8 @@ import {
   Phone,
   Mail,
   Heart,
-  Truck
+  Truck,
+  ClipboardList
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useLocation } from '../../context/LocationContext';
@@ -101,98 +102,130 @@ export const MobileNav: React.FC<MobileNavProps> = ({ currentView, onNavigate, o
 
   return (
     <>
-      {/* 1. Mobile Bottom Sticky Navigation Bar */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-lg border-t border-slate-200/90 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] px-1.5 py-1 safe-area-pb">
-        <div className="flex items-center justify-around max-w-md mx-auto relative">
-          
+      {/* 1. Mobile Bottom Sticky Navigation Bar (Matched to Qaaga Mobile UI) */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-slate-100 shadow-[0_-4px_20px_rgba(15,23,42,0.05)] px-2 pt-1.5 pb-2 safe-area-pb">
+        <div className="grid grid-cols-5 items-end max-w-[480px] mx-auto">
           {/* 1. Home */}
           <button
+            type="button"
             onClick={() => onNavigate('home')}
-            className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all cursor-pointer ${
-              currentView === 'home'
-                ? 'text-[#4e20b8] font-bold scale-105'
-                : 'text-slate-500 hover:text-slate-800'
-            }`}
+            className="min-h-[48px] flex flex-col items-center justify-end gap-1 py-0.5 cursor-pointer active:scale-95 transition-transform"
           >
-            <div className="relative">
-              <Home size={19} className={currentView === 'home' ? 'stroke-[2.5] text-[#4e20b8]' : 'stroke-2'} />
-            </div>
-            <span className="text-[10px] mt-0.5 font-medium">হোম</span>
+            <Home
+              size={23}
+              className={
+                currentView === 'home'
+                  ? 'fill-[#FF5500] text-[#FF5500] stroke-[2]'
+                  : 'text-[#FF5500] stroke-[2]'
+              }
+            />
+            <span
+              className={`text-[11px] leading-none tracking-[-0.01em] whitespace-nowrap ${
+                currentView === 'home'
+                  ? 'text-[#FF5500] font-semibold'
+                  : 'text-slate-900 font-medium'
+              }`}
+            >
+              Home
+            </span>
           </button>
 
-          {/* 2. Service */}
+          {/* 2. Inbox */}
           <button
-            onClick={() => onNavigate('service_request')}
-            className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all cursor-pointer ${
-              currentView === 'service_request'
-                ? 'text-[#4e20b8] font-bold scale-105'
-                : 'text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <div className="relative">
-              <Wrench size={19} className={currentView === 'service_request' ? 'stroke-[2.5] text-[#4e20b8]' : 'stroke-2'} />
-            </div>
-            <span className="text-[10px] mt-0.5 font-medium">সার্ভিস</span>
-          </button>
-
-          {/* 3. Jobs */}
-          <button
-            onClick={() => onNavigate('jobs')}
-            className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all cursor-pointer relative ${
-              currentView === 'jobs'
-                ? 'text-[#4e20b8] font-bold scale-105'
-                : 'text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <div className="relative">
-              <Briefcase size={19} className={currentView === 'jobs' ? 'stroke-[2.5] text-[#4e20b8]' : 'stroke-2'} />
-              <span className="absolute -top-1 -right-2 text-[8px] bg-[#ff6d00] text-white font-extrabold px-1 rounded-full leading-none py-0.5">
-                New
-              </span>
-            </div>
-            <span className="text-[10px] mt-0.5 font-medium">জবস</span>
-          </button>
-
-          {/* 4. Sohayota (Help / Support Chat) */}
-          <button
+            type="button"
             onClick={() => setIsChatOpen(true)}
-            className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all cursor-pointer ${
-              isChatOpen
-                ? 'text-[#4e20b8] font-bold'
-                : 'text-slate-500 hover:text-slate-800'
-            }`}
+            className="min-h-[48px] flex flex-col items-center justify-end gap-1 py-0.5 cursor-pointer active:scale-95 transition-transform"
           >
             <div className="relative">
-              <Headphones size={19} className={isChatOpen ? 'stroke-[2.5] text-[#4e20b8]' : 'stroke-2'} />
-              {unreadNotificationCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white animate-pulse" />
-              )}
+              <Mail
+                size={23}
+                className={
+                  isChatOpen
+                    ? 'fill-[#FF5500]/15 text-[#FF5500] stroke-[2.2]'
+                    : 'text-[#FF5500] stroke-[1.9]'
+                }
+              />
             </div>
-            <span className="text-[10px] mt-0.5 font-medium">সহায়তা</span>
+            <span
+              className={`text-[11px] leading-none tracking-[-0.01em] whitespace-nowrap ${
+                isChatOpen
+                  ? 'text-[#FF5500] font-semibold'
+                  : 'text-slate-900 font-medium'
+              }`}
+            >
+              Inbox
+            </span>
           </button>
 
-          {/* 5. Profile & Role Hub */}
+          {/* 3. Prominent Center Add Button */}
           <button
-            onClick={() => setIsProfileSheetOpen(true)}
-            className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all cursor-pointer ${
-              isProfileSheetOpen || currentView.includes('dashboard') || currentView === 'admin'
-                ? 'text-[#4e20b8] font-bold'
-                : 'text-slate-500 hover:text-slate-800'
-            }`}
+            type="button"
+            onClick={() => setIsQuickActionOpen(true)}
+            className="min-h-[48px] flex flex-col items-center justify-end gap-1 py-0.5 cursor-pointer active:scale-95 transition-transform"
           >
-            <div className="relative">
-              <div className="w-5 h-5 rounded-full overflow-hidden ring-2 ring-purple-500/40">
-                <img
-                  src={currentUser?.avatarUrl || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&h=100&q=80"}
-                  alt={currentUser?.fullName || "User"}
-                  className="w-full h-full object-cover"
-                />
-              </div>
-              <span className="absolute -bottom-0.5 -right-0.5 w-1.5 h-1.5 bg-emerald-500 rounded-full ring-1 ring-white" />
-            </div>
-            <span className="text-[10px] mt-0.5 font-medium">প্রোফাইল</span>
+            <span className="w-11 h-11 -mt-2 rounded-full bg-[#FF5500] text-white flex items-center justify-center shadow-[0_4px_14px_rgba(255,85,0,0.34)]">
+              <Plus size={25} strokeWidth={2.5} />
+            </span>
+            <span
+              className={`text-[11px] leading-none tracking-[-0.01em] whitespace-nowrap ${
+                isQuickActionOpen
+                  ? 'text-[#FF5500] font-semibold'
+                  : 'text-slate-900 font-medium'
+              }`}
+            >
+              Add
+            </span>
           </button>
 
+          {/* 4. Bookings */}
+          <button
+            type="button"
+            onClick={() => onNavigate('customer_dashboard')}
+            className="min-h-[48px] flex flex-col items-center justify-end gap-1 py-0.5 cursor-pointer active:scale-95 transition-transform"
+          >
+            <ClipboardList
+              size={23}
+              className={
+                currentView === 'customer_dashboard'
+                  ? 'fill-[#FF5500]/15 text-[#FF5500] stroke-[2.2]'
+                  : 'text-[#FF5500] stroke-[1.9]'
+              }
+            />
+            <span
+              className={`text-[11px] leading-none tracking-[-0.01em] whitespace-nowrap ${
+                currentView === 'customer_dashboard'
+                  ? 'text-[#FF5500] font-semibold'
+                  : 'text-slate-900 font-medium'
+              }`}
+            >
+              Bookings
+            </span>
+          </button>
+
+          {/* 5. Profile */}
+          <button
+            type="button"
+            onClick={() => setIsProfileSheetOpen(true)}
+            className="min-h-[48px] flex flex-col items-center justify-end gap-1 py-0.5 cursor-pointer active:scale-95 transition-transform"
+          >
+            <User
+              size={23}
+              className={
+                isProfileSheetOpen || currentView === 'admin_portal'
+                  ? 'fill-[#FF5500]/15 text-[#FF5500] stroke-[2.2]'
+                  : 'text-[#FF5500] stroke-[1.9]'
+              }
+            />
+            <span
+              className={`text-[11px] leading-none tracking-[-0.01em] whitespace-nowrap ${
+                isProfileSheetOpen
+                  ? 'text-[#FF5500] font-semibold'
+                  : 'text-slate-900 font-medium'
+              }`}
+            >
+              Profile
+            </span>
+          </button>
         </div>
       </nav>
 

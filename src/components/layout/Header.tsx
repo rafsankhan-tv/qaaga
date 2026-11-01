@@ -17,7 +17,9 @@ import {
   ShoppingCart,
   Phone,
   Mail,
-  Headphones
+  Headphones,
+  ArrowLeft,
+  Heart
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useLocation } from '../../context/LocationContext';
@@ -87,7 +89,40 @@ export const Header: React.FC<HeaderProps> = ({ currentView, onNavigate, onOpenS
   ];
 
   return (
-    <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs transition-shadow">
+    <>
+      {/* Clean Mobile Sub-View Top Bar (hidden on Home where MobileQaagaHome renders the seamless top bar) */}
+      {currentView !== 'home' && (
+        <header className="md:hidden sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-100 px-4 h-13 flex items-center justify-between">
+          <button
+            type="button"
+            aria-label="Back to Home"
+            onClick={() => onNavigate('home')}
+            className="-ml-2 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full text-slate-800 active:bg-slate-100 cursor-pointer"
+          >
+            <ArrowLeft size={20} />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onNavigate('home')}
+            className="text-[22px] font-extrabold tracking-[-0.03em] text-[#FF5500] leading-none cursor-pointer"
+          >
+            qaaga.com
+          </button>
+
+          <button
+            type="button"
+            aria-label="Saved items"
+            onClick={() => onNavigate('wishlist')}
+            className="-mr-2 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full active:scale-95 transition-transform cursor-pointer"
+          >
+            <Heart size={22} className="fill-[#FF5500] text-[#FF5500]" />
+          </button>
+        </header>
+      )}
+
+      {/* Desktop Header (>=768px) */}
+      <header className="hidden md:block sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs transition-shadow">
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-14 sm:h-16 gap-2 sm:gap-4">
           
@@ -586,7 +621,8 @@ export const Header: React.FC<HeaderProps> = ({ currentView, onNavigate, onOpenS
         onClose={() => setIsCatAssistantOpen(false)}
         onNavigate={onNavigate}
       />
-    </header>
+      </header>
+    </>
   );
 };
 

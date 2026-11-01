@@ -3,9 +3,23 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'QAAGA Super Marketplace | সার্ভিস, ডাক্তার, নার্সিং, হোটেল, শপ ও ইবুক',
-  description: 'বাংলাদেশের সর্বাধুনিক মাল্টি-সার্ভিস ও ইকমার্স সুপার প্ল্যাটফর্ম। বাসা-বাড়ির কাজ, ডাক্তার সিরিয়াল, নার্সিং সেবা, হোটেল বুকিং, অনলাইন শপিং ও ইবুক রিডার।',
-  keywords: ['QAAGA', 'Bangladesh Marketplace', 'Home Services', 'Doctor Appointment', 'Nursing Caregiver', 'Hotel Booking', 'E-commerce', 'eBook'],
+  title: 'QAAGA Super Marketplace',
+  description:
+    "qaaga.com is Bangladesh's verified multi-service super marketplace for on-demand services, repairs, doctors, home care, hotels, products, and jobs.",
+  openGraph: {
+    title: 'QAAGA Super Marketplace',
+    description:
+      "qaaga.com is Bangladesh's verified multi-service super marketplace for on-demand services, repairs, doctors, home care, hotels, products, and jobs.",
+    type: 'website',
+  },
+  keywords: [
+    'QAAGA',
+    'qaaga.com',
+    'Room Rental Dhaka',
+    'Bangladesh Marketplace',
+    'Home Services',
+    'Hotel Booking',
+  ],
   authors: [{ name: 'QAAGA Marketplace' }],
   robots: 'index, follow',
   icons: {
@@ -17,7 +31,7 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 5,
-  themeColor: '#4e20b8',
+  themeColor: '#FF5500',
 };
 
 export default function RootLayout({
@@ -26,8 +40,16 @@ export default function RootLayout({
   children: ReactNode;
 }) {
   return (
-    <html lang="bn">
-      <body className="font-['Hind_Siliguri',sans-serif] antialiased bg-slate-50 text-slate-900 selection:bg-purple-600 selection:text-white">
+    <html lang="en">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+          rel="stylesheet"
+        />
+      </head>
+      <body className="font-['Plus_Jakarta_Sans','Hind_Siliguri',sans-serif] antialiased bg-white md:bg-slate-50 text-slate-900 selection:bg-[#FF5500] selection:text-white">
         {children}
       </body>
     </html>

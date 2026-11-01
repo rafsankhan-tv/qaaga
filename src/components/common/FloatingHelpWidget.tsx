@@ -493,7 +493,7 @@ export const FloatingHelpWidget: React.FC<FloatingHelpWidgetProps> = ({ onNaviga
   }
 
   return (
-    <div className={`fixed ${isOpen ? 'z-[9999]' : 'z-50'} bottom-[74px] sm:bottom-6 left-3 sm:left-6 flex flex-col items-start gap-2 select-none font-sans`}>
+    <div className={`fixed ${isOpen ? 'z-[9999]' : 'z-50'} bottom-[74px] sm:bottom-6 left-3 sm:left-6 hidden md:flex flex-col items-start gap-2 select-none font-sans`}>
       {/* Backdrop overlay on mobile when chat popup is open so it stays prominently on top */}
       {isOpen && (
         <div
