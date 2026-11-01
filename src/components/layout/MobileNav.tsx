@@ -102,128 +102,85 @@ export const MobileNav: React.FC<MobileNavProps> = ({ currentView, onNavigate, o
 
   return (
     <>
-      {/* 1. Mobile Bottom Sticky Navigation Bar (Matched to Qaaga Mobile UI) */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-slate-100 shadow-[0_-4px_20px_rgba(15,23,42,0.05)] px-2 pt-1.5 pb-2 safe-area-pb">
-        <div className="grid grid-cols-5 items-end max-w-[480px] mx-auto">
+      {/* 1. Mobile Bottom Sticky Navigation Bar (Matched to Qaaga PDF Page 1) */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-slate-100 shadow-[0_-4px_20px_rgba(15,23,42,0.05)] px-3 pt-2 pb-2.5 safe-area-pb">
+        <div className="grid grid-cols-5 items-center w-full">
           {/* 1. Home */}
           <button
             type="button"
+            aria-label="Home"
             onClick={() => onNavigate('home')}
-            className="min-h-[48px] flex flex-col items-center justify-end gap-1 py-0.5 cursor-pointer active:scale-95 transition-transform"
+            className="min-h-[48px] flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-95 transition-transform"
           >
-            <Home
-              size={23}
-              className={
-                currentView === 'home'
-                  ? 'fill-[#FF5500] text-[#FF5500] stroke-[2]'
-                  : 'text-[#FF5500] stroke-[2]'
-              }
-            />
             <span
-              className={`text-[11px] leading-none tracking-[-0.01em] whitespace-nowrap ${
+              className={`w-10 h-10 rounded-full flex items-center justify-center ${
                 currentView === 'home'
-                  ? 'text-[#FF5500] font-semibold'
-                  : 'text-slate-900 font-medium'
+                  ? 'bg-[#FF5500] text-white'
+                  : 'bg-orange-50 text-[#FF5500]'
               }`}
             >
-              Home
+              <Home
+                size={21}
+                className={
+                  currentView === 'home'
+                    ? 'fill-white text-white stroke-[2]'
+                    : 'text-[#FF5500] stroke-[2.2]'
+                }
+              />
             </span>
           </button>
 
           {/* 2. Inbox */}
           <button
             type="button"
+            aria-label="Inbox"
             onClick={() => setIsChatOpen(true)}
-            className="min-h-[48px] flex flex-col items-center justify-end gap-1 py-0.5 cursor-pointer active:scale-95 transition-transform"
+            className="min-h-[48px] flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-95 transition-transform"
           >
-            <div className="relative">
-              <Mail
-                size={23}
-                className={
-                  isChatOpen
-                    ? 'fill-[#FF5500]/15 text-[#FF5500] stroke-[2.2]'
-                    : 'text-[#FF5500] stroke-[1.9]'
-                }
-              />
-            </div>
-            <span
-              className={`text-[11px] leading-none tracking-[-0.01em] whitespace-nowrap ${
+            <Mail
+              size={27}
+              className={
                 isChatOpen
-                  ? 'text-[#FF5500] font-semibold'
-                  : 'text-slate-900 font-medium'
-              }`}
-            >
-              Inbox
-            </span>
+                  ? 'fill-[#FF5500] text-white stroke-[2]'
+                  : 'fill-[#FF5500] text-white stroke-[1.8]'
+              }
+            />
           </button>
 
           {/* 3. Prominent Center Add Button */}
           <button
             type="button"
+            aria-label="Add listing"
             onClick={() => setIsQuickActionOpen(true)}
-            className="min-h-[48px] flex flex-col items-center justify-end gap-1 py-0.5 cursor-pointer active:scale-95 transition-transform"
+            className="min-h-[48px] flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-95 transition-transform"
           >
-            <span className="w-11 h-11 -mt-2 rounded-full bg-[#FF5500] text-white flex items-center justify-center shadow-[0_4px_14px_rgba(255,85,0,0.34)]">
-              <Plus size={25} strokeWidth={2.5} />
-            </span>
-            <span
-              className={`text-[11px] leading-none tracking-[-0.01em] whitespace-nowrap ${
-                isQuickActionOpen
-                  ? 'text-[#FF5500] font-semibold'
-                  : 'text-slate-900 font-medium'
-              }`}
-            >
-              Add
+            <span className="w-12 h-12 rounded-full bg-[#FF5500] text-white flex items-center justify-center shadow-[0_4px_14px_rgba(255,85,0,0.34)]">
+              <Plus size={28} strokeWidth={3} />
             </span>
           </button>
 
           {/* 4. Bookings */}
           <button
             type="button"
+            aria-label="Bookings"
             onClick={() => onNavigate('customer_dashboard')}
-            className="min-h-[48px] flex flex-col items-center justify-end gap-1 py-0.5 cursor-pointer active:scale-95 transition-transform"
+            className="min-h-[48px] flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-95 transition-transform"
           >
             <ClipboardList
-              size={23}
-              className={
-                currentView === 'customer_dashboard'
-                  ? 'fill-[#FF5500]/15 text-[#FF5500] stroke-[2.2]'
-                  : 'text-[#FF5500] stroke-[1.9]'
-              }
+              size={27}
+              className="fill-[#FF5500] text-white stroke-[1.8]"
             />
-            <span
-              className={`text-[11px] leading-none tracking-[-0.01em] whitespace-nowrap ${
-                currentView === 'customer_dashboard'
-                  ? 'text-[#FF5500] font-semibold'
-                  : 'text-slate-900 font-medium'
-              }`}
-            >
-              Bookings
-            </span>
           </button>
 
           {/* 5. Profile */}
           <button
             type="button"
+            aria-label="Profile"
             onClick={() => setIsProfileSheetOpen(true)}
-            className="min-h-[48px] flex flex-col items-center justify-end gap-1 py-0.5 cursor-pointer active:scale-95 transition-transform"
+            className="min-h-[48px] flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-95 transition-transform"
           >
-            <User
-              size={23}
-              className={
-                isProfileSheetOpen || currentView === 'admin_portal'
-                  ? 'fill-[#FF5500]/15 text-[#FF5500] stroke-[2.2]'
-                  : 'text-[#FF5500] stroke-[1.9]'
-              }
-            />
-            <span
-              className={`text-[11px] leading-none tracking-[-0.01em] whitespace-nowrap ${
-                isProfileSheetOpen
-                  ? 'text-[#FF5500] font-semibold'
-                  : 'text-slate-900 font-medium'
-              }`}
-            >
-              Profile
+            <span className="w-10 h-10 rounded-full bg-[#FF5500] text-white flex items-center justify-center">
+              <User size={22} className="fill-white text-white stroke-[2]" />
             </span>
           </button>
         </div>

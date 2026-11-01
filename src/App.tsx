@@ -93,7 +93,7 @@ const MainApp: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-white md:bg-slate-50 text-slate-900 selection:bg-[#FF5500] selection:text-white pb-20 sm:pb-24 md:pb-0 w-full max-w-full overflow-x-clip">
+    <div className={`min-h-screen flex flex-col ${currentView === 'home' ? 'bg-white' : 'bg-white md:bg-slate-50'} text-slate-900 selection:bg-[#FF5500] selection:text-white pb-20 sm:pb-24 md:pb-0 w-full max-w-full overflow-x-clip`}>
       
       {/* Global Navigation Header */}
       <Header
@@ -229,10 +229,10 @@ const MainApp: React.FC = () => {
         </Suspense>
       </main>
 
-      {/* Global Footer (Desktop + Non-Home Sub-Views) */}
-      <div className={currentView === 'home' ? 'hidden md:block' : ''}>
+      {/* Global Footer (Non-Home Sub-Views only) */}
+      {currentView !== 'home' && (
         <Footer onNavigate={handleNavigate} />
-      </div>
+      )}
 
       {/* Floating Cat Assistant on Desktop Non-Home Views */}
       {currentView !== 'home' && (
@@ -245,8 +245,10 @@ const MainApp: React.FC = () => {
         </div>
       )}
 
-      {/* Floating 24/7 Multimodal Suchi Assistant & Direct Help Widget */}
-      <FloatingHelpWidget onNavigate={handleNavigate} />
+      {/* Floating Help Widget on Non-Home Views */}
+      {currentView !== 'home' && (
+        <FloatingHelpWidget onNavigate={handleNavigate} />
+      )}
 
       {/* Mobile Sticky Bottom Navigation with Complete Profile Hub & Quick Action */}
       <MobileNav

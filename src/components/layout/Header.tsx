@@ -88,9 +88,13 @@ export const Header: React.FC<HeaderProps> = ({ currentView, onNavigate, onOpenS
     { role: 'SUPER_ADMIN', label: 'Super Admin (Rafsan)', icon: Sparkles, color: 'text-purple-600 bg-purple-50' }
   ];
 
+  if (currentView === 'home') {
+    return null;
+  }
+
   return (
     <>
-      {/* Clean Mobile Sub-View Top Bar (hidden on Home where MobileQaagaHome renders the seamless top bar) */}
+      {/* Clean Mobile Sub-View Top Bar */}
       {currentView !== 'home' && (
         <header className="md:hidden sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-100 px-4 h-13 flex items-center justify-between">
           <button
