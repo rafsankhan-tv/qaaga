@@ -462,7 +462,31 @@ export const MobileNav: React.FC<MobileNavProps> = ({ currentView, onNavigate, o
             </div>
 
             {/* Core Dashboards & Management Links */}
-            <div className="space-y-1 mb-4">
+            <div className="space-y-1.5 mb-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsProfileSheetOpen(false);
+                  if (currentView === 'home') {
+                    window.dispatchEvent(new CustomEvent('qaaga:open-host'));
+                  } else {
+                    onNavigate('home');
+                    setTimeout(() => {
+                      window.dispatchEvent(new CustomEvent('qaaga:open-host'));
+                    }, 120);
+                  }
+                }}
+                className="w-full p-2.5 rounded-xl bg-orange-50 hover:bg-orange-100/80 border border-orange-200 flex items-center justify-between text-xs font-bold text-[#FF6B18] cursor-pointer mb-2"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="w-7 h-7 rounded-lg bg-[#FF6B18] text-white flex items-center justify-center">
+                    <Hotel size={15} />
+                  </div>
+                  <span>Become a host (নতুন লিস্টিং যুক্ত করুন)</span>
+                </div>
+                <ChevronRight size={15} className="text-[#FF6B18]" />
+              </button>
+
               <span className="text-xs font-black text-slate-800 uppercase tracking-wider block mb-2">
                 ম্যানেজমেন্ট ড্যাশবোর্ড
               </span>

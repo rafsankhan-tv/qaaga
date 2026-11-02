@@ -1721,16 +1721,8 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
               })}
             </nav>
 
-            {/* Zone 3: Desktop Right "become a host" + Messages(1) + Trips(2) + Avatar */}
-            <div className="hidden md:flex md:justify-self-end items-center gap-3.5 lg:gap-5 shrink-0">
-              <button
-                type="button"
-                onClick={() => setIsHostModalOpen(true)}
-                className="hidden lg:inline-flex items-center text-[15px] text-slate-800 hover:text-slate-950 font-normal px-2.5 py-1.5 rounded-full hover:bg-slate-100/80 transition-colors whitespace-nowrap cursor-pointer"
-              >
-                become a host
-              </button>
-
+            {/* Zone 3: Desktop Right Messages(1) + Trips(2) + Avatar */}
+            <div className="hidden md:flex md:justify-self-end items-center gap-3.5 lg:gap-4 shrink-0">
               {/* Messages Envelope Icon + Crisp Orange Count Badge */}
               <button
                 type="button"
@@ -1842,9 +1834,10 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
                           setIsAccountMenuOpen(false);
                           setIsHostModalOpen(true);
                         }}
-                        className="w-full text-left px-3 py-2 rounded-xl hover:bg-slate-50 font-medium cursor-pointer"
+                        className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-orange-50/70 hover:bg-orange-100/80 text-[#FF6610] font-semibold cursor-pointer"
                       >
-                        Become a host (Add listing)
+                        <span>Become a host</span>
+                        <Plus size={15} strokeWidth={2.4} />
                       </button>
                     </div>
 
