@@ -102,85 +102,111 @@ export const MobileNav: React.FC<MobileNavProps> = ({ currentView, onNavigate, o
 
   return (
     <>
-      {/* 1. Mobile Bottom Sticky Navigation Bar (Matched to Qaaga PDF Page 1) */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-slate-100 shadow-[0_-4px_20px_rgba(15,23,42,0.05)] px-3 pt-2 pb-2.5 safe-area-pb">
-        <div className="grid grid-cols-5 items-center w-full">
-          {/* 1. Home */}
+      {/* 1. Mobile Bottom Sticky Navigation Bar (Matched 1:1 to final_design_fb56d790.png) */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-slate-100/90 px-4 pt-2.5 pb-3 safe-area-pb">
+        <div className="grid grid-cols-5 items-center w-full max-w-md mx-auto">
+          {/* 1. Home: Solid Orange Circle with White House */}
           <button
             type="button"
             aria-label="Home"
-            onClick={() => onNavigate('home')}
-            className="min-h-[48px] flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-95 transition-transform"
+            onClick={() => {
+              if (currentView === 'home') {
+                window.dispatchEvent(new CustomEvent('qaaga:home-reset'));
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              } else {
+                onNavigate('home');
+              }
+            }}
+            className="min-h-[48px] flex items-center justify-center cursor-pointer active:scale-95 transition-transform"
           >
             <span
-              className={`w-10 h-10 rounded-full flex items-center justify-center ${
+              className={`w-11 h-11 rounded-full flex items-center justify-center transition-colors ${
                 currentView === 'home'
-                  ? 'bg-[#FF5500] text-white'
-                  : 'bg-orange-50 text-[#FF5500]'
+                  ? 'bg-[#FF6B18] text-white'
+                  : 'bg-[#B0B0B0] text-white'
               }`}
             >
-              <Home
-                size={21}
-                className={
-                  currentView === 'home'
-                    ? 'fill-white text-white stroke-[2]'
-                    : 'text-[#FF5500] stroke-[2.2]'
-                }
-              />
+              <Home size={22} className="fill-white text-white stroke-[2]" />
             </span>
           </button>
 
-          {/* 2. Inbox */}
+          {/* 2. Inbox: Light-Grey Filled Envelope */}
           <button
             type="button"
             aria-label="Inbox"
-            onClick={() => setIsChatOpen(true)}
-            className="min-h-[48px] flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-95 transition-transform"
+            onClick={() => {
+              if (currentView === 'home') {
+                window.dispatchEvent(new CustomEvent('qaaga:open-inbox'));
+              } else {
+                setIsChatOpen(true);
+              }
+            }}
+            className="min-h-[48px] flex items-center justify-center cursor-pointer active:scale-95 transition-transform"
           >
             <Mail
-              size={27}
+              size={30}
               className={
                 isChatOpen
-                  ? 'fill-[#FF5500] text-white stroke-[2]'
-                  : 'fill-[#FF5500] text-white stroke-[1.8]'
+                  ? '[&_rect]:fill-[#FF6B18] [&_rect]:stroke-[#FF6B18] [&_path]:fill-none [&_path]:stroke-white [&_path]:stroke-[2]'
+                  : '[&_rect]:fill-[#D4D4D4] [&_rect]:stroke-[#D4D4D4] [&_path]:fill-none [&_path]:stroke-white [&_path]:stroke-[2]'
               }
             />
           </button>
 
-          {/* 3. Prominent Center Add Button */}
+          {/* 3. Center Add Button: White Circle with Grey Ring & Orange '+' */}
           <button
             type="button"
             aria-label="Add listing"
-            onClick={() => setIsQuickActionOpen(true)}
-            className="min-h-[48px] flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-95 transition-transform"
+            onClick={() => {
+              if (currentView === 'home') {
+                window.dispatchEvent(new CustomEvent('qaaga:open-host'));
+              } else {
+                setIsQuickActionOpen(true);
+              }
+            }}
+            className="min-h-[48px] flex items-center justify-center cursor-pointer active:scale-95 transition-transform"
           >
-            <span className="w-12 h-12 rounded-full bg-[#FF5500] text-white flex items-center justify-center shadow-[0_4px_14px_rgba(255,85,0,0.34)]">
-              <Plus size={28} strokeWidth={3} />
+            <span className="w-12 h-12 rounded-full bg-white border-2 border-[#D0D0D0] ring-2 ring-slate-100 text-[#FF6B18] flex items-center justify-center">
+              <Plus size={25} strokeWidth={2.4} />
             </span>
           </button>
 
-          {/* 4. Bookings */}
+          {/* 4. Bookings: Medium-Grey Filled Clipboard */}
           <button
             type="button"
             aria-label="Bookings"
-            onClick={() => onNavigate('customer_dashboard')}
-            className="min-h-[48px] flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-95 transition-transform"
+            onClick={() => {
+              if (currentView === 'home') {
+                window.dispatchEvent(new CustomEvent('qaaga:open-trips'));
+              } else {
+                onNavigate('customer_dashboard');
+              }
+            }}
+            className="min-h-[48px] flex items-center justify-center cursor-pointer active:scale-95 transition-transform"
           >
             <ClipboardList
-              size={27}
-              className="fill-[#FF5500] text-white stroke-[1.8]"
+              size={29}
+              className={
+                currentView === 'customer_dashboard'
+                  ? 'fill-[#FF6B18] text-white stroke-[1.8]'
+                  : 'fill-[#AEAEAE] text-white stroke-[1.8]'
+              }
             />
           </button>
 
-          {/* 5. Profile */}
+          {/* 5. Profile: Solid Grey Circle with White User Silhouette */}
           <button
             type="button"
             aria-label="Profile"
             onClick={() => setIsProfileSheetOpen(true)}
-            className="min-h-[48px] flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-95 transition-transform"
+            className="min-h-[48px] flex items-center justify-center cursor-pointer active:scale-95 transition-transform"
           >
-            <span className="w-10 h-10 rounded-full bg-[#FF5500] text-white flex items-center justify-center">
-              <User size={22} className="fill-white text-white stroke-[2]" />
+            <span
+              className={`w-11 h-11 rounded-full flex items-center justify-center transition-colors ${
+                isProfileSheetOpen ? 'bg-[#FF6B18] text-white' : 'bg-[#B0B0B0] text-white'
+              }`}
+            >
+              <User size={23} className="fill-white text-white stroke-[2]" />
             </span>
           </button>
         </div>

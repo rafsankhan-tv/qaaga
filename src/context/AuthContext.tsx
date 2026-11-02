@@ -47,10 +47,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return unsub;
   }, [currentUser]);
 
-  // Attempt silent session recovery on mount
+  // Attempt silent session recovery on mount only if an auth session cookie exists
   useEffect(() => {
     const checkSession = async () => {
       try {
+        if (typeof document !== 'undefined' && !document.cookie.includes('token') && !document.cookie.includes('session') && !document.cookie.includes('qaaga')) {
+          return;
+        }
         const res = await fetch('/api/auth/me', { credentials: 'same-origin' });
         if (res.ok) {
           const data = await res.json();

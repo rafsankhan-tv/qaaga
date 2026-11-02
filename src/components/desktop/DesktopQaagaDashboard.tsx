@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import {
   Search,
   Plus,
@@ -15,34 +15,42 @@ import {
   X,
   Check,
   MapPin,
-  Calendar,
-  Users,
   Minus,
   Send,
   ShieldCheck,
-  Wifi,
-  Wind,
-  Waves,
-  KeyRound,
   Building2,
-  Sparkles,
   Share2,
-  SlidersHorizontal,
+  Stethoscope,
+  Wrench,
+  ShoppingBag,
+  Briefcase,
+  Compass,
 } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 
 export type QaagaCategory = 'all' | 'stay' | 'experiences' | 'services';
 export type CurrencyCode = 'USD' | 'MYR' | 'BDT';
+
+export interface ListingReview {
+  id: string;
+  author: string;
+  date: string;
+  rating: number;
+  comment: string;
+}
 
 export interface QaagaListing {
   id: string;
   title: string;
   area: string;
   city: string;
+  subType: string;
   twoNightPriceUsd: number;
   rating: string;
   reviewsCount: number;
   guestFavorite: boolean;
   image: string;
+  gallery: string[];
   category: 'stay' | 'experiences' | 'services';
   maxGuests: number;
   bedrooms: string;
@@ -53,6 +61,8 @@ export interface QaagaListing {
   inInitialRecent?: boolean;
   inInitialWishlist?: boolean;
   inPopularKL?: boolean;
+  offerPercent?: number;
+  originalTwoNightUsd?: number;
 }
 
 export interface BookingRecord {
@@ -90,18 +100,32 @@ const CURRENCY_CONFIG: Record<CurrencyCode, { symbol: string; rate: number; labe
   BDT: { symbol: '৳', rate: 120, label: '৳ BDT' },
 };
 
-// Exact 6 Core Listings from qaaga_d3ef7a3c.png + Extra Carousel / Category Items
+const STORAGE_KEYS = {
+  wishlist: 'qaaga_kl_wishlist_v2',
+  bookings: 'qaaga_kl_bookings_v2',
+  threads: 'qaaga_kl_threads_v2',
+  customListings: 'qaaga_kl_custom_listings_v2',
+  currency: 'qaaga_kl_currency_v2',
+};
+
+// Exact 6 Core Screenshot Listings + Unique Extra Carousel & Category Listings
 const INITIAL_LISTINGS: QaagaListing[] = [
   {
     id: 'kl-1',
     title: 'Apartment in Bukit Bintang',
     area: 'Bukit Bintang',
     city: 'Kuala Lumpur',
+    subType: 'apartments',
     twoNightPriceUsd: 370,
     rating: '5.0',
     reviewsCount: 128,
     guestFavorite: false,
     image: '/assets/kl-ui/kl-1.jpg',
+    gallery: [
+      '/assets/kl-ui/kl-1.jpg',
+      '/assets/clean-rooms/room-gulshan-studio.jpg',
+      '/assets/clean-rooms/wish-dhanmondi.jpg',
+    ],
     category: 'stay',
     maxGuests: 6,
     bedrooms: '2 bedrooms · 3 beds · 2 baths',
@@ -126,11 +150,17 @@ const INITIAL_LISTINGS: QaagaListing[] = [
     title: 'Room in Kuala Lumpur',
     area: 'KLCC',
     city: 'Kuala Lumpur',
+    subType: 'rooms',
     twoNightPriceUsd: 61,
     rating: '5.0',
     reviewsCount: 94,
     guestFavorite: true,
     image: '/assets/kl-ui/kl-2.jpg',
+    gallery: [
+      '/assets/kl-ui/kl-2.jpg',
+      '/assets/clean-rooms/room-mirpur-apt.jpg',
+      '/assets/clean-rooms/room-dhanmondi.jpg',
+    ],
     category: 'stay',
     maxGuests: 2,
     bedrooms: '1 queen bed · Dedicated bath',
@@ -154,11 +184,17 @@ const INITIAL_LISTINGS: QaagaListing[] = [
     title: 'Room in Kuala Lumpur',
     area: 'Bukit Bintang',
     city: 'Kuala Lumpur',
+    subType: 'rooms',
     twoNightPriceUsd: 51,
     rating: '4.9',
     reviewsCount: 76,
     guestFavorite: true,
     image: '/assets/kl-ui/kl-3.jpg',
+    gallery: [
+      '/assets/kl-ui/kl-3.jpg',
+      '/assets/clean-rooms/offer-badda.jpg',
+      '/assets/clean-rooms/room-banani-private.jpg',
+    ],
     category: 'stay',
     maxGuests: 2,
     bedrooms: '1 single bed · Shared modern bath',
@@ -176,17 +212,25 @@ const INITIAL_LISTINGS: QaagaListing[] = [
     inInitialRecent: true,
     inInitialWishlist: true,
     inPopularKL: true,
+    offerPercent: 15,
+    originalTwoNightUsd: 60,
   },
   {
     id: 'kl-4',
     title: 'Apartment in Kampung Bahru',
     area: 'Kampung Bahru',
     city: 'Kuala Lumpur',
+    subType: 'apartments',
     twoNightPriceUsd: 99,
     rating: '4.76',
     reviewsCount: 142,
     guestFavorite: true,
     image: '/assets/kl-ui/kl-4.jpg',
+    gallery: [
+      '/assets/kl-ui/kl-4.jpg',
+      '/assets/clean-rooms/room-uttara-balcony.jpg',
+      '/assets/clean-rooms/pop-uttara.jpg',
+    ],
     category: 'stay',
     maxGuests: 4,
     bedrooms: '1 king bed · Sofa lounge · Balcony',
@@ -204,17 +248,25 @@ const INITIAL_LISTINGS: QaagaListing[] = [
     inInitialRecent: true,
     inInitialWishlist: true,
     inPopularKL: true,
+    offerPercent: 12,
+    originalTwoNightUsd: 112,
   },
   {
     id: 'kl-5',
     title: 'Condo in Kampung Bahru',
     area: 'Kampung Bahru',
     city: 'Kuala Lumpur',
+    subType: 'condos',
     twoNightPriceUsd: 163,
     rating: '5.0',
     reviewsCount: 215,
     guestFavorite: false,
     image: '/assets/kl-ui/kl-5.jpg',
+    gallery: [
+      '/assets/kl-ui/kl-5.jpg',
+      '/assets/clean-rooms/wish-gulshan.jpg',
+      '/assets/clean-rooms/wish-banani.jpg',
+    ],
     category: 'stay',
     maxGuests: 4,
     bedrooms: '1 bedroom · 2 beds · Infinity pool access',
@@ -238,11 +290,17 @@ const INITIAL_LISTINGS: QaagaListing[] = [
     title: 'Room in Kuala Lumpur',
     area: 'Mont Kiara',
     city: 'Kuala Lumpur',
+    subType: 'rooms',
     twoNightPriceUsd: 51,
     rating: '4.91',
     reviewsCount: 112,
     guestFavorite: true,
     image: '/assets/kl-ui/kl-6.jpg',
+    gallery: [
+      '/assets/kl-ui/kl-6.jpg',
+      '/assets/clean-rooms/pop-gulshan.jpg',
+      '/assets/clean-rooms/offer-mirpur.jpg',
+    ],
     category: 'stay',
     maxGuests: 2,
     bedrooms: '1 queen bed · Ensuite bath',
@@ -260,81 +318,121 @@ const INITIAL_LISTINGS: QaagaListing[] = [
     inInitialRecent: true,
     inInitialWishlist: true,
     inPopularKL: true,
+    offerPercent: 15,
+    originalTwoNightUsd: 60,
   },
 
-  // Extra Popular Kuala Lumpur Stays (for < > carousel pagination!)
+  // Extra Unique Carousel Stays (each using distinct clean-rooms photography!)
   {
     id: 'kl-7',
-    title: 'Sky Penthouse in KLCC',
+    title: 'Sky Studio in KLCC Park',
     area: 'KLCC',
     city: 'Kuala Lumpur',
-    twoNightPriceUsd: 290,
+    subType: 'apartments',
+    twoNightPriceUsd: 210,
     rating: '4.98',
     reviewsCount: 89,
     guestFavorite: true,
-    image: '/assets/kl-ui/kl-1.jpg',
+    image: '/assets/clean-rooms/room-gulshan-studio.jpg',
+    gallery: ['/assets/clean-rooms/room-gulshan-studio.jpg', '/assets/kl-ui/kl-1.jpg'],
     category: 'stay',
-    maxGuests: 6,
-    bedrooms: '3 bedrooms · 3 baths · Private lift',
+    maxGuests: 4,
+    bedrooms: 'Studio · Panorama terrace · 1 bath',
     hostName: 'Zulkifli Ahmad',
     hostYears: 8,
-    amenities: ['Twin Towers View', 'Infinity Pool', 'Wi-Fi', 'Private Parking'],
+    amenities: ['Park & Skyline View', 'Infinity Pool', 'Fast Wi-Fi', 'Private Parking'],
     description:
-      'Duplex sky penthouse overlooking KLCC Fountain Park with floor-to-ceiling windows and private elevator lobby.',
+      'Sunlit executive sky-studio overlooking KLCC greenery and towers with floor-to-ceiling windows and private balcony.',
+    inInitialRecent: true,
     inPopularKL: true,
   },
   {
     id: 'kl-8',
-    title: 'Designer Loft in Bangsar',
+    title: 'Balcony Suite in Bangsar',
     area: 'Bangsar',
     city: 'Kuala Lumpur',
+    subType: 'apartments',
     twoNightPriceUsd: 118,
     rating: '4.94',
     reviewsCount: 64,
     guestFavorite: true,
-    image: '/assets/kl-ui/kl-4.jpg',
+    image: '/assets/clean-rooms/room-uttara-balcony.jpg',
+    gallery: ['/assets/clean-rooms/room-uttara-balcony.jpg', '/assets/kl-ui/kl-4.jpg'],
     category: 'stay',
     maxGuests: 3,
-    bedrooms: '1 loft bedroom · Balcony',
+    bedrooms: '1 king bed · Open garden balcony',
     hostName: 'Hannah Lim',
     hostYears: 5,
     amenities: ['Artisanal Coffee Bar', 'Fast Wi-Fi', 'Pool', 'LRT Link Bridge'],
     description:
-      'Sun-drenched architectural loft in Bangsar South connected directly to LRT Kerinchi and specialty cafes.',
+      'Sun-drenched architectural suite in Bangsar South with wide sliding glass balcony overlooking lush tropical greenery.',
+    inInitialRecent: true,
     inPopularKL: true,
+    offerPercent: 20,
+    originalTwoNightUsd: 148,
   },
   {
     id: 'kl-9',
-    title: 'Twin Towers View Suite',
-    area: 'Kampung Bahru',
+    title: 'Condo in Mont Kiara',
+    area: 'Mont Kiara',
     city: 'Kuala Lumpur',
+    subType: 'condos',
     twoNightPriceUsd: 145,
     rating: '4.96',
     reviewsCount: 173,
     guestFavorite: true,
-    image: '/assets/kl-ui/kl-5.jpg',
+    image: '/assets/clean-rooms/wish-dhanmondi.jpg',
+    gallery: ['/assets/clean-rooms/wish-dhanmondi.jpg', '/assets/kl-ui/kl-5.jpg'],
     category: 'stay',
     maxGuests: 4,
-    bedrooms: '1 king bed · Sky pool access',
+    bedrooms: '1 bedroom · Private dining nook · Sky pool',
     hostName: 'Rizal Mansor',
     hostYears: 6,
-    amenities: ['51st Floor Infinity Pool', 'Wi-Fi', 'Kitchen', 'Self Check-in'],
+    amenities: ['Rooftop Pool', 'Wi-Fi', 'Dining Corner', 'Self Check-in'],
     description:
-      'Unobstructed KLCC skyline panorama from both your bedroom balcony and the 51st-floor rooftop infinity pool.',
+      'Open-plan designer residence in Mont Kiara featuring panoramic terrace glass, private dining nook, and resort facilities.',
     inPopularKL: true,
+    offerPercent: 18,
+    originalTwoNightUsd: 176,
+  },
+  {
+    id: 'kl-10',
+    title: 'Boutique Room in Bukit Ceylon',
+    area: 'Bukit Bintang',
+    city: 'Kuala Lumpur',
+    subType: 'rooms',
+    twoNightPriceUsd: 74,
+    rating: '4.93',
+    reviewsCount: 108,
+    guestFavorite: false,
+    image: '/assets/clean-rooms/pop-gulshan.jpg',
+    gallery: ['/assets/clean-rooms/pop-gulshan.jpg', '/assets/kl-ui/kl-2.jpg'],
+    category: 'stay',
+    maxGuests: 2,
+    bedrooms: '1 king bed · Ensuite rain shower',
+    hostName: 'Evelyn Khoo',
+    hostYears: 4,
+    amenities: ['Warm Timber Interiors', 'Fast Wi-Fi', 'AC', 'Quiet Hillside Street'],
+    description:
+      'Tucked on leafy Bukit Ceylon just 5 minutes from Changkat cafes, offering hotel-grade tranquility and warm lighting.',
+    inPopularKL: true,
+    offerPercent: 10,
+    originalTwoNightUsd: 82,
   },
 
-  // Curated Experiences (shown when "Experiences" tab is clicked)
+  // Curated Experiences (6 unique items)
   {
     id: 'exp-1',
     title: 'Petronas Skyline Rooftop Tour',
     area: 'KLCC',
     city: 'Kuala Lumpur',
+    subType: 'skyline',
     twoNightPriceUsd: 78,
     rating: '5.0',
     reviewsCount: 156,
     guestFavorite: true,
     image: '/assets/kl-ui/kl-5.jpg',
+    gallery: ['/assets/kl-ui/kl-5.jpg', '/assets/kl-ui/kl-1.jpg'],
     category: 'experiences',
     maxGuests: 8,
     bedrooms: '3-hour guided sunset walk · Drinks included',
@@ -349,11 +447,13 @@ const INITIAL_LISTINGS: QaagaListing[] = [
     title: 'Kampung Bahru Night Food Trail',
     area: 'Kampung Bahru',
     city: 'Kuala Lumpur',
+    subType: 'food',
     twoNightPriceUsd: 64,
     rating: '4.97',
     reviewsCount: 204,
     guestFavorite: true,
     image: '/assets/kl-ui/kl-4.jpg',
+    gallery: ['/assets/kl-ui/kl-4.jpg', '/assets/clean-rooms/wish-banani.jpg'],
     category: 'experiences',
     maxGuests: 10,
     bedrooms: '12 authentic tastings · 3.5 hours',
@@ -365,20 +465,22 @@ const INITIAL_LISTINGS: QaagaListing[] = [
   },
   {
     id: 'exp-3',
-    title: 'Bukit Bintang Hidden Speakeasy Walk',
+    title: 'Bukit Bintang Speakeasy Walk',
     area: 'Bukit Bintang',
     city: 'Kuala Lumpur',
+    subType: 'food',
     twoNightPriceUsd: 85,
     rating: '4.92',
     reviewsCount: 83,
     guestFavorite: false,
     image: '/assets/kl-ui/kl-1.jpg',
+    gallery: ['/assets/kl-ui/kl-1.jpg'],
     category: 'experiences',
     maxGuests: 6,
     bedrooms: 'Evening social experience · 3 venues',
     hostName: 'Jason Yap',
     hostYears: 4,
-    amenities: ['3 Curated Rooftops & Lounges', 'Mocktail & Craft Options', 'VIP Priority Entry'],
+    amenities: ['3 Curated Rooftops & Lounges', 'Craft Mocktail Options', 'Priority Entry'],
     description:
       'Explore Chinatown and Bukit Bintang’s tucked-away rooftop lounges with skyline views and live Malaysian jazz.',
   },
@@ -387,11 +489,13 @@ const INITIAL_LISTINGS: QaagaListing[] = [
     title: 'Malaysian Tea & Batik Studio',
     area: 'Bangsar',
     city: 'Kuala Lumpur',
+    subType: 'culture',
     twoNightPriceUsd: 55,
     rating: '4.95',
     reviewsCount: 91,
     guestFavorite: true,
-    image: '/assets/kl-ui/kl-2.jpg',
+    image: '/assets/clean-rooms/wish-banani.jpg',
+    gallery: ['/assets/clean-rooms/wish-banani.jpg'],
     category: 'experiences',
     maxGuests: 6,
     bedrooms: '2.5-hour hands-on studio · Take-home art',
@@ -403,14 +507,16 @@ const INITIAL_LISTINGS: QaagaListing[] = [
   },
   {
     id: 'exp-5',
-    title: 'Morning Wellness & Pool Yoga',
+    title: 'Morning Terrace Yoga & Brunch',
     area: 'Mont Kiara',
     city: 'Kuala Lumpur',
+    subType: 'culture',
     twoNightPriceUsd: 46,
     rating: '4.89',
     reviewsCount: 49,
     guestFavorite: true,
-    image: '/assets/kl-ui/kl-6.jpg',
+    image: '/assets/clean-rooms/room-uttara-balcony.jpg',
+    gallery: ['/assets/clean-rooms/room-uttara-balcony.jpg'],
     category: 'experiences',
     maxGuests: 8,
     bedrooms: '90-minute rooftop session · Breakfast bowl',
@@ -418,39 +524,43 @@ const INITIAL_LISTINGS: QaagaListing[] = [
     hostYears: 3,
     amenities: ['Mats & Towels Included', 'Cold-Pressed Juice', 'Skyline Terrace'],
     description:
-      'Start your morning above the city haze with guided vinyasa flow beside a tranquil infinity terrace.',
+      'Start your morning above the city haze with guided vinyasa flow beside a tranquil open terrace.',
   },
   {
     id: 'exp-6',
-    title: 'Minimalist Interior Architecture Tour',
+    title: 'Tropical Modernism Architecture Tour',
     area: 'KLCC',
     city: 'Kuala Lumpur',
+    subType: 'skyline',
     twoNightPriceUsd: 70,
     rating: '4.93',
     reviewsCount: 37,
     guestFavorite: false,
-    image: '/assets/kl-ui/kl-3.jpg',
+    image: '/assets/clean-rooms/wish-gulshan.jpg',
+    gallery: ['/assets/clean-rooms/wish-gulshan.jpg'],
     category: 'experiences',
     maxGuests: 5,
     bedrooms: 'Half-day curated studio visits',
-    hostName: ' Studio KLA',
+    hostName: 'Studio KLA',
     hostYears: 5,
-    amenities: ['Architect Host', 'Private Transport', 'Espresso Stop'],
+    amenities: ['Architect Host', 'Private Transport', 'Specialty Espresso Stop'],
     description:
       'Step inside adaptive-reuse townhouses and modern sky residences across central Kuala Lumpur with a practicing architect.',
   },
 
-  // Curated Services (shown when "Services" tab is clicked)
+  // Curated Services (6 unique items)
   {
     id: 'srv-1',
     title: 'Private Chef Nyonya Dinner',
     area: 'Bukit Bintang',
     city: 'Kuala Lumpur',
+    subType: 'chef',
     twoNightPriceUsd: 120,
     rating: '5.0',
     reviewsCount: 118,
     guestFavorite: true,
-    image: '/assets/kl-ui/kl-1.jpg',
+    image: '/assets/clean-rooms/wish-dhanmondi.jpg',
+    gallery: ['/assets/clean-rooms/wish-dhanmondi.jpg'],
     category: 'services',
     maxGuests: 8,
     bedrooms: '4-course in-apartment dining · Full cleanup',
@@ -462,17 +572,19 @@ const INITIAL_LISTINGS: QaagaListing[] = [
   },
   {
     id: 'srv-2',
-    title: 'Executive KLIA Airport Transfer',
+    title: 'Executive KLIA Airport Chauffeur',
     area: 'KLCC',
     city: 'Kuala Lumpur',
+    subType: 'chauffeur',
     twoNightPriceUsd: 58,
     rating: '4.99',
     reviewsCount: 310,
     guestFavorite: true,
     image: '/assets/kl-ui/kl-5.jpg',
+    gallery: ['/assets/kl-ui/kl-5.jpg'],
     category: 'services',
     maxGuests: 6,
-    bedrooms: 'Door-to-door MPV · Flight tracking',
+    bedrooms: 'Door-to-door MPV · Real-time flight tracking',
     hostName: 'KL Premier Chauffeur',
     hostYears: 6,
     amenities: ['Meet & Greet Gate Sign', '60-Min Wait Buffer', 'Wi-Fi Onboard'],
@@ -481,14 +593,16 @@ const INITIAL_LISTINGS: QaagaListing[] = [
   },
   {
     id: 'srv-3',
-    title: 'Hotel-Grade Suite Refresh',
+    title: 'Hotel-Grade Suite Housekeeping',
     area: 'Kampung Bahru',
     city: 'Kuala Lumpur',
+    subType: 'care',
     twoNightPriceUsd: 42,
     rating: '4.95',
     reviewsCount: 87,
     guestFavorite: true,
-    image: '/assets/kl-ui/kl-2.jpg',
+    image: '/assets/clean-rooms/room-banani-private.jpg',
+    gallery: ['/assets/clean-rooms/room-banani-private.jpg'],
     category: 'services',
     maxGuests: 4,
     bedrooms: 'Full linen change · Eco sanitization',
@@ -503,11 +617,13 @@ const INITIAL_LISTINGS: QaagaListing[] = [
     title: 'In-Room Balinese & Malay Spa',
     area: 'Mont Kiara',
     city: 'Kuala Lumpur',
+    subType: 'care',
     twoNightPriceUsd: 88,
     rating: '4.97',
     reviewsCount: 144,
     guestFavorite: true,
-    image: '/assets/kl-ui/kl-6.jpg',
+    image: '/assets/clean-rooms/offer-mirpur.jpg',
+    gallery: ['/assets/clean-rooms/offer-mirpur.jpg'],
     category: 'services',
     maxGuests: 2,
     bedrooms: '90-min couples or solo massage',
@@ -522,11 +638,13 @@ const INITIAL_LISTINGS: QaagaListing[] = [
     title: 'Same-Day Express Wardrobe Care',
     area: 'Bukit Bintang',
     city: 'Kuala Lumpur',
+    subType: 'care',
     twoNightPriceUsd: 35,
     rating: '4.91',
     reviewsCount: 62,
     guestFavorite: false,
-    image: '/assets/kl-ui/kl-3.jpg',
+    image: '/assets/clean-rooms/offer-badda.jpg',
+    gallery: ['/assets/clean-rooms/offer-badda.jpg'],
     category: 'services',
     maxGuests: 4,
     bedrooms: 'Pickup & pressed delivery in 6 hours',
@@ -538,27 +656,29 @@ const INITIAL_LISTINGS: QaagaListing[] = [
   },
   {
     id: 'srv-6',
-    title: 'Personal Skyline Photo Concierge',
+    title: 'Private City Chauffeur (Full Day)',
     area: 'Kampung Bahru',
     city: 'Kuala Lumpur',
-    twoNightPriceUsd: 75,
+    subType: 'chauffeur',
+    twoNightPriceUsd: 95,
     rating: '4.96',
     reviewsCount: 79,
     guestFavorite: true,
-    image: '/assets/kl-ui/kl-4.jpg',
+    image: '/assets/clean-rooms/pop-uttara.jpg',
+    gallery: ['/assets/clean-rooms/pop-uttara.jpg'],
     category: 'services',
     maxGuests: 6,
-    bedrooms: '90-min private shoot · 40 edited hi-res photos',
-    hostName: 'Hafiz Lens',
+    bedrooms: '8-hour private vehicle & bilingual driver',
+    hostName: 'Executive Mobility KL',
     hostYears: 5,
-    amenities: ['48-Hour Delivery', 'Couples & Families', 'Location Styling'],
+    amenities: ['Fuel & Tolls Included', 'Flexible Stops', 'Child Seat Available'],
     description:
-      'Capture effortless travel portraits at your infinity pool or KLCC park with a published lifestyle photographer.',
+      'Dedicated private vehicle and local driver for effortless meetings, Batu Caves visits, or shopping across Kuala Lumpur.',
   },
 ];
 
 const KL_DESTINATIONS = [
-  { name: 'All Kuala Lumpur', subtitle: 'Show all neighborhoods in KL' },
+  { name: 'All Kuala Lumpur', subtitle: 'Explore all neighborhoods in KL' },
   { name: 'Bukit Bintang', subtitle: 'Skyline suites, shopping & dining' },
   { name: 'Kampung Bahru', subtitle: 'Twin Towers views & heritage charm' },
   { name: 'KLCC', subtitle: 'Iconic city center & parkfront condos' },
@@ -572,6 +692,7 @@ const DATE_OPTIONS = [
   { id: 'nov-20-23', label: 'Nov 20 – 23', display: 'Nov 20 – 23', nights: 3, tag: '3 nights getaway' },
   { id: 'dec-01-06', label: 'Dec 1 – 6', display: 'Dec 1 – 6', nights: 5, tag: '5 nights stay' },
   { id: 'dec-12-19', label: 'Dec 12 – 19', display: 'Dec 12 – 19', nights: 7, tag: '1 week · 7 nights' },
+  { id: 'monthly-30', label: 'Monthly (30 nights)', display: '30 nights', nights: 30, tag: 'Monthly · 30 nights' },
 ];
 
 const CATEGORY_TABS: { id: QaagaCategory; label: string; iconSrc: string }[] = [
@@ -581,12 +702,35 @@ const CATEGORY_TABS: { id: QaagaCategory; label: string; iconSrc: string }[] = [
   { id: 'services', label: 'Services', iconSrc: '/assets/kl-ui/icon-services.png' },
 ];
 
+const DEFAULT_REVIEWS: ListingReview[] = [
+  {
+    id: 'rev-1',
+    author: 'Sarah Jenkins',
+    date: 'October 2026',
+    rating: 5,
+    comment:
+      'Spotless apartment with breathtaking Kuala Lumpur skyline views. Self check-in took under a minute and Wi-Fi was super fast.',
+  },
+  {
+    id: 'rev-2',
+    author: 'Tariq Al-Mansoor',
+    date: 'September 2026',
+    rating: 5,
+    comment:
+      'Exactly like the photos! Walking distance to MRT and great local food. Host responded within 2 minutes.',
+  },
+];
+
 const ListingImage: React.FC<{
   src: string;
   alt: string;
   className?: string;
 }> = ({ src, alt, className = '' }) => {
   const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setFailed(false);
+  }, [src]);
 
   if (failed) {
     return (
@@ -615,8 +759,13 @@ interface DesktopQaagaDashboardProps {
 }
 
 export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ onNavigate }) => {
+  const { currentUser } = useAuth();
+
   const [listings, setListings] = useState<QaagaListing[]>(INITIAL_LISTINGS);
   const [activeCategory, setActiveCategory] = useState<QaagaCategory>('all');
+  const [staySubFilter, setStaySubFilter] = useState<string>('all');
+  const [expSubFilter, setExpSubFilter] = useState<string>('all');
+  const [srvSubFilter, setSrvSubFilter] = useState<string>('all');
   const [currency, setCurrency] = useState<CurrencyCode>('USD');
 
   // Search state
@@ -624,17 +773,32 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
   const [selectedDates, setSelectedDates] = useState<(typeof DATE_OPTIONS)[number]>(
     DATE_OPTIONS[0]
   );
+  const [calendarMonth, setCalendarMonth] = useState<'Nov' | 'Dec'>('Nov');
   const [customCheckInDay, setCustomCheckInDay] = useState<number | null>(14);
   const [customCheckOutDay, setCustomCheckOutDay] = useState<number | null>(16);
   const [adults, setAdults] = useState<number>(0);
   const [childrenCount, setChildrenCount] = useState<number>(0);
   const [infants, setInfants] = useState<number>(0);
   const [pets, setPets] = useState<number>(0);
+  const [isSearchResultsMode, setIsSearchResultsMode] = useState<boolean>(false);
 
   const [activePopover, setActivePopover] = useState<'where' | 'when' | 'who' | null>(null);
   const searchAreaRef = useRef<HTMLDivElement | null>(null);
+  const whereInputRef = useRef<HTMLInputElement | null>(null);
+  const accountMenuRef = useRef<HTMLDivElement | null>(null);
 
-  // Recently viewed order & Wishlist IDs
+  // Horizontal scroll refs for desktop & mobile carousels
+  const recentRowRef = useRef<HTMLDivElement | null>(null);
+  const wishlistRowRef = useRef<HTMLDivElement | null>(null);
+  const popularRowRef = useRef<HTMLDivElement | null>(null);
+
+  const mobileRecentRowRef = useRef<HTMLDivElement | null>(null);
+  const mobileWishlistRowRef = useRef<HTMLDivElement | null>(null);
+  const mobilePopularRowRef = useRef<HTMLDivElement | null>(null);
+  const mobileOfferRowRef = useRef<HTMLDivElement | null>(null);
+  const [showMoreMobile, setShowMoreMobile] = useState<boolean>(false);
+
+  // Recently viewed order & Honest 1-click Wishlist IDs
   const [recentIds, setRecentIds] = useState<string[]>([
     'kl-1',
     'kl-2',
@@ -642,6 +806,8 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
     'kl-4',
     'kl-5',
     'kl-6',
+    'kl-7',
+    'kl-8',
   ]);
   const [wishlistIds, setWishlistIds] = useState<string[]>([
     'kl-1',
@@ -651,17 +817,20 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
     'kl-5',
     'kl-6',
   ]);
-  // Track hearts explicitly clicked by user during session for vibrant highlight
-  const [highlightedHearts, setHighlightedHearts] = useState<Record<string, boolean>>({});
+  const [userToggledHeartIds, setUserToggledHeartIds] = useState<Record<string, boolean>>({});
+  const [lastRemovedWishlistId, setLastRemovedWishlistId] = useState<string | null>(null);
 
-  // Carousel pagination for "Popular homes in Kuala Lumpur"
-  const [popularOffset, setPopularOffset] = useState<number>(0);
-
-  // Interactive Modals & Drawers
+  // Modals & Drawers
   const [selectedListing, setSelectedListing] = useState<QaagaListing | null>(null);
+  const [activeGalleryImg, setActiveGalleryImg] = useState<string>('');
   const [modalNights, setModalNights] = useState<number>(2);
   const [modalGuests, setModalGuests] = useState<number>(2);
   const [bookingSuccessCode, setBookingSuccessCode] = useState<string | null>(null);
+  const [customReviewsByListing, setCustomReviewsByListing] = useState<
+    Record<string, ListingReview[]>
+  >({});
+  const [newReviewText, setNewReviewText] = useState<string>('');
+  const [newReviewRating, setNewReviewRating] = useState<number>(5);
 
   const [isHostModalOpen, setIsHostModalOpen] = useState<boolean>(false);
   const [isInboxOpen, setIsInboxOpen] = useState<boolean>(false);
@@ -671,7 +840,10 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
   const [isTripsOpen, setIsTripsOpen] = useState<boolean>(false);
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState<boolean>(false);
   const [isCollectionExplorerOpen, setIsCollectionExplorerOpen] = useState<boolean>(false);
-  const [explorerSort, setExplorerSort] = useState<'recommended' | 'price-asc' | 'price-desc' | 'rating'>('recommended');
+  const [explorerTitle, setExplorerTitle] = useState<string>('Popular homes in Kuala Lumpur');
+  const [explorerSort, setExplorerSort] = useState<
+    'recommended' | 'price-asc' | 'price-desc' | 'rating'
+  >('recommended');
   const [onlyGuestFavorites, setOnlyGuestFavorites] = useState<boolean>(false);
 
   const [toast, setToast] = useState<string | null>(null);
@@ -750,23 +922,134 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
   const [hostPhoto, setHostPhoto] = useState('/assets/kl-ui/kl-1.jpg');
   const [hostGuestFav, setHostGuestFav] = useState(true);
 
-  // Close search popover when clicking outside
+  const showToast = useCallback((msg: string) => {
+    setToast(msg);
+    setTimeout(() => {
+      setToast((prev) => (prev === msg ? null : prev));
+    }, 2800);
+  }, []);
+
+  // Hydrate persisted state safely on client mount
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => {
+    try {
+      const savedWish = localStorage.getItem(STORAGE_KEYS.wishlist);
+      if (savedWish) {
+        const parsed = JSON.parse(savedWish);
+        if (Array.isArray(parsed)) setWishlistIds(parsed);
+      }
+      const savedBookings = localStorage.getItem(STORAGE_KEYS.bookings);
+      if (savedBookings) {
+        const parsed = JSON.parse(savedBookings);
+        if (Array.isArray(parsed)) setBookings(parsed);
+      }
+      const savedThreads = localStorage.getItem(STORAGE_KEYS.threads);
+      if (savedThreads) {
+        const parsed = JSON.parse(savedThreads);
+        if (Array.isArray(parsed) && parsed.length > 0) setThreads(parsed);
+      }
+      const savedCustom = localStorage.getItem(STORAGE_KEYS.customListings);
+      if (savedCustom) {
+        const parsed = JSON.parse(savedCustom);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setListings([...parsed, ...INITIAL_LISTINGS]);
+        }
+      }
+      const savedCurr = localStorage.getItem(STORAGE_KEYS.currency) as CurrencyCode | null;
+      if (savedCurr && CURRENCY_CONFIG[savedCurr]) {
+        setCurrency(savedCurr);
+      }
+    } catch {
+      // ignore storage errors in restricted environments
+    }
+    setHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      localStorage.setItem(STORAGE_KEYS.wishlist, JSON.stringify(wishlistIds));
+    } catch {}
+  }, [wishlistIds, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      localStorage.setItem(STORAGE_KEYS.bookings, JSON.stringify(bookings));
+    } catch {}
+  }, [bookings, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      localStorage.setItem(STORAGE_KEYS.threads, JSON.stringify(threads));
+    } catch {}
+  }, [threads, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      localStorage.setItem(STORAGE_KEYS.currency, currency);
+    } catch {}
+  }, [currency, hydrated]);
+
+  const resetAllFilters = useCallback(() => {
+    setWhereQuery('');
+    setSelectedDates(DATE_OPTIONS[0]);
+    setAdults(0);
+    setChildrenCount(0);
+    setInfants(0);
+    setPets(0);
+    setIsSearchResultsMode(false);
+    setStaySubFilter('all');
+    setExpSubFilter('all');
+    setSrvSubFilter('all');
+    setActiveCategory('all');
+    setActivePopover(null);
+  }, []);
+
+  // Outside click & Escape key listeners + MobileNav event bridge
   useEffect(() => {
     const handleOutside = (e: MouseEvent) => {
       if (searchAreaRef.current && !searchAreaRef.current.contains(e.target as Node)) {
         setActivePopover(null);
       }
+      if (accountMenuRef.current && !accountMenuRef.current.contains(e.target as Node)) {
+        setIsAccountMenuOpen(false);
+      }
     };
-    document.addEventListener('mousedown', handleOutside);
-    return () => document.removeEventListener('mousedown', handleOutside);
-  }, []);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setActivePopover(null);
+        setIsAccountMenuOpen(false);
+        setSelectedListing(null);
+        setIsHostModalOpen(false);
+        setIsInboxOpen(false);
+        setIsTripsOpen(false);
+        setIsCollectionExplorerOpen(false);
+      }
+    };
+    const onHomeReset = () => resetAllFilters();
+    const onOpenInbox = () => setIsInboxOpen(true);
+    const onOpenHost = () => setIsHostModalOpen(true);
+    const onOpenTrips = () => setIsTripsOpen(true);
 
-  const showToast = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => {
-      setToast((prev) => (prev === msg ? null : prev));
-    }, 2500);
-  };
+    document.addEventListener('mousedown', handleOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('qaaga:home-reset', onHomeReset);
+    window.addEventListener('qaaga:open-inbox', onOpenInbox);
+    window.addEventListener('qaaga:open-host', onOpenHost);
+    window.addEventListener('qaaga:open-trips', onOpenTrips);
+
+    return () => {
+      document.removeEventListener('mousedown', handleOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('qaaga:home-reset', onHomeReset);
+      window.removeEventListener('qaaga:open-inbox', onOpenInbox);
+      window.removeEventListener('qaaga:open-host', onOpenHost);
+      window.removeEventListener('qaaga:open-trips', onOpenTrips);
+    };
+  }, [resetAllFilters]);
 
   const totalGuests = adults + childrenCount;
   const activeNights = selectedDates.nights || 2;
@@ -781,68 +1064,84 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
     return `${symbol}${converted.toLocaleString()}`;
   };
 
-  const matchesSearch = (item: QaagaListing) => {
-    if (whereQuery.trim() && whereQuery !== 'All Kuala Lumpur') {
-      const q = whereQuery.toLowerCase().trim();
-      const hit =
-        item.title.toLowerCase().includes(q) ||
-        item.area.toLowerCase().includes(q) ||
-        item.city.toLowerCase().includes(q);
-      if (!hit) return false;
-    }
-    if (totalGuests > 0 && item.maxGuests < totalGuests) {
-      return false;
-    }
-    return true;
-  };
+  const matchesSearch = useCallback(
+    (item: QaagaListing) => {
+      if (whereQuery.trim() && whereQuery !== 'All Kuala Lumpur') {
+        const q = whereQuery.toLowerCase().trim();
+        const hit =
+          item.title.toLowerCase().includes(q) ||
+          item.area.toLowerCase().includes(q) ||
+          item.city.toLowerCase().includes(q) ||
+          item.subType.toLowerCase().includes(q);
+        if (!hit) return false;
+      }
+      if (totalGuests > 0 && item.maxGuests < totalGuests) {
+        return false;
+      }
+      return true;
+    },
+    [whereQuery, totalGuests]
+  );
 
   const recentListings = useMemo(() => {
     const mapped = recentIds
       .map((id) => listings.find((l) => l.id === id))
       .filter((l): l is QaagaListing => Boolean(l));
-    const filtered = mapped.filter((item) => {
-      if (activeCategory !== 'all' && item.category !== activeCategory) return false;
-      return matchesSearch(item);
-    });
-    return filtered.slice(0, 6);
-  }, [recentIds, listings, activeCategory, whereQuery, totalGuests]);
+    return mapped.filter(matchesSearch);
+  }, [recentIds, listings, matchesSearch]);
 
   const wishlistListings = useMemo(() => {
     const mapped = wishlistIds
       .map((id) => listings.find((l) => l.id === id))
       .filter((l): l is QaagaListing => Boolean(l));
-    return mapped.filter((item) => {
+    return mapped.filter(matchesSearch);
+  }, [wishlistIds, listings, matchesSearch]);
+
+  const popularKLListings = useMemo(() => {
+    return listings.filter((item) => item.inPopularKL && matchesSearch(item));
+  }, [listings, matchesSearch]);
+
+  const offerListings = useMemo(() => {
+    return listings.filter((item) => Boolean(item.offerPercent) && matchesSearch(item));
+  }, [listings, matchesSearch]);
+
+  const stayTabListings = useMemo(() => {
+    let base = listings.filter((item) => item.category === 'stay' && matchesSearch(item));
+    if (staySubFilter === 'apartments') base = base.filter((i) => i.subType === 'apartments');
+    if (staySubFilter === 'rooms') base = base.filter((i) => i.subType === 'rooms');
+    if (staySubFilter === 'condos') base = base.filter((i) => i.subType === 'condos');
+    if (staySubFilter === 'favorites') base = base.filter((i) => i.guestFavorite);
+    if (staySubFilter === 'under100') base = base.filter((i) => i.twoNightPriceUsd <= 100);
+    return base;
+  }, [listings, staySubFilter, matchesSearch]);
+
+  const experiencesTabListings = useMemo(() => {
+    let base = listings.filter((item) => item.category === 'experiences' && matchesSearch(item));
+    if (expSubFilter !== 'all') base = base.filter((i) => i.subType === expSubFilter);
+    return base;
+  }, [listings, expSubFilter, matchesSearch]);
+
+  const servicesTabListings = useMemo(() => {
+    let base = listings.filter((item) => item.category === 'services' && matchesSearch(item));
+    if (srvSubFilter !== 'all') base = base.filter((i) => i.subType === srvSubFilter);
+    return base;
+  }, [listings, srvSubFilter, matchesSearch]);
+
+  const allMatchingSearchListings = useMemo(() => {
+    return listings.filter((item) => {
       if (activeCategory !== 'all' && item.category !== activeCategory) return false;
       return matchesSearch(item);
     });
-  }, [wishlistIds, listings, activeCategory, whereQuery, totalGuests]);
-
-  const popularSource = useMemo(() => {
-    return listings.filter((item) => {
-      if (activeCategory === 'all') {
-        return item.inPopularKL && matchesSearch(item);
-      }
-      return item.category === activeCategory && matchesSearch(item);
-    });
-  }, [listings, activeCategory, whereQuery, totalGuests]);
-
-  const visiblePopularListings = useMemo(() => {
-    if (popularSource.length <= 6) return popularSource;
-    const safeOffset = popularOffset % popularSource.length;
-    return [
-      ...popularSource.slice(safeOffset),
-      ...popularSource.slice(0, safeOffset),
-    ].slice(0, 6);
-  }, [popularSource, popularOffset]);
-
-  const categorySpecificListings = useMemo(() => {
-    return listings.filter(
-      (item) => item.category === activeCategory && matchesSearch(item)
-    );
-  }, [listings, activeCategory, whereQuery, totalGuests]);
+  }, [listings, activeCategory, matchesSearch]);
 
   const explorerListings = useMemo(() => {
     let base = listings.filter((item) => {
+      if (explorerTitle === 'Saved Wishlist') {
+        return wishlistIds.includes(item.id);
+      }
+      if (explorerTitle === 'Special Offers') {
+        return Boolean(item.offerPercent);
+      }
       if (activeCategory !== 'all' && item.category !== activeCategory) return false;
       if (onlyGuestFavorites && !item.guestFavorite) return false;
       return matchesSearch(item);
@@ -855,7 +1154,15 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
       base = [...base].sort((a, b) => parseFloat(b.rating) - parseFloat(a.rating));
     }
     return base;
-  }, [listings, activeCategory, onlyGuestFavorites, explorerSort, whereQuery, totalGuests]);
+  }, [
+    listings,
+    explorerTitle,
+    wishlistIds,
+    activeCategory,
+    onlyGuestFavorites,
+    explorerSort,
+    matchesSearch,
+  ]);
 
   const hasActiveFilters =
     Boolean(whereQuery.trim() && whereQuery !== 'All Kuala Lumpur') ||
@@ -864,47 +1171,85 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
     infants > 0 ||
     pets > 0;
 
-  const resetAllFilters = () => {
-    setWhereQuery('');
-    setSelectedDates(DATE_OPTIONS[0]);
-    setAdults(0);
-    setChildrenCount(0);
-    setInfants(0);
-    setPets(0);
-    setActiveCategory('all');
-    setActivePopover(null);
+  // Smooth horizontal scroll helper for any carousel row
+  const scrollCarousel = (
+    ref: React.RefObject<HTMLDivElement | null>,
+    direction: 'left' | 'right'
+  ) => {
+    const el = ref.current;
+    if (!el) return;
+    const step = Math.max(280, Math.round(el.clientWidth * 0.68));
+    const maxScroll = el.scrollWidth - el.clientWidth;
+
+    if (direction === 'right') {
+      if (el.scrollLeft >= maxScroll - 12) {
+        el.scrollTo({ left: 0, behavior: 'smooth' });
+      } else {
+        el.scrollBy({ left: step, behavior: 'smooth' });
+      }
+    } else {
+      if (el.scrollLeft <= 12) {
+        el.scrollTo({ left: maxScroll, behavior: 'smooth' });
+      } else {
+        el.scrollBy({ left: -step, behavior: 'smooth' });
+      }
+    }
   };
 
-  const handleToggleWishlist = (
-    e: React.MouseEvent,
-    item: QaagaListing,
-    fromWishlistRow = false
-  ) => {
+  // Immediate 1-click Wishlist toggle
+  const handleToggleWishlist = (e: React.MouseEvent, item: QaagaListing) => {
     e.stopPropagation();
-    const isCurrentlyInWishlist = wishlistIds.includes(item.id);
-
-    if (fromWishlistRow || (isCurrentlyInWishlist && highlightedHearts[item.id])) {
+    const exists = wishlistIds.includes(item.id);
+    if (exists) {
       setWishlistIds((prev) => prev.filter((id) => id !== item.id));
-      setHighlightedHearts((prev) => ({ ...prev, [item.id]: false }));
+      setUserToggledHeartIds((prev) => ({ ...prev, [item.id]: false }));
+      setLastRemovedWishlistId(item.id);
       showToast(`Removed "${item.title}" from Wishlist`);
-    } else if (!isCurrentlyInWishlist) {
-      setWishlistIds((prev) => [item.id, ...prev]);
-      setHighlightedHearts((prev) => ({ ...prev, [item.id]: true }));
-      showToast(`Saved "${item.title}" to Wishlist`);
     } else {
-      // Already in default 6 Wishlist: first click highlights active saved state, second removes
-      setHighlightedHearts((prev) => ({ ...prev, [item.id]: true }));
-      showToast(`"${item.title}" is saved in your Wishlist`);
+      setWishlistIds((prev) => [item.id, ...prev]);
+      setUserToggledHeartIds((prev) => ({ ...prev, [item.id]: true }));
+      setLastRemovedWishlistId(null);
+      showToast(`Saved "${item.title}" to Wishlist`);
     }
+  };
+
+  const handleUndoRemoveWishlist = () => {
+    if (!lastRemovedWishlistId) return;
+    setWishlistIds((prev) =>
+      prev.includes(lastRemovedWishlistId) ? prev : [lastRemovedWishlistId, ...prev]
+    );
+    setUserToggledHeartIds((prev) => ({ ...prev, [lastRemovedWishlistId]: true }));
+    setLastRemovedWishlistId(null);
+    setToast(null);
   };
 
   const handleOpenListing = (item: QaagaListing) => {
     setSelectedListing(item);
+    setActiveGalleryImg(item.image);
     setModalNights(activeNights);
-    setModalGuests(Math.max(1, totalGuests || 2));
+    setModalGuests(Math.max(1, Math.min(item.maxGuests, totalGuests || 2)));
     setBookingSuccessCode(null);
-    // Promote to Recently viewed
-    setRecentIds((prev) => [item.id, ...prev.filter((id) => id !== item.id)].slice(0, 8));
+    setNewReviewText('');
+    setRecentIds((prev) => [item.id, ...prev.filter((id) => id !== item.id)].slice(0, 10));
+  };
+
+  const handleExecuteSearch = () => {
+    if (!hasActiveFilters && activePopover === null) {
+      setActivePopover('where');
+      setTimeout(() => whereInputRef.current?.focus(), 40);
+      return;
+    }
+    setActivePopover(null);
+    if (hasActiveFilters) {
+      setIsSearchResultsMode(true);
+      showToast(
+        `Found ${allMatchingSearchListings.length} matching listing${
+          allMatchingSearchListings.length === 1 ? '' : 's'
+        }`
+      );
+    } else {
+      setIsSearchResultsMode(false);
+    }
   };
 
   const handleConfirmBooking = () => {
@@ -921,7 +1266,7 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
       title: selectedListing.title,
       area: `${selectedListing.area}, ${selectedListing.city}`,
       image: selectedListing.image,
-      checkInLabel: selectedDates.display || `Nov 14 – Nov ${14 + modalNights}`,
+      checkInLabel: selectedDates.display || `${calendarMonth} 14 – ${calendarMonth} ${14 + modalNights}`,
       nights: modalNights,
       guests: modalGuests,
       totalUsd,
@@ -931,6 +1276,32 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
     setBookings((prev) => [newBooking, ...prev]);
     setBookingSuccessCode(code);
     showToast(`Reservation confirmed (${code})!`);
+  };
+
+  const handleAddReview = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedListing || !newReviewText.trim()) return;
+    const created: ListingReview = {
+      id: `rev-${Date.now()}`,
+      author: currentUser?.fullName || 'Verified Guest',
+      date: 'Just now',
+      rating: newReviewRating,
+      comment: newReviewText.trim(),
+    };
+    setCustomReviewsByListing((prev) => ({
+      ...prev,
+      [selectedListing.id]: [created, ...(prev[selectedListing.id] || [])],
+    }));
+    setListings((prev) =>
+      prev.map((l) =>
+        l.id === selectedListing.id ? { ...l, reviewsCount: l.reviewsCount + 1 } : l
+      )
+    );
+    setSelectedListing((prev) =>
+      prev ? { ...prev, reviewsCount: prev.reviewsCount + 1 } : null
+    );
+    setNewReviewText('');
+    showToast('Your review has been posted!');
   };
 
   const handleMessageHostFromListing = (item: QaagaListing) => {
@@ -985,7 +1356,6 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
     );
     setReplyDraft('');
 
-    // Helpful instant host acknowledgement
     setTimeout(() => {
       setThreads((prev) =>
         prev.map((t) =>
@@ -997,7 +1367,7 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
                   {
                     id: `h-${Date.now()}`,
                     sender: 'host',
-                    text: 'Thanks for your message! Those dates are available and early luggage drop-off is welcome.',
+                    text: 'Thanks for reaching out! Those dates are open and self check-in details will be sent right after booking.',
                     time: 'Just now',
                   },
                 ],
@@ -1005,7 +1375,7 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
             : t
         )
       );
-    }, 850);
+    }, 700);
   };
 
   const handleSelectCustomCalendarDay = (day: number) => {
@@ -1016,9 +1386,9 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
       const nights = day - customCheckInDay;
       setCustomCheckOutDay(day);
       setSelectedDates({
-        id: `custom-${customCheckInDay}-${day}`,
-        label: `Nov ${customCheckInDay} – ${day}`,
-        display: `Nov ${customCheckInDay} – ${day}`,
+        id: `custom-${calendarMonth}-${customCheckInDay}-${day}`,
+        label: `${calendarMonth} ${customCheckInDay} – ${day}`,
+        display: `${calendarMonth} ${customCheckInDay} – ${day}`,
         nights,
         tag: `${nights} night${nights > 1 ? 's' : ''}`,
       });
@@ -1037,93 +1407,124 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
       title: hostTitle.trim(),
       area: hostArea,
       city: 'Kuala Lumpur',
+      subType: hostCategory === 'stay' ? 'apartments' : hostCategory === 'experiences' ? 'skyline' : 'care',
       twoNightPriceUsd: parsedPrice,
       rating: '5.0',
       reviewsCount: 1,
       guestFavorite: hostGuestFav,
       image: hostPhoto,
+      gallery: [hostPhoto, '/assets/kl-ui/kl-1.jpg'],
       category: hostCategory,
       maxGuests: 4,
       bedrooms:
         hostCategory === 'stay'
           ? '1 queen bed · Private bath'
           : 'Hosted session · Instant confirmation',
-      hostName: 'You (Host)',
+      hostName: currentUser?.fullName || 'You (Host)',
       hostYears: 1,
       amenities: ['Verified Host', 'High-Speed Wi-Fi', 'Instant Book', 'Air Conditioning'],
-      description: `Newly listed ${hostCategory} in ${hostArea}, Kuala Lumpur with flexible check-in and verified amenities.`,
+      description: `Newly published ${hostCategory} in ${hostArea}, Kuala Lumpur with flexible check-in and verified amenities.`,
       inPopularKL: true,
     };
 
-    setListings((prev) => [created, ...prev]);
-    setRecentIds((prev) => [created.id, ...prev.slice(0, 5)]);
+    setListings((prev) => {
+      const updated = [created, ...prev];
+      try {
+        const customOnly = updated.filter((i) => i.id.startsWith('host-'));
+        localStorage.setItem(STORAGE_KEYS.customListings, JSON.stringify(customOnly));
+      } catch {}
+      return updated;
+    });
+    setRecentIds((prev) => [created.id, ...prev]);
     setWishlistIds((prev) => [created.id, ...prev]);
-    setHighlightedHearts((prev) => ({ ...prev, [created.id]: true }));
-    setActiveCategory(hostCategory === 'stay' ? 'all' : hostCategory);
+    setUserToggledHeartIds((prev) => ({ ...prev, [created.id]: true }));
+    setActiveCategory(hostCategory);
     setHostTitle('');
     setIsHostModalOpen(false);
     showToast(`Published "${created.title}" live on qaaga!`);
   };
 
-  const renderCard = (item: QaagaListing, inWishlistSection = false) => {
-    const isHighlighted = Boolean(highlightedHearts[item.id]);
-    const isInWishlist = wishlistIds.includes(item.id);
+  const renderCard = (
+    item: QaagaListing,
+    contextKey: string,
+    carouselItem = false,
+    closeExplorerFirst = false
+  ) => {
+    const isSaved = wishlistIds.includes(item.id);
+    const isVividHeart =
+      isSaved &&
+      (Boolean(userToggledHeartIds[item.id]) ||
+        contextKey === 'stay' ||
+        contextKey === 'search' ||
+        contextKey === 'explorer');
     const nightsText =
       item.category === 'stay'
         ? `for ${activeNights} night${activeNights > 1 ? 's' : ''}`
-        : 'per session';
+        : 'per booking';
+
+    const openCard = () => {
+      if (closeExplorerFirst) {
+        setIsCollectionExplorerOpen(false);
+      }
+      handleOpenListing(item);
+    };
 
     return (
-      <div
-        key={`${inWishlistSection ? 'wish' : 'card'}-${item.id}`}
-        onClick={() => handleOpenListing(item)}
-        role="button"
-        tabIndex={0}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            handleOpenListing(item);
-          }
-        }}
-        className="group flex flex-col text-left cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6610] rounded-[20px]"
+      <article
+        key={`${contextKey}-${item.id}`}
+        className={`group relative flex flex-col text-left rounded-[20px] ${
+          carouselItem
+            ? 'snap-start shrink-0 w-[46%] sm:w-[31%] lg:w-[calc((100%-100px)/6)]'
+            : ''
+        }`}
       >
         {/* Rounded Square Photo Frame matching qaaga_d3ef7a3c.png */}
         <div className="relative w-full aspect-[1.05/1] rounded-[20px] overflow-hidden bg-slate-100">
-          <ListingImage
-            src={item.image}
-            alt={item.title}
-            className="w-full h-full object-cover object-center scale-[1.035] group-hover:scale-[1.075] transition-transform duration-300"
-          />
+          <button
+            type="button"
+            aria-label={`View details for ${item.title}`}
+            onClick={openCard}
+            className="block w-full h-full cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#FF6610]"
+          >
+            <ListingImage
+              src={item.image}
+              alt={item.title}
+              className="w-full h-full object-cover object-center scale-[1.035] group-hover:scale-[1.075] transition-transform duration-300"
+            />
+          </button>
 
-          {/* Top-Left "Guest favorite" Pill (only on items marked guestFavorite) */}
+          {/* Top-Left "Guest favorite" Pill */}
           {item.guestFavorite && (
-            <span className="absolute top-3 left-3 bg-white/95 backdrop-blur-xs text-slate-900 text-[12px] font-semibold px-3 py-1 rounded-full shadow-[0_2px_8px_rgba(0,0,0,0.12)] leading-tight">
+            <span className="absolute top-3 left-3 z-10 bg-white/95 backdrop-blur-xs text-slate-900 text-[12px] font-semibold px-3 py-1 rounded-full shadow-[0_2px_8px_rgba(0,0,0,0.12)] leading-tight pointer-events-none">
               Guest favorite
             </span>
           )}
 
-          {/* Top-Right Interactive Heart Button */}
+          {/* Top-Right 1-Click Interactive Heart Button */}
           <button
             type="button"
+            title={isSaved ? 'Remove from Wishlist' : 'Save to Wishlist'}
             aria-label={
-              isInWishlist ? `Manage ${item.title} in wishlist` : `Save ${item.title} to wishlist`
+              isSaved ? `Remove ${item.title} from wishlist` : `Save ${item.title} to wishlist`
             }
-            onClick={(e) => handleToggleWishlist(e, item, inWishlistSection)}
-            className="absolute top-2 right-2 min-w-[40px] min-h-[40px] flex items-center justify-center rounded-full z-10 cursor-pointer active:scale-90 transition-transform"
+            onClick={(e) => handleToggleWishlist(e, item)}
+            className="absolute top-2 right-2 z-20 min-w-[40px] min-h-[40px] flex items-center justify-center rounded-full cursor-pointer hover:scale-110 active:scale-90 transition-transform"
           >
             <Heart
               size={22}
               className={
-                isHighlighted
+                isVividHeart
                   ? 'fill-[#FF6610] text-white stroke-[2] drop-shadow-[0_1px_4px_rgba(0,0,0,0.3)]'
-                  : 'fill-black/50 hover:fill-black/65 text-white stroke-[2] drop-shadow-[0_1px_4px_rgba(0,0,0,0.28)]'
+                  : isSaved
+                  ? 'fill-black/50 hover:fill-[#FF6610] text-white stroke-[2] drop-shadow-[0_1px_4px_rgba(0,0,0,0.28)]'
+                  : 'fill-black/20 hover:fill-[#FF6610] text-white/95 stroke-[2] drop-shadow-[0_1px_4px_rgba(0,0,0,0.28)]'
               }
             />
           </button>
         </div>
 
         {/* Clean Unboxed Metadata Underneath Photo */}
-        <div className="pt-2.5 px-0.5 space-y-0.5">
+        <div onClick={openCard} className="pt-2.5 px-0.5 space-y-0.5 cursor-pointer">
           <h3 className="text-[14.5px] font-semibold text-slate-900 leading-snug truncate">
             {item.title}
           </h3>
@@ -1136,7 +1537,7 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
             <span>{item.rating}</span>
           </div>
         </div>
-      </div>
+      </article>
     );
   };
 
@@ -1149,32 +1550,138 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
   }, [totalGuests, infants, pets]);
 
   const activeThread = threads.find((t) => t.id === activeThreadId) || threads[0];
+  const activeModalReviews = selectedListing
+    ? [...(customReviewsByListing[selectedListing.id] || []), ...DEFAULT_REVIEWS]
+    : [];
+
+  const renderMobileWideCard = (
+    item: QaagaListing,
+    contextKey: string,
+    showOfferBadge = false,
+    gridItem = false
+  ) => {
+    const isSaved = wishlistIds.includes(item.id);
+    const isVividHeart = isSaved && Boolean(userToggledHeartIds[item.id]);
+
+    return (
+      <article
+        key={`mob-${contextKey}-${item.id}`}
+        className={`group relative flex flex-col text-left rounded-[16px] ${
+          gridItem ? 'w-full' : 'snap-start shrink-0 w-[calc(50%-6px)]'
+        }`}
+      >
+        <div className="relative w-full aspect-[1.48/1] rounded-[16px] overflow-hidden bg-slate-100">
+          <button
+            type="button"
+            aria-label={`View details for ${item.title}`}
+            onClick={() => handleOpenListing(item)}
+            className="block w-full h-full cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#FF6B18]"
+          >
+            <ListingImage
+              src={item.image}
+              alt={item.title}
+              className="w-full h-full object-cover object-center scale-[1.035] transition-transform duration-300"
+            />
+          </button>
+
+          {showOfferBadge && item.offerPercent ? (
+            <span className="absolute top-2 left-2 z-10 bg-white/95 text-[#FF6B18] text-[10px] font-bold px-2 py-0.5 rounded-full shadow-xs leading-tight pointer-events-none">
+              {item.offerPercent}% OFF
+            </span>
+          ) : item.guestFavorite ? (
+            <span className="absolute top-2 left-2 z-10 bg-white/95 text-slate-900 text-[10px] font-semibold px-2 py-0.5 rounded-full shadow-xs leading-tight pointer-events-none">
+              Guest favorite
+            </span>
+          ) : null}
+
+          <button
+            type="button"
+            title={isSaved ? 'Remove from Wishlist' : 'Save to Wishlist'}
+            aria-label={
+              isSaved ? `Remove ${item.title} from wishlist` : `Save ${item.title} to wishlist`
+            }
+            onClick={(e) => handleToggleWishlist(e, item)}
+            className="absolute top-1.5 right-1.5 z-20 min-w-[38px] min-h-[38px] flex items-center justify-center rounded-full cursor-pointer active:scale-90 transition-transform"
+          >
+            <Heart
+              size={19}
+              className={
+                isVividHeart
+                  ? 'fill-[#FF6B18] text-white stroke-[2] drop-shadow-[0_1px_3px_rgba(0,0,0,0.3)]'
+                  : isSaved
+                  ? 'fill-black/50 text-white stroke-[2] drop-shadow-[0_1px_3px_rgba(0,0,0,0.28)]'
+                  : 'fill-black/20 text-white/95 stroke-[2] drop-shadow-[0_1px_3px_rgba(0,0,0,0.28)]'
+              }
+            />
+          </button>
+        </div>
+
+        <div
+          onClick={() => handleOpenListing(item)}
+          className="pt-1.5 px-0.5 space-y-0.5 cursor-pointer"
+        >
+          <h3 className="text-[12.5px] font-semibold text-slate-900 leading-tight truncate">
+            {item.title}
+          </h3>
+          <div className="flex items-center gap-1 text-[11px] text-slate-500 tabular-nums leading-tight">
+            <span className={showOfferBadge && item.offerPercent ? 'text-[#FF6B18] font-semibold' : ''}>
+              {formatStayPrice(item.twoNightPriceUsd)}
+            </span>
+            {showOfferBadge && item.originalTwoNightUsd ? (
+              <span className="line-through text-slate-400">
+                {formatStayPrice(item.originalTwoNightUsd)}
+              </span>
+            ) : (
+              <span>
+                {item.category === 'stay' ? `for ${activeNights}n` : 'booking'}
+              </span>
+            )}
+            <span aria-hidden="true">·</span>
+            <Star size={10} className="fill-slate-500 text-slate-500 shrink-0 -mt-px" />
+            <span>{item.rating}</span>
+          </div>
+        </div>
+      </article>
+    );
+  };
 
   return (
-    <div className="min-h-screen bg-white text-slate-900 pb-16 md:pb-14">
+    <div className="min-h-screen bg-white text-slate-900 pb-24 md:pb-14">
       {/* ===================================================================== */}
-      {/* TOP HEADER + SEARCH SECTION + BOTTOM HAIRLINE DIVIDER                 */}
+      {/* TOP HEADER + SEARCH SECTION (Mobile: final_design | Desktop: kl-ui)   */}
       {/* ===================================================================== */}
-      <div className="border-b border-slate-200/90 bg-white">
-        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-12 pt-4 sm:pt-5 pb-5 sm:pb-6 space-y-4 sm:space-y-5">
-          {/* Row 1: Brand Wordmark — 4 Illustrated Category Tabs — Host & Utilities */}
-          <header className="flex flex-wrap items-center justify-between gap-4">
-            {/* Zone 1: Left Brand Wordmark ("qaaga") */}
-            <button
-              type="button"
-              onClick={() => {
-                resetAllFilters();
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }}
-              className="text-[26px] sm:text-[28px] font-bold tracking-[-0.035em] text-[#FF6610] leading-none cursor-pointer whitespace-nowrap shrink-0"
-            >
-              qaaga
-            </button>
+      <div className="md:border-b md:border-slate-200/90 bg-white">
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-12 pt-4 md:pt-5 pb-2 md:pb-6 space-y-3.5 md:space-y-5">
+          {/* Row 1: Brand Wordmark — 4 Illustrated Category Tabs — Desktop Host & Utilities */}
+          <header className="flex flex-col md:flex-row md:flex-wrap md:items-center md:justify-between gap-3 md:gap-4">
+            {/* Zone 1: Left Brand Wordmark ("qaaga.com" on Mobile, "qaaga" on Desktop) */}
+            <div className="flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => {
+                  resetAllFilters();
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className="leading-none cursor-pointer whitespace-nowrap shrink-0 text-left"
+              >
+                <span className="md:hidden inline-flex items-baseline">
+                  <span className="text-[31px] font-bold tracking-[-0.035em] text-[#FF6B18]">
+                    qaaga
+                  </span>
+                  <span className="text-[21px] font-bold tracking-[-0.02em] text-[#FF6B18]">
+                    .com
+                  </span>
+                </span>
+                <span className="hidden md:inline text-[28px] font-bold tracking-[-0.035em] text-[#FF6610]">
+                  qaaga
+                </span>
+              </button>
+            </div>
 
-            {/* Zone 2: Center 4 Category Tabs with Exact 3D Icons & Active Bottom Line */}
+            {/* Zone 2: 4 Category Tabs with Exact 3D Icons & Active Bottom Line */}
             <nav
               aria-label="Listing categories"
-              className="order-3 md:order-2 w-full md:w-auto flex items-center justify-around sm:justify-center gap-5 sm:gap-9 lg:gap-11 overflow-x-auto scrollbar-none border-t md:border-t-0 border-slate-100 pt-2.5 md:pt-0"
+              className="w-full md:w-auto flex items-center justify-between md:justify-center gap-2 sm:gap-7 md:gap-9 lg:gap-11 overflow-x-auto scrollbar-none pt-0.5 md:pt-0"
             >
               {CATEGORY_TABS.map((tab) => {
                 const isActive = activeCategory === tab.id;
@@ -1184,12 +1691,13 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
                     type="button"
                     onClick={() => {
                       setActiveCategory(tab.id);
-                      setPopularOffset(0);
+                      setIsSearchResultsMode(false);
+                      setActivePopover(null);
                     }}
-                    className={`relative flex items-center gap-2 sm:gap-2.5 pb-2.5 pt-1 whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
+                    className={`relative flex items-center gap-1.5 sm:gap-2.5 pb-2 md:pb-2.5 pt-1 whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
                       isActive
-                        ? 'text-slate-950 font-semibold'
-                        : 'text-slate-500 hover:text-slate-800 font-semibold'
+                        ? 'text-slate-950 font-bold md:font-semibold'
+                        : 'text-[#666666] md:text-slate-500 hover:text-slate-900 font-bold md:font-semibold'
                     }`}
                   >
                     <img
@@ -1197,15 +1705,14 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
                       alt=""
                       aria-hidden="true"
                       referrerPolicy="no-referrer"
-                      className={`w-8 h-8 sm:w-9 sm:h-9 object-contain transition-transform duration-150 ${
-                        isActive ? 'scale-105' : 'opacity-90 hover:opacity-100'
+                      className={`w-8 h-8 md:w-9 md:h-9 object-contain transition-transform duration-150 ${
+                        isActive ? 'scale-105' : 'opacity-95 hover:opacity-100'
                       }`}
                     />
-                    <span className="text-[14px] sm:text-[14.5px] tracking-[-0.01em]">
+                    <span className="text-[12.5px] sm:text-[14px] md:text-[14.5px] tracking-[-0.01em]">
                       {tab.label}
                     </span>
 
-                    {/* Exact Active Bottom Underline */}
                     {isActive && (
                       <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-slate-900 rounded-full" />
                     )}
@@ -1214,12 +1721,12 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
               })}
             </nav>
 
-            {/* Zone 3: Right "become a host" + Messages(1) + Trips(2) + Avatar */}
-            <div className="order-2 md:order-3 flex items-center gap-3.5 sm:gap-5 shrink-0">
+            {/* Zone 3: Desktop Right "become a host" + Messages(1) + Trips(2) + Avatar */}
+            <div className="hidden md:flex items-center gap-5 shrink-0">
               <button
                 type="button"
                 onClick={() => setIsHostModalOpen(true)}
-                className="hidden sm:inline-flex items-center text-[15px] text-slate-800 hover:text-slate-950 font-normal px-2.5 py-1.5 rounded-full hover:bg-slate-100/80 transition-colors whitespace-nowrap cursor-pointer"
+                className="inline-flex items-center text-[15px] text-slate-800 hover:text-slate-950 font-normal px-2.5 py-1.5 rounded-full hover:bg-slate-100/80 transition-colors whitespace-nowrap cursor-pointer"
               >
                 become a host
               </button>
@@ -1236,12 +1743,9 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
                 }}
                 className="relative min-w-[40px] min-h-[40px] flex items-center justify-center rounded-full hover:bg-slate-100 transition-colors cursor-pointer"
               >
-                <Mail
-                  size={23}
-                  className="fill-slate-400/85 text-white stroke-[1.6]"
-                />
+                <Mail size={23} className="fill-slate-400/85 text-white stroke-[1.6]" />
                 <span className="absolute top-0.5 right-0.5 text-[14px] font-bold text-[#FF6610] leading-none tabular-nums">
-                  {unreadMessagesCount > 0 ? unreadMessagesCount : 1}
+                  {unreadMessagesCount > 0 ? unreadMessagesCount : threads.length}
                 </span>
               </button>
 
@@ -1252,17 +1756,14 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
                 onClick={() => setIsTripsOpen(true)}
                 className="relative min-w-[40px] min-h-[40px] flex items-center justify-center rounded-full hover:bg-slate-100 transition-colors cursor-pointer"
               >
-                <Luggage
-                  size={23}
-                  className="fill-slate-400/85 text-white stroke-[1.6]"
-                />
+                <Luggage size={23} className="fill-slate-400/85 text-white stroke-[1.6]" />
                 <span className="absolute top-0.5 right-0.5 text-[14px] font-bold text-[#FF6610] leading-none tabular-nums">
                   {bookings.length}
                 </span>
               </button>
 
               {/* User Profile Avatar Menu */}
-              <div className="relative">
+              <div ref={accountMenuRef} className="relative">
                 <button
                   type="button"
                   aria-label="Account menu"
@@ -1273,11 +1774,13 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
                 </button>
 
                 {isAccountMenuOpen && (
-                  <div className="absolute right-0 mt-2.5 w-64 bg-white rounded-2xl shadow-[0_12px_36px_rgba(15,23,42,0.14)] border border-slate-200/90 py-2 z-50 text-left">
+                  <div className="absolute right-0 mt-2.5 w-72 bg-white rounded-2xl shadow-[0_12px_36px_rgba(15,23,42,0.16)] border border-slate-200/90 py-2 z-50 text-left">
                     <div className="px-4 py-2.5 border-b border-slate-100">
-                      <p className="text-xs font-bold text-slate-900">Qaaga Traveler</p>
+                      <p className="text-xs font-bold text-slate-900 truncate">
+                        {currentUser?.fullName || 'Qaaga Verified Guest'}
+                      </p>
                       <p className="text-[11px] text-slate-500 truncate">
-                        Kuala Lumpur · Verified Guest
+                        {currentUser?.email || 'Kuala Lumpur · Super Marketplace'}
                       </p>
                     </div>
 
@@ -1292,7 +1795,7 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
                       >
                         <span>Messages</span>
                         <span className="text-xs font-bold text-[#FF6610] tabular-nums">
-                          {unreadMessagesCount || 1}
+                          {threads.length}
                         </span>
                       </button>
 
@@ -1314,12 +1817,13 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
                         type="button"
                         onClick={() => {
                           setIsAccountMenuOpen(false);
+                          setExplorerTitle('Saved Wishlist');
                           setIsCollectionExplorerOpen(true);
                         }}
                         className="w-full flex items-center justify-between px-3 py-2 rounded-xl hover:bg-slate-50 font-medium cursor-pointer"
                       >
-                        <span>Saved Wishlist</span>
-                        <span className="text-xs text-slate-400 tabular-nums">
+                        <span>Wishlist</span>
+                        <span className="text-xs font-semibold text-slate-500 tabular-nums">
                           {wishlistIds.length}
                         </span>
                       </button>
@@ -1332,7 +1836,7 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
                         }}
                         className="w-full text-left px-3 py-2 rounded-xl hover:bg-slate-50 font-medium cursor-pointer"
                       >
-                        Become a host
+                        Become a host (Add listing)
                       </button>
                     </div>
 
@@ -1348,7 +1852,7 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
                             type="button"
                             onClick={() => {
                               setCurrency(code);
-                              showToast(`Prices switched to ${CURRENCY_CONFIG[code].label}`);
+                              showToast(`Currency updated to ${CURRENCY_CONFIG[code].label}`);
                             }}
                             className={`py-1 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer ${
                               currency === code
@@ -1362,27 +1866,109 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
                       </div>
                     </div>
 
-                    <div className="p-1.5 border-t border-slate-100 space-y-0.5 text-xs text-slate-600">
+                    {/* Full QAAGA Platform Modules */}
+                    <div className="p-1.5 border-t border-slate-100 space-y-0.5 text-xs text-slate-700">
+                      <p className="px-3 pt-1 pb-0.5 text-[10px] font-bold text-slate-400">
+                        Qaaga Ecosystem
+                      </p>
                       <button
                         type="button"
                         onClick={() => {
                           setIsAccountMenuOpen(false);
-                          onNavigate('customer_dashboard');
+                          onNavigate('hotels');
                         }}
-                        className="w-full text-left px-3 py-1.5 rounded-lg hover:bg-slate-50 cursor-pointer"
+                        className="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-slate-50 cursor-pointer"
                       >
-                        Customer Dashboard
+                        <Building2 size={14} className="text-[#FF6610]" />
+                        <span>Hotels & Resorts Directory</span>
                       </button>
                       <button
                         type="button"
                         onClick={() => {
                           setIsAccountMenuOpen(false);
-                          onNavigate('admin_portal');
+                          onNavigate('service_request');
                         }}
-                        className="w-full text-left px-3 py-1.5 rounded-lg hover:bg-slate-50 cursor-pointer"
+                        className="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-slate-50 cursor-pointer"
                       >
-                        Admin Control Tower
+                        <Wrench size={14} className="text-[#FF6610]" />
+                        <span>On-Demand Home Services</span>
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsAccountMenuOpen(false);
+                          onNavigate('doctors');
+                        }}
+                        className="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-slate-50 cursor-pointer"
+                      >
+                        <Stethoscope size={14} className="text-[#FF6610]" />
+                        <span>Doctors & Consultations</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsAccountMenuOpen(false);
+                          onNavigate('products');
+                        }}
+                        className="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-slate-50 cursor-pointer"
+                      >
+                        <ShoppingBag size={14} className="text-[#FF6610]" />
+                        <span>Marketplace Shop</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsAccountMenuOpen(false);
+                          onNavigate('feed');
+                        }}
+                        className="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-slate-50 cursor-pointer"
+                      >
+                        <Compass size={14} className="text-[#FF6610]" />
+                        <span>Community Feed</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsAccountMenuOpen(false);
+                          onNavigate('jobs');
+                        }}
+                        className="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-slate-50 cursor-pointer"
+                      >
+                        <Briefcase size={14} className="text-[#FF6610]" />
+                        <span>Verified Jobs</span>
+                      </button>
+                      <div className="pt-1 mt-1 border-t border-slate-100 flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsAccountMenuOpen(false);
+                            onNavigate('customer_dashboard');
+                          }}
+                          className="flex-1 text-center py-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 font-semibold text-slate-800 cursor-pointer"
+                        >
+                          Dashboard
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsAccountMenuOpen(false);
+                            onNavigate('partner_register');
+                          }}
+                          className="flex-1 text-center py-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 font-semibold text-[#FF6610] cursor-pointer"
+                        >
+                          Partner Hub
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsAccountMenuOpen(false);
+                            onNavigate('admin_portal');
+                          }}
+                          className="flex-1 text-center py-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 font-semibold text-slate-700 cursor-pointer"
+                        >
+                          Admin
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -1390,38 +1976,70 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
             </div>
           </header>
 
-          {/* Row 2: Centered 3-Segment Search Pill + Adjacent '+' Circle Button */}
+          {/* Row 2: 3-Segment Search Pill (+ Desktop '+' Circle Button) */}
           <div
             ref={searchAreaRef}
-            className="relative flex items-center justify-center gap-3 sm:gap-3.5"
+            className="relative flex items-center justify-center gap-3.5"
           >
-            <div className="w-full max-w-[780px] min-h-[60px] sm:min-h-[64px] rounded-full bg-white border border-slate-300/90 shadow-[0_3px_14px_rgba(15,23,42,0.06)] pl-5 sm:pl-7 pr-2 py-1.5 flex items-center">
+            <div className="w-full md:max-w-[780px] min-h-[52px] md:min-h-[64px] rounded-full bg-white border border-[#D4D4D4] md:border-slate-300/90 md:shadow-[0_3px_14px_rgba(15,23,42,0.06)] pl-4 md:pl-7 pr-1.5 md:pr-2 py-1 md:py-1.5 flex items-center">
               {/* Segment 1: Where */}
               <div
-                onClick={() => setActivePopover('where')}
-                className={`flex-1 min-w-0 py-1 pr-3 rounded-full cursor-pointer transition-colors ${
-                  activePopover === 'where' ? 'bg-slate-50/90 px-3 -ml-2' : ''
+                onClick={() => {
+                  setActivePopover('where');
+                  whereInputRef.current?.focus();
+                }}
+                className={`flex-1 min-w-0 py-0.5 md:py-1 pr-1 md:pr-2 rounded-full flex items-center justify-between gap-1 cursor-pointer transition-colors ${
+                  activePopover === 'where' ? 'bg-slate-50/90 px-2 md:px-3 -ml-1 md:-ml-2' : ''
                 }`}
               >
-                <label
-                  htmlFor="qaaga-where-input"
-                  className="block text-[12px] font-bold text-slate-950 leading-tight cursor-pointer"
-                >
-                  Where
-                </label>
-                <input
-                  id="qaaga-where-input"
-                  type="text"
-                  value={whereQuery}
-                  onFocus={() => setActivePopover('where')}
-                  onChange={(e) => setWhereQuery(e.target.value)}
-                  placeholder="Search destination"
-                  className="w-full bg-transparent text-[13.5px] sm:text-[14px] text-slate-800 placeholder:text-slate-400 focus:outline-none truncate mt-0.5"
-                />
+                <div className="min-w-0 flex-1">
+                  <label
+                    htmlFor="qaaga-where-input"
+                    className="block text-[12px] font-bold text-slate-950 leading-tight cursor-pointer"
+                  >
+                    Where
+                  </label>
+                  <input
+                    ref={whereInputRef}
+                    id="qaaga-where-input"
+                    type="text"
+                    value={whereQuery}
+                    onFocus={() => setActivePopover('where')}
+                    onChange={(e) => {
+                      setWhereQuery(e.target.value);
+                      if (!e.target.value.trim()) setIsSearchResultsMode(false);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleExecuteSearch();
+                      }
+                    }}
+                    placeholder="Search destination"
+                    className="w-full bg-transparent text-[10.5px] md:text-[14px] text-slate-800 placeholder:text-[#9A9A9A] md:placeholder:text-slate-400 focus:outline-none truncate mt-0.5"
+                  />
+                </div>
+                {whereQuery && (
+                  <button
+                    type="button"
+                    aria-label="Clear destination"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setWhereQuery('');
+                      setIsSearchResultsMode(false);
+                    }}
+                    className="w-5 h-5 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-700 flex items-center justify-center shrink-0 cursor-pointer"
+                  >
+                    <X size={11} />
+                  </button>
+                )}
               </div>
 
               {/* Crisp Dark Vertical Divider */}
-              <div className="h-7 w-[1.5px] bg-slate-800/80 mx-2 sm:mx-4 shrink-0" aria-hidden="true" />
+              <div
+                className="h-6 md:h-7 w-[1.5px] bg-slate-900/85 mx-2 md:mx-4 shrink-0"
+                aria-hidden="true"
+              />
 
               {/* Segment 2: When */}
               <button
@@ -1429,7 +2047,7 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
                 onClick={() =>
                   setActivePopover((prev) => (prev === 'when' ? null : 'when'))
                 }
-                className={`w-[27%] sm:w-[30%] min-w-0 text-left py-1 px-2 rounded-full hover:bg-slate-50/80 transition-colors cursor-pointer ${
+                className={`w-[25%] md:w-[30%] min-w-0 text-left py-0.5 md:py-1 px-1 md:px-2 rounded-full hover:bg-slate-50/80 transition-colors cursor-pointer ${
                   activePopover === 'when' ? 'bg-slate-100/80' : ''
                 }`}
               >
@@ -1437,8 +2055,10 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
                   When
                 </span>
                 <span
-                  className={`block text-[13.5px] sm:text-[14px] leading-tight truncate mt-0.5 ${
-                    selectedDates.display ? 'text-slate-900 font-medium' : 'text-slate-400'
+                  className={`block text-[10.5px] md:text-[14px] leading-tight truncate mt-0.5 ${
+                    selectedDates.display
+                      ? 'text-slate-900 font-medium'
+                      : 'text-[#9A9A9A] md:text-slate-400'
                   }`}
                 >
                   {selectedDates.display || 'Add dates'}
@@ -1446,7 +2066,10 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
               </button>
 
               {/* Crisp Dark Vertical Divider */}
-              <div className="h-7 w-[1.5px] bg-slate-800/80 mx-2 sm:mx-4 shrink-0" aria-hidden="true" />
+              <div
+                className="h-6 md:h-7 w-[1.5px] bg-slate-900/85 mx-2 md:mx-4 shrink-0"
+                aria-hidden="true"
+              />
 
               {/* Segment 3: Who */}
               <button
@@ -1454,7 +2077,7 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
                 onClick={() =>
                   setActivePopover((prev) => (prev === 'who' ? null : 'who'))
                 }
-                className={`w-[24%] sm:w-[25%] min-w-0 text-left py-1 px-2 rounded-full hover:bg-slate-50/80 transition-colors cursor-pointer ${
+                className={`w-[22%] md:w-[25%] min-w-0 text-left py-0.5 md:py-1 px-1 md:px-2 rounded-full hover:bg-slate-50/80 transition-colors cursor-pointer ${
                   activePopover === 'who' ? 'bg-slate-100/80' : ''
                 }`}
               >
@@ -1462,8 +2085,10 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
                   Who
                 </span>
                 <span
-                  className={`block text-[13.5px] sm:text-[14px] leading-tight truncate mt-0.5 tabular-nums ${
-                    guestSummaryText ? 'text-slate-900 font-medium' : 'text-slate-400'
+                  className={`block text-[10.5px] md:text-[14px] leading-tight truncate mt-0.5 tabular-nums ${
+                    guestSummaryText
+                      ? 'text-slate-900 font-medium'
+                      : 'text-[#9A9A9A] md:text-slate-400'
                   }`}
                 >
                   {guestSummaryText || 'Add guests'}
@@ -1474,26 +2099,20 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
               <button
                 type="button"
                 aria-label="Search listings"
-                onClick={() => {
-                  setActivePopover(null);
-                  showToast(
-                    whereQuery
-                      ? `Showing stays in ${whereQuery}`
-                      : `Showing ${popularSource.length} Kuala Lumpur listings`
-                  );
-                }}
-                className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-[#FF6610] hover:bg-[#eb5907] active:scale-95 text-white flex items-center justify-center shrink-0 ml-2 shadow-[0_3px_10px_rgba(255,102,16,0.3)] transition-all cursor-pointer"
+                onClick={handleExecuteSearch}
+                className="w-9 h-9 md:w-12 md:h-12 rounded-full bg-[#FF6B18] md:bg-[#FF6610] hover:bg-[#eb5907] active:scale-95 text-white flex items-center justify-center shrink-0 ml-1.5 md:ml-2 shadow-[0_2px_8px_rgba(255,107,24,0.28)] transition-all cursor-pointer"
               >
-                <Search size={19} strokeWidth={2.5} />
+                <Search size={16} strokeWidth={2.5} className="md:hidden" />
+                <Search size={19} strokeWidth={2.5} className="hidden md:block" />
               </button>
             </div>
 
-            {/* Adjacent '+' Circle Button matching qaaga_d3ef7a3c.png */}
+            {/* Adjacent '+' Circle Button on Desktop matching qaaga_d3ef7a3c.png */}
             <button
               type="button"
               aria-label="Create new listing"
               onClick={() => setIsHostModalOpen(true)}
-              className="w-12 h-12 sm:w-[50px] sm:h-[50px] rounded-full bg-white border border-slate-300 hover:border-slate-400 flex items-center justify-center text-[#FF6610] active:scale-95 transition-all shrink-0 cursor-pointer"
+              className="hidden md:flex w-[50px] h-[50px] rounded-full bg-white border border-slate-300 hover:border-slate-400 items-center justify-center text-[#FF6610] active:scale-95 transition-all shrink-0 cursor-pointer"
             >
               <Plus size={25} strokeWidth={2.4} />
             </button>
@@ -1502,7 +2121,7 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
             {/* POPOVER 1: WHERE (Destination Suggestions)                      */}
             {/* =============================================================== */}
             {activePopover === 'where' && (
-              <div className="absolute top-[74px] left-1/2 -translate-x-1/2 w-full max-w-[440px] bg-white rounded-3xl shadow-[0_16px_48px_rgba(15,23,42,0.16)] border border-slate-200 p-4 z-40 text-left">
+              <div className="absolute top-[60px] md:top-[74px] left-0 right-0 mx-auto md:left-1/2 md:-translate-x-1/2 md:mx-0 w-full max-w-[440px] bg-white rounded-3xl shadow-[0_16px_48px_rgba(15,23,42,0.16)] border border-slate-200 p-4 z-40 text-left">
                 <div className="flex items-center justify-between px-2 pb-2">
                   <span className="text-xs font-bold text-slate-500">
                     Suggested destinations in Kuala Lumpur
@@ -1510,7 +2129,10 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
                   {whereQuery && (
                     <button
                       type="button"
-                      onClick={() => setWhereQuery('')}
+                      onClick={() => {
+                        setWhereQuery('');
+                        setIsSearchResultsMode(false);
+                      }}
                       className="text-xs font-semibold text-[#FF6610] hover:underline cursor-pointer"
                     >
                       Clear
@@ -1523,7 +2145,9 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
                       key={dest.name}
                       type="button"
                       onClick={() => {
-                        setWhereQuery(dest.name === 'All Kuala Lumpur' ? '' : dest.name);
+                        const chosen = dest.name === 'All Kuala Lumpur' ? '' : dest.name;
+                        setWhereQuery(chosen);
+                        setIsSearchResultsMode(Boolean(chosen));
                         setActivePopover('when');
                       }}
                       className="w-full flex items-center gap-3.5 px-3 py-2.5 rounded-2xl hover:bg-slate-50 transition-colors text-left cursor-pointer"
@@ -1542,21 +2166,35 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
             )}
 
             {/* =============================================================== */}
-            {/* POPOVER 2: WHEN (Interactive Calendar + Quick Stay Presets)     */}
+            {/* POPOVER 2: WHEN (2-Month Calendar + Quick Stay Presets)         */}
             {/* =============================================================== */}
             {activePopover === 'when' && (
-              <div className="absolute top-[74px] left-1/2 -translate-x-1/2 w-full max-w-[500px] bg-white rounded-3xl shadow-[0_16px_48px_rgba(15,23,42,0.16)] border border-slate-200 p-5 z-40 text-left space-y-4">
+              <div className="absolute top-[60px] md:top-[74px] left-0 right-0 mx-auto md:left-1/2 md:-translate-x-1/2 md:mx-0 w-full max-w-[500px] bg-white rounded-3xl shadow-[0_16px_48px_rgba(15,23,42,0.16)] border border-slate-200 p-5 z-40 text-left space-y-4">
                 <div className="flex items-center justify-between">
-                  <div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      aria-label="Previous month"
+                      onClick={() => setCalendarMonth((m) => (m === 'Dec' ? 'Nov' : 'Dec'))}
+                      className="w-7 h-7 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-600 cursor-pointer"
+                    >
+                      <ChevronLeft size={16} />
+                    </button>
                     <h4 className="text-sm font-bold text-slate-900">
-                      November 2026 · Select check-in & check-out
+                      {calendarMonth === 'Nov' ? 'November 2026' : 'December 2026'}
                     </h4>
-                    <p className="text-xs text-slate-500">
-                      Card prices dynamically adjust to your selected nights
-                    </p>
+                    <button
+                      type="button"
+                      aria-label="Next month"
+                      onClick={() => setCalendarMonth((m) => (m === 'Nov' ? 'Dec' : 'Nov'))}
+                      className="w-7 h-7 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-600 cursor-pointer"
+                    >
+                      <ChevronRight size={16} />
+                    </button>
                   </div>
                   <button
                     type="button"
+                    aria-label="Close calendar"
                     onClick={() => setActivePopover(null)}
                     className="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-500 cursor-pointer"
                   >
@@ -1564,7 +2202,6 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
                   </button>
                 </div>
 
-                {/* Interactive November 2026 Calendar Grid */}
                 <div>
                   <div className="grid grid-cols-7 text-center text-[11px] font-semibold text-slate-400 mb-1.5">
                     {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((d) => (
@@ -1572,7 +2209,10 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
                     ))}
                   </div>
                   <div className="grid grid-cols-7 gap-1 text-center tabular-nums">
-                    {Array.from({ length: 30 }, (_, i) => i + 1).map((day) => {
+                    {Array.from(
+                      { length: calendarMonth === 'Nov' ? 30 : 31 },
+                      (_, i) => i + 1
+                    ).map((day) => {
                       const isStart = customCheckInDay === day;
                       const isEnd = customCheckOutDay === day;
                       const inRange =
@@ -1600,7 +2240,6 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
                   </div>
                 </div>
 
-                {/* Quick Stay Presets */}
                 <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
                   {DATE_OPTIONS.map((opt) => {
                     const active = selectedDates.id === opt.id;
@@ -1612,7 +2251,7 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
                           setSelectedDates(opt);
                           setActivePopover('who');
                         }}
-                        className={`px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-colors cursor-pointer ${
+                        className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors cursor-pointer ${
                           active
                             ? 'bg-slate-900 text-white border-slate-900'
                             : 'bg-white text-slate-700 border-slate-300 hover:border-slate-900'
@@ -1627,77 +2266,106 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
             )}
 
             {/* =============================================================== */}
-            {/* POPOVER 3: WHO (Airbnb-Style Guests Stepper)                    */}
+            {/* POPOVER 3: WHO (Airbnb-Style Guests Stepper + Apply)            */}
             {/* =============================================================== */}
             {activePopover === 'who' && (
-              <div className="absolute top-[74px] right-4 sm:right-20 w-full max-w-[380px] bg-white rounded-3xl shadow-[0_16px_48px_rgba(15,23,42,0.16)] border border-slate-200 p-5 z-40 text-left divide-y divide-slate-100">
-                {[
-                  {
-                    title: 'Adults',
-                    sub: 'Ages 13 or above',
-                    val: adults,
-                    setVal: setAdults,
-                    min: 0,
-                    max: 8,
-                  },
-                  {
-                    title: 'Children',
-                    sub: 'Ages 2 – 12',
-                    val: childrenCount,
-                    setVal: setChildrenCount,
-                    min: 0,
-                    max: 6,
-                  },
-                  {
-                    title: 'Infants',
-                    sub: 'Under 2',
-                    val: infants,
-                    setVal: setInfants,
-                    min: 0,
-                    max: 4,
-                  },
-                  {
-                    title: 'Pets',
-                    sub: 'Bringing a service animal?',
-                    val: pets,
-                    setVal: setPets,
-                    min: 0,
-                    max: 3,
-                  },
-                ].map((row) => (
-                  <div
-                    key={row.title}
-                    className="py-3.5 first:pt-1 last:pb-1 flex items-center justify-between gap-4"
+              <div className="absolute top-[60px] md:top-[74px] left-0 right-0 mx-auto md:left-auto md:mx-0 md:right-20 w-full max-w-[380px] bg-white rounded-3xl shadow-[0_16px_48px_rgba(15,23,42,0.16)] border border-slate-200 p-5 z-40 text-left">
+                <div className="divide-y divide-slate-100">
+                  {[
+                    {
+                      title: 'Adults',
+                      sub: 'Ages 13 or above',
+                      val: adults,
+                      setVal: setAdults,
+                      min: 0,
+                      max: 8,
+                    },
+                    {
+                      title: 'Children',
+                      sub: 'Ages 2 – 12',
+                      val: childrenCount,
+                      setVal: setChildrenCount,
+                      min: 0,
+                      max: 6,
+                    },
+                    {
+                      title: 'Infants',
+                      sub: 'Under 2',
+                      val: infants,
+                      setVal: setInfants,
+                      min: 0,
+                      max: 4,
+                    },
+                    {
+                      title: 'Pets',
+                      sub: 'Bringing a service animal?',
+                      val: pets,
+                      setVal: setPets,
+                      min: 0,
+                      max: 3,
+                    },
+                  ].map((row) => (
+                    <div
+                      key={row.title}
+                      className="py-3 first:pt-0 flex items-center justify-between gap-4"
+                    >
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">{row.title}</p>
+                        <p className="text-xs text-slate-500">{row.sub}</p>
+                      </div>
+                      <div className="flex items-center gap-3 tabular-nums">
+                        <button
+                          type="button"
+                          aria-label={`Decrease ${row.title}`}
+                          disabled={row.val <= row.min}
+                          onClick={() => row.setVal(Math.max(row.min, row.val - 1))}
+                          className="w-8 h-8 rounded-full border border-slate-300 disabled:opacity-35 hover:border-slate-900 flex items-center justify-center text-slate-700 cursor-pointer disabled:cursor-not-allowed"
+                        >
+                          <Minus size={14} />
+                        </button>
+                        <span className="w-5 text-center text-sm font-semibold text-slate-900">
+                          {row.val}
+                        </span>
+                        <button
+                          type="button"
+                          aria-label={`Increase ${row.title}`}
+                          disabled={row.val >= row.max}
+                          onClick={() => row.setVal(Math.min(row.max, row.val + 1))}
+                          className="w-8 h-8 rounded-full border border-slate-300 disabled:opacity-35 hover:border-slate-900 flex items-center justify-center text-slate-700 cursor-pointer disabled:cursor-not-allowed"
+                        >
+                          <Plus size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="pt-3 mt-1 border-t border-slate-100 flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAdults(0);
+                      setChildrenCount(0);
+                      setInfants(0);
+                      setPets(0);
+                    }}
+                    className="text-xs font-semibold text-slate-600 hover:underline cursor-pointer"
                   >
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">{row.title}</p>
-                      <p className="text-xs text-slate-500">{row.sub}</p>
-                    </div>
-                    <div className="flex items-center gap-3 tabular-nums">
-                      <button
-                        type="button"
-                        aria-label={`Decrease ${row.title}`}
-                        disabled={row.val <= row.min}
-                        onClick={() => row.setVal(Math.max(row.min, row.val - 1))}
-                        className="w-8 h-8 rounded-full border border-slate-300 disabled:opacity-35 hover:border-slate-900 flex items-center justify-center text-slate-700 cursor-pointer disabled:cursor-not-allowed"
-                      >
-                        <Minus size={14} />
-                      </button>
-                      <span className="w-5 text-center text-sm font-semibold text-slate-900">
-                        {row.val}
-                      </span>
-                      <button
-                        type="button"
-                        aria-label={`Increase ${row.title}`}
-                        disabled={row.val >= row.max}
-                        onClick={() => row.setVal(Math.min(row.max, row.val + 1))}
-                        className="w-8 h-8 rounded-full border border-slate-300 disabled:opacity-35 hover:border-slate-900 flex items-center justify-center text-slate-700 cursor-pointer disabled:cursor-not-allowed"
-                      >
-                        <Plus size={14} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                    Clear guests
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActivePopover(null);
+                      if (totalGuests > 0 || whereQuery.trim() || selectedDates.display) {
+                        setIsSearchResultsMode(true);
+                      }
+                    }}
+                    className="px-5 py-2 rounded-full bg-[#FF6610] hover:bg-[#eb5907] text-white text-xs font-semibold cursor-pointer"
+                  >
+                    Apply ({allMatchingSearchListings.length} matches)
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -1707,98 +2375,496 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
       {/* ===================================================================== */}
       {/* MAIN LISTINGS CANVAS                                                  */}
       {/* ===================================================================== */}
-      <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-12 pt-7 pb-10 space-y-10">
-        {/* Active Search Filter Strip (only shown when user applies filters) */}
-        {hasActiveFilters && (
-          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 rounded-2xl bg-slate-50 border border-slate-200/80 text-xs text-slate-700">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-semibold text-slate-900">Active search:</span>
-              <span>{whereQuery || 'All Kuala Lumpur'}</span>
-              <span aria-hidden="true">·</span>
-              <span>
-                {selectedDates.display
-                  ? `${selectedDates.display} (${activeNights} nights)`
-                  : `${activeNights} nights`}
-              </span>
-              {guestSummaryText && (
-                <>
-                  <span aria-hidden="true">·</span>
-                  <span>{guestSummaryText}</span>
-                </>
-              )}
-            </div>
-            <button
-              type="button"
-              onClick={resetAllFilters}
-              className="text-[#FF6610] font-semibold hover:underline cursor-pointer"
-            >
-              Reset filters
-            </button>
-          </div>
-        )}
-
-        {/* Dedicated Category View for Experiences or Services */}
-        {(activeCategory === 'experiences' || activeCategory === 'services') && (
-          <section className="space-y-4">
-            <div className="flex items-end justify-between gap-4">
-              <div>
-                <h2 className="text-[21px] font-bold text-slate-950 tracking-[-0.015em] capitalize">
-                  {activeCategory === 'experiences'
-                    ? 'Popular experiences in Kuala Lumpur'
-                    : 'Hospitality services in Kuala Lumpur'}
-                </h2>
-                <p className="text-[14px] text-slate-500 mt-0.5">
-                  {activeCategory === 'experiences'
-                    ? 'Hosted cultural walks, skyline photography, and culinary trails'
-                    : 'On-demand private chefs, airport chauffeurs, spa, and suite care'}
-                </p>
+      <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-12 pt-3 md:pt-7 pb-6 md:pb-10 space-y-6 md:space-y-10">
+        {/* Active Search Results Banner + Dedicated Search Grid */}
+        {(hasActiveFilters || isSearchResultsMode) && (
+          <div className="space-y-5">
+            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200/80 text-xs text-slate-700">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-bold text-slate-900">
+                  {allMatchingSearchListings.length} result
+                  {allMatchingSearchListings.length === 1 ? '' : 's'}:
+                </span>
+                <span>{whereQuery || 'All Kuala Lumpur'}</span>
+                <span aria-hidden="true">·</span>
+                <span>
+                  {selectedDates.display
+                    ? `${selectedDates.display} (${activeNights} nights)`
+                    : `${activeNights} nights`}
+                </span>
+                {guestSummaryText && (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <span>{guestSummaryText}</span>
+                  </>
+                )}
               </div>
               <button
                 type="button"
-                onClick={() => setActiveCategory('all')}
-                className="text-xs font-semibold text-[#FF6610] hover:underline whitespace-nowrap cursor-pointer"
+                onClick={resetAllFilters}
+                className="text-[#FF6610] font-semibold hover:underline cursor-pointer"
               >
-                Back to All
+                Clear search
               </button>
             </div>
 
-            {categorySpecificListings.length === 0 ? (
-              <div className="py-12 text-center border border-slate-200/80 rounded-3xl space-y-3">
-                <p className="text-sm font-semibold text-slate-800">
-                  No {activeCategory} matched &ldquo;{whereQuery}&rdquo; for {totalGuests} guests
-                </p>
-                <button
-                  type="button"
-                  onClick={resetAllFilters}
-                  className="px-5 py-2 rounded-full bg-slate-900 text-white text-xs font-semibold cursor-pointer"
-                >
-                  Clear filters
-                </button>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-5">
-                {categorySpecificListings.map((item) => renderCard(item, false))}
-              </div>
+            {isSearchResultsMode && (
+              <section className="space-y-4 pb-4 border-b border-slate-100">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-[21px] font-bold text-slate-950 tracking-[-0.015em]">
+                    Search results in {whereQuery || 'Kuala Lumpur'}
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={() => setIsSearchResultsMode(false)}
+                    className="text-xs font-semibold text-slate-600 hover:text-slate-950 cursor-pointer"
+                  >
+                    Show all sections
+                  </button>
+                </div>
+                {allMatchingSearchListings.length === 0 ? (
+                  <div className="py-10 text-center border border-slate-200/80 rounded-2xl space-y-3">
+                    <p className="text-sm font-semibold text-slate-800">
+                      No listings matched your exact search filters
+                    </p>
+                    <button
+                      type="button"
+                      onClick={resetAllFilters}
+                      className="px-5 py-2 rounded-full bg-[#FF6610] text-white text-xs font-semibold cursor-pointer"
+                    >
+                      Reset all filters
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-5">
+                    {allMatchingSearchListings.map((item) => renderCard(item, 'search', false))}
+                  </div>
+                )}
+              </section>
             )}
+          </div>
+        )}
+
+        {/* ================================================================= */}
+        {/* TAB 2: DEDICATED "STAY" EXPLORER VIEW                             */}
+        {/* ================================================================= */}
+        {activeCategory === 'stay' && (
+          <section className="space-y-5">
+            <div className="flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <h2 className="text-[22px] font-bold text-slate-950 tracking-[-0.015em]">
+                  Stays in Kuala Lumpur ({stayTabListings.length})
+                </h2>
+                <p className="text-[14px] text-slate-500 mt-0.5">
+                  Verified skyline apartments, private rooms, and infinity-pool condos
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                {[
+                  { id: 'all', label: 'All Stays' },
+                  { id: 'apartments', label: 'Apartments' },
+                  { id: 'rooms', label: 'Private Rooms' },
+                  { id: 'condos', label: 'Sky Condos' },
+                  { id: 'favorites', label: 'Guest Favorites' },
+                  { id: 'under100', label: 'Under $100' },
+                ].map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => setStaySubFilter(f.id)}
+                    className={`px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-colors whitespace-nowrap cursor-pointer ${
+                      staySubFilter === f.id
+                        ? 'bg-slate-900 text-white border-slate-900'
+                        : 'bg-white text-slate-700 border-slate-300 hover:border-slate-900'
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-5">
+              {stayTabListings.map((item) => renderCard(item, 'stay', false))}
+            </div>
           </section>
         )}
 
-        {/* Default "All" & "Stay" 3-Row Layout Matching qaaga_d3ef7a3c.png */}
-        {(activeCategory === 'all' || activeCategory === 'stay') && (
-          <>
-            {/* ============================================================= */}
-            {/* ROW 1: Recently viewed                                        */}
-            {/* ============================================================= */}
-            <section className="space-y-4">
+        {/* ================================================================= */}
+        {/* TAB 3: DEDICATED "EXPERIENCES" EXPLORER VIEW                      */}
+        {/* ================================================================= */}
+        {activeCategory === 'experiences' && (
+          <section className="space-y-5">
+            <div className="flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <h2 className="text-[22px] font-bold text-slate-950 tracking-[-0.015em]">
+                  Experiences in Kuala Lumpur ({experiencesTabListings.length})
+                </h2>
+                <p className="text-[14px] text-slate-500 mt-0.5">
+                  Hosted skyline walks, Kampung Bahru street food trails, and studio workshops
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                {[
+                  { id: 'all', label: 'All Experiences' },
+                  { id: 'skyline', label: 'Skyline & Photo' },
+                  { id: 'food', label: 'Food & Nightlife' },
+                  { id: 'culture', label: 'Culture & Wellness' },
+                ].map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => setExpSubFilter(f.id)}
+                    className={`px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-colors whitespace-nowrap cursor-pointer ${
+                      expSubFilter === f.id
+                        ? 'bg-slate-900 text-white border-slate-900'
+                        : 'bg-white text-slate-700 border-slate-300 hover:border-slate-900'
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-5">
+              {experiencesTabListings.map((item) => renderCard(item, 'exp', false))}
+            </div>
+          </section>
+        )}
+
+        {/* ================================================================= */}
+        {/* TAB 4: DEDICATED "SERVICES" EXPLORER VIEW                         */}
+        {/* ================================================================= */}
+        {activeCategory === 'services' && (
+          <section className="space-y-5">
+            <div className="flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <h2 className="text-[22px] font-bold text-slate-950 tracking-[-0.015em]">
+                  Hospitality & In-Stay Services ({servicesTabListings.length})
+                </h2>
+                <p className="text-[14px] text-slate-500 mt-0.5">
+                  On-demand private chefs, KLIA airport transfers, housekeeping, and spa
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                {[
+                  { id: 'all', label: 'All Services' },
+                  { id: 'chef', label: 'Private Chef' },
+                  { id: 'chauffeur', label: 'Chauffeur & KLIA' },
+                  { id: 'care', label: 'Suite Care & Spa' },
+                ].map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => setSrvSubFilter(f.id)}
+                    className={`px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-colors whitespace-nowrap cursor-pointer ${
+                      srvSubFilter === f.id
+                        ? 'bg-slate-900 text-white border-slate-900'
+                        : 'bg-white text-slate-700 border-slate-300 hover:border-slate-900'
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+
+                <button
+                  type="button"
+                  onClick={() => onNavigate('service_request')}
+                  className="px-3.5 py-1.5 rounded-full text-xs font-semibold bg-[#FF6610] hover:bg-[#eb5907] text-white whitespace-nowrap cursor-pointer"
+                >
+                  Request Custom Service
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-5">
+              {servicesTabListings.map((item) => renderCard(item, 'srv', false))}
+            </div>
+          </section>
+        )}
+
+        {/* ================================================================= */}
+        {/* TAB 1 ("ALL") — MOBILE VIEW (Matched 1:1 to final_design.png)     */}
+        {/* ================================================================= */}
+        {activeCategory === 'all' && (
+          <div className="md:hidden space-y-5">
+            {/* 1. recently viewed (3 full rounded squares + 4th peeking) */}
+            <section className="space-y-2.5">
+              <h2 className="text-[14px] font-bold text-[#9E9E9E] tracking-[-0.01em]">
+                recently viewed
+              </h2>
+              {recentListings.length === 0 ? (
+                <div className="py-5 px-4 rounded-2xl bg-slate-50 text-xs text-slate-600 flex items-center justify-between">
+                  <span>No recent stays match your filter.</span>
+                  <button
+                    type="button"
+                    onClick={resetAllFilters}
+                    className="text-[#FF6B18] font-semibold cursor-pointer"
+                  >
+                    Reset
+                  </button>
+                </div>
+              ) : (
+                <div
+                  ref={mobileRecentRowRef}
+                  className="flex items-center gap-3 overflow-x-auto scroll-smooth snap-x scrollbar-none -mr-4 pr-4"
+                >
+                  {recentListings.map((item) => (
+                    <button
+                      key={`mob-recent-${item.id}`}
+                      type="button"
+                      aria-label={`View ${item.title}`}
+                      onClick={() => handleOpenListing(item)}
+                      className="snap-start shrink-0 w-[28.5%] aspect-square rounded-[18px] overflow-hidden bg-slate-100 relative cursor-pointer active:scale-95 transition-transform focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6B18]"
+                    >
+                      <ListingImage
+                        src={item.image}
+                        alt={item.title}
+                        className="w-full h-full object-cover object-center scale-[1.04]"
+                      />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            {/* 2. Wishlist + Right Grey Circle '->' Button */}
+            <section className="space-y-2.5">
               <div className="flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setExplorerTitle('Saved Wishlist');
+                    setIsCollectionExplorerOpen(true);
+                  }}
+                  className="text-[14px] font-bold text-[#9E9E9E] tracking-[-0.01em] cursor-pointer"
+                >
+                  Wishlist
+                </button>
+                <div className="flex items-center gap-2">
+                  {wishlistIds.length < 6 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setWishlistIds(['kl-1', 'kl-2', 'kl-3', 'kl-4', 'kl-5', 'kl-6']);
+                        showToast('Restored 6 saved homes');
+                      }}
+                      className="text-[11px] font-semibold text-[#FF6B18] cursor-pointer"
+                    >
+                      Restore
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    aria-label="Scroll mobile wishlist"
+                    onClick={() => scrollCarousel(mobileWishlistRowRef, 'right')}
+                    className="w-7 h-7 rounded-full bg-[#D4D4D4] active:bg-slate-400 text-white flex items-center justify-center cursor-pointer transition-colors"
+                  >
+                    <ArrowRight size={14} strokeWidth={2.5} />
+                  </button>
+                </div>
+              </div>
+
+              {wishlistListings.length === 0 ? (
+                <div className="py-6 px-4 rounded-2xl border border-slate-200/80 text-xs text-slate-600 flex items-center justify-between">
+                  <span>Tap any heart icon to save homes here.</span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setWishlistIds(['kl-1', 'kl-2', 'kl-3', 'kl-4', 'kl-5', 'kl-6'])
+                    }
+                    className="text-[#FF6B18] font-semibold cursor-pointer"
+                  >
+                    Restore
+                  </button>
+                </div>
+              ) : (
+                <div
+                  ref={mobileWishlistRowRef}
+                  className="flex items-start gap-3 overflow-x-auto scroll-smooth snap-x scrollbar-none"
+                >
+                  {wishlistListings.map((item) =>
+                    renderMobileWideCard(item, 'wishlist', false, false)
+                  )}
+                </div>
+              )}
+            </section>
+
+            {/* 3. popular + Right Grey Circle '->' Button */}
+            <section className="space-y-2.5">
+              <div className="flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setExplorerTitle('Popular homes in Kuala Lumpur');
+                    setIsCollectionExplorerOpen(true);
+                  }}
+                  className="text-[14px] font-bold text-[#9E9E9E] tracking-[-0.01em] cursor-pointer"
+                >
+                  popular
+                </button>
+                <button
+                  type="button"
+                  aria-label="Scroll mobile popular"
+                  onClick={() => scrollCarousel(mobilePopularRowRef, 'right')}
+                  className="w-7 h-7 rounded-full bg-[#D4D4D4] active:bg-slate-400 text-white flex items-center justify-center cursor-pointer transition-colors"
+                >
+                  <ArrowRight size={14} strokeWidth={2.5} />
+                </button>
+              </div>
+
+              {popularKLListings.length === 0 ? (
+                <div className="py-6 px-4 rounded-2xl border border-slate-200/80 text-xs text-slate-600 flex items-center justify-between">
+                  <span>No popular homes match your current search.</span>
+                  <button
+                    type="button"
+                    onClick={resetAllFilters}
+                    className="text-[#FF6B18] font-semibold cursor-pointer"
+                  >
+                    Reset
+                  </button>
+                </div>
+              ) : (
+                <div
+                  ref={mobilePopularRowRef}
+                  className="flex items-start gap-3 overflow-x-auto scroll-smooth snap-x scrollbar-none"
+                >
+                  {[
+                    ...popularKLListings.filter((i) =>
+                      ['kl-5', 'kl-7', 'kl-8', 'kl-9', 'kl-10'].includes(i.id)
+                    ),
+                    ...popularKLListings.filter(
+                      (i) => !['kl-5', 'kl-7', 'kl-8', 'kl-9', 'kl-10'].includes(i.id)
+                    ),
+                  ].map((item) => renderMobileWideCard(item, 'popular', false, false))}
+                </div>
+              )}
+            </section>
+
+            {/* 4. offer + Right Grey Circle '->' Button */}
+            <section className="space-y-2.5">
+              <div className="flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setExplorerTitle('Special Offers');
+                    setIsCollectionExplorerOpen(true);
+                  }}
+                  className="text-[14px] font-bold text-[#9E9E9E] tracking-[-0.01em] cursor-pointer"
+                >
+                  offer
+                </button>
+                <button
+                  type="button"
+                  aria-label="Scroll mobile offer"
+                  onClick={() => scrollCarousel(mobileOfferRowRef, 'right')}
+                  className="w-7 h-7 rounded-full bg-[#D4D4D4] active:bg-slate-400 text-white flex items-center justify-center cursor-pointer transition-colors"
+                >
+                  <ArrowRight size={14} strokeWidth={2.5} />
+                </button>
+              </div>
+
+              {offerListings.length === 0 ? (
+                <div className="py-6 px-4 rounded-2xl border border-slate-200/80 text-xs text-slate-600 flex items-center justify-between">
+                  <span>No discounted offers match your current filter.</span>
+                  <button
+                    type="button"
+                    onClick={resetAllFilters}
+                    className="text-[#FF6B18] font-semibold cursor-pointer"
+                  >
+                    Reset
+                  </button>
+                </div>
+              ) : (
+                <div
+                  ref={mobileOfferRowRef}
+                  className="flex items-start gap-3 overflow-x-auto scroll-smooth snap-x scrollbar-none"
+                >
+                  {offerListings.map((item) =>
+                    renderMobileWideCard(item, 'offer', true, false)
+                  )}
+                </div>
+              )}
+            </section>
+
+            {/* 5. Full-Width Orange 'see more' Pill Button */}
+            <div className="pt-1 space-y-5">
+              <button
+                type="button"
+                onClick={() => setShowMoreMobile((v) => !v)}
+                className="w-full h-[46px] rounded-full bg-[#FF6B18] hover:bg-[#eb5907] active:scale-[0.99] text-white text-[15.5px] font-bold tracking-[-0.01em] flex items-center justify-center shadow-[0_4px_14px_rgba(255,107,24,0.26)] transition-all cursor-pointer"
+              >
+                {showMoreMobile ? 'show less' : 'see more'}
+              </button>
+
+              {showMoreMobile && (
+                <section className="space-y-3 pt-1">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-[14px] font-bold text-slate-800">
+                      more stays, experiences & services
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setExplorerTitle('Popular homes in Kuala Lumpur');
+                        setIsCollectionExplorerOpen(true);
+                      }}
+                      className="text-xs font-semibold text-[#FF6B18] cursor-pointer"
+                    >
+                      Filter & Sort
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      ...stayTabListings.slice(4),
+                      ...experiencesTabListings.slice(0, 4),
+                      ...servicesTabListings.slice(0, 4),
+                    ].map((item) => renderMobileWideCard(item, 'more', false, true))}
+                  </div>
+                </section>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ================================================================= */}
+        {/* TAB 1 ("ALL") — DESKTOP VIEW (Matched 1:1 to qaaga_d3ef7a3c.png)  */}
+        {/* ================================================================= */}
+        {activeCategory === 'all' && (
+          <div className="hidden md:block space-y-10">
+            {/* ROW 1: Recently viewed */}
+            <section className="space-y-4">
+              <div className="flex items-center justify-between gap-4">
                 <h2 className="text-[21px] font-bold text-slate-950 tracking-[-0.015em]">
                   Recently viewed
                 </h2>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    aria-label="Scroll recently viewed left"
+                    onClick={() => scrollCarousel(recentRowRef, 'left')}
+                    className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition-colors cursor-pointer"
+                  >
+                    <ChevronLeft size={16} strokeWidth={2.2} />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Scroll recently viewed right"
+                    onClick={() => scrollCarousel(recentRowRef, 'right')}
+                    className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition-colors cursor-pointer"
+                  >
+                    <ChevronRight size={16} strokeWidth={2.2} />
+                  </button>
+                </div>
               </div>
 
               {recentListings.length === 0 ? (
                 <div className="py-8 px-5 rounded-2xl bg-slate-50 text-sm text-slate-600 flex items-center justify-between">
-                  <span>No recently viewed homes match your current destination filter.</span>
+                  <span>No recently viewed homes match your current filter.</span>
                   <button
                     type="button"
                     onClick={resetAllFilters}
@@ -1808,38 +2874,70 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
                   </button>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-5">
-                  {recentListings.map((item) => renderCard(item, false))}
+                <div
+                  ref={recentRowRef}
+                  className="flex items-start gap-5 overflow-x-auto scroll-smooth snap-x scrollbar-none pb-1"
+                >
+                  {recentListings.map((item) => renderCard(item, 'recent', true))}
                 </div>
               )}
             </section>
 
-            {/* ============================================================= */}
-            {/* ROW 2: Wishlist                                               */}
-            {/* ============================================================= */}
+            {/* ROW 2: Wishlist */}
             <section className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-[21px] font-bold text-slate-950 tracking-[-0.015em]">
-                  Wishlist
-                </h2>
-                {wishlistIds.length < 6 && (
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-2.5">
                   <button
                     type="button"
                     onClick={() => {
-                      setWishlistIds(['kl-1', 'kl-2', 'kl-3', 'kl-4', 'kl-5', 'kl-6']);
-                      showToast('Restored all 6 saved homes in Wishlist');
+                      setExplorerTitle('Saved Wishlist');
+                      setIsCollectionExplorerOpen(true);
                     }}
-                    className="text-xs font-semibold text-slate-500 hover:text-slate-900 cursor-pointer"
+                    className="text-[21px] font-bold text-slate-950 tracking-[-0.015em] hover:underline cursor-pointer"
                   >
-                    Restore default 6
+                    Wishlist
                   </button>
-                )}
+                  <span className="text-xs text-slate-400 tabular-nums">
+                    ({wishlistListings.length})
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  {wishlistIds.length < 6 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setWishlistIds(['kl-1', 'kl-2', 'kl-3', 'kl-4', 'kl-5', 'kl-6']);
+                        showToast('Restored all 6 saved homes in Wishlist');
+                      }}
+                      className="text-xs font-semibold text-[#FF6610] hover:underline mr-2 cursor-pointer"
+                    >
+                      Restore 6
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    aria-label="Scroll wishlist left"
+                    onClick={() => scrollCarousel(wishlistRowRef, 'left')}
+                    className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition-colors cursor-pointer"
+                  >
+                    <ChevronLeft size={16} strokeWidth={2.2} />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Scroll wishlist right"
+                    onClick={() => scrollCarousel(wishlistRowRef, 'right')}
+                    className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition-colors cursor-pointer"
+                  >
+                    <ChevronRight size={16} strokeWidth={2.2} />
+                  </button>
+                </div>
               </div>
 
               {wishlistListings.length === 0 ? (
                 <div className="py-8 px-5 rounded-2xl border border-slate-200/80 text-sm text-slate-600 flex items-center justify-between">
                   <span>
-                    Your wishlist is empty for this filter. Tap any heart icon to shortlist homes.
+                    Your wishlist is empty. Tap the heart icon on any card to save favorites.
                   </span>
                   <button
                     type="button"
@@ -1852,21 +2950,25 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
                   </button>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-5">
-                  {wishlistListings.slice(0, 6).map((item) => renderCard(item, true))}
+                <div
+                  ref={wishlistRowRef}
+                  className="flex items-start gap-5 overflow-x-auto scroll-smooth snap-x scrollbar-none pb-1"
+                >
+                  {wishlistListings.map((item) => renderCard(item, 'wishlist', true))}
                 </div>
               )}
             </section>
 
-            {/* ============================================================= */}
-            {/* ROW 3: Popular homes in Kuala Lumpur (-> + subtitle + < >)    */}
-            {/* ============================================================= */}
+            {/* ROW 3: Popular homes in Kuala Lumpur (-> + subtitle + < >) */}
             <section className="space-y-4">
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <button
                     type="button"
-                    onClick={() => setIsCollectionExplorerOpen(true)}
+                    onClick={() => {
+                      setExplorerTitle('Popular homes in Kuala Lumpur');
+                      setIsCollectionExplorerOpen(true);
+                    }}
                     className="inline-flex items-center gap-2 text-left group cursor-pointer"
                   >
                     <h2 className="text-[21px] font-bold text-slate-950 tracking-[-0.015em] group-hover:underline">
@@ -1886,13 +2988,7 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
                   <button
                     type="button"
                     aria-label="Previous Kuala Lumpur homes"
-                    onClick={() =>
-                      setPopularOffset(
-                        (prev) =>
-                          (prev - 1 + Math.max(1, popularSource.length)) %
-                          Math.max(1, popularSource.length)
-                      )
-                    }
+                    onClick={() => scrollCarousel(popularRowRef, 'left')}
                     className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition-colors cursor-pointer"
                   >
                     <ChevronLeft size={16} strokeWidth={2.2} />
@@ -1900,11 +2996,7 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
                   <button
                     type="button"
                     aria-label="Next Kuala Lumpur homes"
-                    onClick={() =>
-                      setPopularOffset(
-                        (prev) => (prev + 1) % Math.max(1, popularSource.length)
-                      )
-                    }
+                    onClick={() => scrollCarousel(popularRowRef, 'right')}
                     className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition-colors cursor-pointer"
                   >
                     <ChevronRight size={16} strokeWidth={2.2} />
@@ -1912,7 +3004,7 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
                 </div>
               </div>
 
-              {visiblePopularListings.length === 0 ? (
+              {popularKLListings.length === 0 ? (
                 <div className="py-10 text-center border border-slate-200/80 rounded-2xl space-y-2">
                   <p className="text-sm font-semibold text-slate-800">
                     No homes matched your filter criteria
@@ -1926,28 +3018,75 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
                   </button>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-5">
-                  {visiblePopularListings.map((item) => renderCard(item, false))}
+                <div
+                  ref={popularRowRef}
+                  className="flex items-start gap-5 overflow-x-auto scroll-smooth snap-x scrollbar-none pb-1"
+                >
+                  {popularKLListings.map((item) => renderCard(item, 'popular', true))}
                 </div>
               )}
             </section>
-          </>
+
+            {/* ROW 4 (Below the fold): Experiences & Services Preview */}
+            <section className="space-y-4 pt-2">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveCategory('experiences')}
+                    className="inline-flex items-center gap-2 text-left group cursor-pointer"
+                  >
+                    <h2 className="text-[21px] font-bold text-slate-950 tracking-[-0.015em] group-hover:underline">
+                      Top experiences & services in Kuala Lumpur
+                    </h2>
+                    <span className="w-7 h-7 rounded-full bg-slate-100 group-hover:bg-slate-200 flex items-center justify-center text-slate-800 transition-colors shrink-0">
+                      <ArrowRight size={15} strokeWidth={2.2} />
+                    </span>
+                  </button>
+                  <p className="text-[14px] text-slate-500 mt-0.5">
+                    Curated culinary walks, skyline photography, private chefs, and airport transfers
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-5">
+                {[...experiencesTabListings.slice(0, 3), ...servicesTabListings.slice(0, 3)].map(
+                  (item) => renderCard(item, 'featured-extra', false)
+                )}
+              </div>
+            </section>
+          </div>
         )}
       </div>
 
-      {/* Subtle Floating Toast Feedback */}
+      {/* Interactive Toast Banner (with Undo support for Wishlist removal) */}
       {toast && (
-        <div className="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white text-xs font-semibold px-4 py-2.5 rounded-full shadow-lg pointer-events-none whitespace-nowrap">
-          {toast}
+        <div className="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white text-xs font-semibold px-4 py-2.5 rounded-full shadow-lg flex items-center gap-3 whitespace-nowrap">
+          <span>{toast}</span>
+          {lastRemovedWishlistId && (
+            <button
+              type="button"
+              onClick={handleUndoRemoveWishlist}
+              className="text-[#FF8540] hover:underline font-bold cursor-pointer"
+            >
+              Undo
+            </button>
+          )}
         </div>
       )}
 
       {/* ===================================================================== */}
-      {/* MODAL 1: LISTING DETAIL & INSTANT RESERVATION CALCULATOR              */}
+      {/* MODAL 1: LISTING DETAIL, GALLERY, REVIEWS & INSTANT RESERVATION       */}
       {/* ===================================================================== */}
       {selectedListing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-3 sm:p-5">
-          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+        <div
+          onClick={() => setSelectedListing(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-3 sm:p-5"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[90vh] overflow-y-auto"
+          >
             {/* Top Modal Bar */}
             <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-xs px-5 sm:px-7 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
               <div className="min-w-0">
@@ -1995,7 +3134,9 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
                         : 'text-slate-700'
                     }
                   />
-                  <span className="hidden sm:inline">Save</span>
+                  <span className="hidden sm:inline">
+                    {wishlistIds.includes(selectedListing.id) ? 'Saved' : 'Save'}
+                  </span>
                 </button>
                 <button
                   type="button"
@@ -2009,18 +3150,43 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
             </div>
 
             <div className="p-5 sm:p-7 grid grid-cols-1 lg:grid-cols-12 gap-7">
-              {/* Left 7 Columns: Photo, Host, Description, Amenities */}
+              {/* Left 7 Columns: Interactive Gallery, Host, Description, Amenities, Reviews */}
               <div className="lg:col-span-7 space-y-5">
-                <div className="relative aspect-[1.35/1] rounded-2xl overflow-hidden bg-slate-100">
-                  <ListingImage
-                    src={selectedListing.image}
-                    alt={selectedListing.title}
-                    className="w-full h-full object-cover scale-[1.03]"
-                  />
-                  {selectedListing.guestFavorite && (
-                    <span className="absolute top-3.5 left-3.5 bg-white/95 text-slate-900 text-xs font-semibold px-3.5 py-1.5 rounded-full shadow-sm">
-                      Guest favorite · Top 5% of homes
-                    </span>
+                <div className="space-y-2.5">
+                  <div className="relative aspect-[1.35/1] rounded-2xl overflow-hidden bg-slate-100">
+                    <ListingImage
+                      src={activeGalleryImg || selectedListing.image}
+                      alt={selectedListing.title}
+                      className="w-full h-full object-cover scale-[1.03]"
+                    />
+                    {selectedListing.guestFavorite && (
+                      <span className="absolute top-3.5 left-3.5 bg-white/95 text-slate-900 text-xs font-semibold px-3.5 py-1.5 rounded-full shadow-sm">
+                        Guest favorite · Top 5% of homes
+                      </span>
+                    )}
+                  </div>
+
+                  {selectedListing.gallery.length > 1 && (
+                    <div className="flex items-center gap-2.5">
+                      {selectedListing.gallery.map((gImg, idx) => (
+                        <button
+                          key={`${gImg}-${idx}`}
+                          type="button"
+                          onClick={() => setActiveGalleryImg(gImg)}
+                          className={`w-20 h-14 rounded-xl overflow-hidden border-2 transition-all cursor-pointer ${
+                            (activeGalleryImg || selectedListing.image) === gImg
+                              ? 'border-[#FF6610]'
+                              : 'border-transparent opacity-70 hover:opacity-100'
+                          }`}
+                        >
+                          <ListingImage
+                            src={gImg}
+                            alt={`View ${idx + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                        </button>
+                      ))}
+                    </div>
                   )}
                 </div>
 
@@ -2030,7 +3196,8 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
                       Hosted by {selectedListing.hostName}
                     </p>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      {selectedListing.bedrooms} · Superhost ({selectedListing.hostYears} years hosting)
+                      {selectedListing.bedrooms} · Superhost ({selectedListing.hostYears} years
+                      hosting)
                     </p>
                   </div>
                   <button
@@ -2060,6 +3227,51 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
                     ))}
                   </div>
                 </div>
+
+                {/* Guest Reviews + Post Review Form */}
+                <div className="space-y-3 pt-3 border-t border-slate-100">
+                  <h4 className="text-sm font-bold text-slate-900">
+                    Guest Reviews ({selectedListing.reviewsCount})
+                  </h4>
+                  <div className="space-y-2.5">
+                    {activeModalReviews.slice(0, 4).map((rev) => (
+                      <div key={rev.id} className="p-3 rounded-xl bg-slate-50 space-y-1">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-bold text-slate-900">{rev.author}</span>
+                          <span className="text-slate-400">{rev.date}</span>
+                        </div>
+                        <p className="text-xs text-slate-600 leading-relaxed">{rev.comment}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  <form onSubmit={handleAddReview} className="flex items-center gap-2 pt-1">
+                    <select
+                      value={newReviewRating}
+                      onChange={(e) => setNewReviewRating(Number(e.target.value))}
+                      className="h-9 px-2.5 rounded-xl border border-slate-300 text-xs font-semibold bg-white"
+                    >
+                      {[5, 4, 3].map((r) => (
+                        <option key={r} value={r}>
+                          ★ {r}.0
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      value={newReviewText}
+                      onChange={(e) => setNewReviewText(e.target.value)}
+                      placeholder="Share your stay experience..."
+                      className="flex-1 h-9 px-3 rounded-xl border border-slate-300 text-xs focus:outline-none focus:border-[#FF6610]"
+                    />
+                    <button
+                      type="submit"
+                      className="px-3.5 h-9 rounded-xl bg-slate-900 text-white text-xs font-semibold cursor-pointer"
+                    >
+                      Post
+                    </button>
+                  </form>
+                </div>
               </div>
 
               {/* Right 5 Columns: Contiguous Reservation Module */}
@@ -2080,13 +3292,13 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
                     </span>
                   </div>
 
-                  {/* Nights & Guests Interactive Controls */}
                   <div className="rounded-xl border border-slate-300 divide-y divide-slate-200 text-xs">
                     <div className="p-3 flex items-center justify-between">
                       <div>
                         <span className="block font-bold text-slate-900">Stay length</span>
                         <span className="text-slate-500">
-                          {selectedDates.display || `Nov 14 – Nov ${14 + modalNights}`}
+                          {selectedDates.display ||
+                            `${calendarMonth} 14 – ${calendarMonth} ${14 + modalNights}`}
                         </span>
                       </div>
                       <div className="flex items-center gap-2 tabular-nums">
@@ -2141,7 +3353,6 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
                     </div>
                   </div>
 
-                  {/* Price Breakdown */}
                   <div className="space-y-2 text-xs text-slate-600 pt-1 tabular-nums">
                     <div className="flex justify-between">
                       <span>
@@ -2209,8 +3420,14 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
       {/* MODAL 2: BECOME A HOST / '+' QUICK ADD LISTING MODAL                  */}
       {/* ===================================================================== */}
       {isHostModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg p-6 space-y-5 max-h-[90vh] overflow-y-auto">
+        <div
+          onClick={() => setIsHostModalOpen(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg p-6 space-y-5 max-h-[90vh] overflow-y-auto"
+          >
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-bold text-slate-950">Become a host on qaaga</h3>
@@ -2230,9 +3447,7 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
 
             <form onSubmit={handlePublishHostListing} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  Category
-                </label>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">Category</label>
                 <div className="grid grid-cols-3 gap-2">
                   {(['stay', 'experiences', 'services'] as const).map((cat) => (
                     <button
@@ -2306,8 +3521,14 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
                   Select cover photo
                 </label>
                 <div className="grid grid-cols-6 gap-2">
-                  {[1, 2, 3, 4, 5, 6].map((num) => {
-                    const path = `/assets/kl-ui/kl-${num}.jpg`;
+                  {[
+                    '/assets/kl-ui/kl-1.jpg',
+                    '/assets/kl-ui/kl-2.jpg',
+                    '/assets/kl-ui/kl-3.jpg',
+                    '/assets/kl-ui/kl-4.jpg',
+                    '/assets/kl-ui/kl-5.jpg',
+                    '/assets/kl-ui/kl-6.jpg',
+                  ].map((path, idx) => {
                     const selected = hostPhoto === path;
                     return (
                       <button
@@ -2320,7 +3541,7 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
                       >
                         <img
                           src={path}
-                          alt={`Cover ${num}`}
+                          alt={`Cover ${idx + 1}`}
                           referrerPolicy="no-referrer"
                           className="w-full h-full object-cover"
                         />
@@ -2340,20 +3561,33 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
                 <span>Highlight with &ldquo;Guest favorite&rdquo; badge</span>
               </label>
 
-              <div className="flex items-center justify-end gap-2.5 pt-2">
+              <div className="flex items-center justify-between gap-2.5 pt-2 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setIsHostModalOpen(false)}
-                  className="px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 cursor-pointer"
+                  onClick={() => {
+                    setIsHostModalOpen(false);
+                    onNavigate('partner_register');
+                  }}
+                  className="text-xs font-semibold text-slate-500 hover:text-[#FF6610] cursor-pointer"
                 >
-                  Cancel
+                  Full Partner Registration →
                 </button>
-                <button
-                  type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-[#FF6610] hover:bg-[#eb5907] text-white text-xs font-semibold shadow-sm cursor-pointer"
-                >
-                  Publish listing
-                </button>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsHostModalOpen(false)}
+                    className="px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-6 py-2.5 rounded-xl bg-[#FF6610] hover:bg-[#eb5907] text-white text-xs font-semibold shadow-sm cursor-pointer"
+                  >
+                    Publish listing
+                  </button>
+                </div>
               </div>
             </form>
           </div>
@@ -2361,13 +3595,19 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
       )}
 
       {/* ===================================================================== */}
-      {/* MODAL 3: MESSAGES / HOST INBOX DRAWER (Top-Right Envelope '1')        */}
+      {/* MODAL 3: MESSAGES / HOST INBOX DRAWER                                 */}
       {/* ===================================================================== */}
       {isInboxOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-3 sm:p-5">
-          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-3xl h-[540px] max-h-[88vh] flex flex-col overflow-hidden">
+        <div
+          onClick={() => setIsInboxOpen(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-3 sm:p-5"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-3xl h-[540px] max-h-[88vh] flex flex-col overflow-hidden"
+          >
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-              <h3 className="text-base font-bold text-slate-950">Messages</h3>
+              <h3 className="text-base font-bold text-slate-950">Messages ({threads.length})</h3>
               <button
                 type="button"
                 aria-label="Close inbox"
@@ -2379,7 +3619,6 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
             </div>
 
             <div className="flex-1 grid grid-cols-1 sm:grid-cols-12 min-h-0">
-              {/* Thread List */}
               <div className="sm:col-span-5 border-b sm:border-b-0 sm:border-r border-slate-100 overflow-y-auto p-2 space-y-1">
                 {threads.map((t) => {
                   const selected = t.id === activeThread?.id;
@@ -2425,7 +3664,6 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
                 })}
               </div>
 
-              {/* Active Conversation */}
               {activeThread && (
                 <div className="sm:col-span-7 flex flex-col min-h-0">
                   <div className="px-4 py-2.5 border-b border-slate-100 bg-slate-50/60">
@@ -2482,11 +3720,17 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
       )}
 
       {/* ===================================================================== */}
-      {/* MODAL 4: TRIPS & BOOKINGS DRAWER (Top-Right Luggage '2')              */}
+      {/* MODAL 4: TRIPS & BOOKINGS DRAWER                                      */}
       {/* ===================================================================== */}
       {isTripsOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-2xl max-h-[86vh] flex flex-col overflow-hidden">
+        <div
+          onClick={() => setIsTripsOpen(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-2xl max-h-[86vh] flex flex-col overflow-hidden"
+          >
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-bold text-slate-950">
@@ -2496,14 +3740,26 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
                   Your confirmed Kuala Lumpur stays and booking codes
                 </p>
               </div>
-              <button
-                type="button"
-                aria-label="Close trips"
-                onClick={() => setIsTripsOpen(false)}
-                className="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-600 cursor-pointer"
-              >
-                <X size={18} />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsTripsOpen(false);
+                    onNavigate('customer_dashboard');
+                  }}
+                  className="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 cursor-pointer"
+                >
+                  Full Dashboard
+                </button>
+                <button
+                  type="button"
+                  aria-label="Close trips"
+                  onClick={() => setIsTripsOpen(false)}
+                  className="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-600 cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
             </div>
 
             <div className="p-5 overflow-y-auto space-y-3.5">
@@ -2577,15 +3833,21 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
       )}
 
       {/* ===================================================================== */}
-      {/* MODAL 5: POPULAR KL COLLECTION EXPLORER (Triggered by Heading ->)     */}
+      {/* MODAL 5: COLLECTION / WISHLIST EXPLORER MODAL                         */}
       {/* ===================================================================== */}
       {isCollectionExplorerOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-3 sm:p-6">
-          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-6xl max-h-[90vh] flex flex-col overflow-hidden">
+        <div
+          onClick={() => setIsCollectionExplorerOpen(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-3 sm:p-6"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-6xl max-h-[90vh] flex flex-col overflow-hidden"
+          >
             <div className="px-6 py-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h3 className="text-lg font-bold text-slate-950">
-                  Kuala Lumpur Stays & Collection ({explorerListings.length})
+                  {explorerTitle} ({explorerListings.length})
                 </h3>
                 <p className="text-xs text-slate-500">
                   Malaysian capital with skyline views · Instant reservation
@@ -2628,17 +3890,7 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
             </div>
 
             <div className="p-6 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-5">
-              {explorerListings.map((item) => (
-                <div
-                  key={`exp-${item.id}`}
-                  onClick={() => {
-                    setIsCollectionExplorerOpen(false);
-                    handleOpenListing(item);
-                  }}
-                >
-                  {renderCard(item, false)}
-                </div>
-              ))}
+              {explorerListings.map((item) => renderCard(item, 'explorer', false, true))}
             </div>
           </div>
         </div>
