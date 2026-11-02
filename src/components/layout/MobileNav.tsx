@@ -324,13 +324,17 @@ export const MobileNav: React.FC<MobileNavProps> = ({ currentView, onNavigate, o
               <div className="absolute right-0 top-0 w-32 h-32 bg-purple-500/10 rounded-full blur-2xl" />
               
               <div className="relative z-10 flex items-center gap-3">
-                <div className="relative w-14 h-14 shrink-0 rounded-full overflow-hidden ring-2 ring-purple-400">
-                  <img
-                    src={currentUser?.avatarUrl || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&h=100&q=80"}
-                    alt={currentUser?.fullName || "User"}
-                    className="w-full h-full object-cover"
-                  />
-                  <span className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-emerald-500 rounded-full ring-2 ring-slate-900" />
+                <div className="relative w-14 h-14 shrink-0 rounded-full overflow-hidden ring-2 ring-purple-400 bg-slate-800 flex items-center justify-center">
+                  {currentUser?.avatarUrl && !currentUser.avatarUrl.includes('unsplash.com') ? (
+                    <img
+                      src={currentUser.avatarUrl}
+                      alt={currentUser?.fullName || 'User'}
+                      referrerPolicy="no-referrer"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <User size={26} className="text-white" />
+                  )}
                 </div>
 
                 <div className="min-w-0 flex-1">
