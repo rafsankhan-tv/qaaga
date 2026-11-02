@@ -102,10 +102,10 @@ export const MobileNav: React.FC<MobileNavProps> = ({ currentView, onNavigate, o
 
   return (
     <>
-      {/* 1. Mobile Bottom Sticky Navigation Bar (Matched 1:1 to final_design_fb56d790.png) */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-slate-100/90 px-4 pt-2.5 pb-3 safe-area-pb">
+      {/* 1. Mobile Bottom Sticky Navigation Bar (High-Contrast Crisp Icons) */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-slate-200/90 shadow-[0_-4px_18px_rgba(15,23,42,0.05)] px-4 pt-2 pb-2.5 safe-area-pb">
         <div className="grid grid-cols-5 items-center w-full max-w-md mx-auto">
-          {/* 1. Home: Solid Orange Circle with White House */}
+          {/* 1. Home: Solid Orange Circle with Crisp White House */}
           <button
             type="button"
             aria-label="Home"
@@ -122,15 +122,15 @@ export const MobileNav: React.FC<MobileNavProps> = ({ currentView, onNavigate, o
             <span
               className={`w-11 h-11 rounded-full flex items-center justify-center transition-colors ${
                 currentView === 'home'
-                  ? 'bg-[#FF6B18] text-white'
-                  : 'bg-[#B0B0B0] text-white'
+                  ? 'bg-[#FF6B18] text-white shadow-[0_3px_10px_rgba(255,107,24,0.28)]'
+                  : 'bg-slate-100 text-slate-700'
               }`}
             >
-              <Home size={22} className="fill-white text-white stroke-[2]" />
+              <Home size={22} strokeWidth={2.3} />
             </span>
           </button>
 
-          {/* 2. Inbox: Light-Grey Filled Envelope */}
+          {/* 2. Inbox / Message: Crisp High-Contrast Envelope Icon */}
           <button
             type="button"
             aria-label="Inbox"
@@ -143,17 +143,18 @@ export const MobileNav: React.FC<MobileNavProps> = ({ currentView, onNavigate, o
             }}
             className="min-h-[48px] flex items-center justify-center cursor-pointer active:scale-95 transition-transform"
           >
-            <Mail
-              size={30}
-              className={
+            <span
+              className={`w-11 h-11 rounded-full flex items-center justify-center transition-colors ${
                 isChatOpen
-                  ? '[&_rect]:fill-[#FF6B18] [&_rect]:stroke-[#FF6B18] [&_path]:fill-none [&_path]:stroke-white [&_path]:stroke-[2]'
-                  : '[&_rect]:fill-[#D4D4D4] [&_rect]:stroke-[#D4D4D4] [&_path]:fill-none [&_path]:stroke-white [&_path]:stroke-[2]'
-              }
-            />
+                  ? 'bg-orange-50 text-[#FF6B18]'
+                  : 'bg-slate-100/90 text-slate-700 hover:text-slate-950'
+              }`}
+            >
+              <Mail size={23} strokeWidth={2.2} />
+            </span>
           </button>
 
-          {/* 3. Center Add Button: White Circle with Grey Ring & Orange '+' */}
+          {/* 3. Center Add Button: White Circle with Crisp Grey Ring & Orange '+' */}
           <button
             type="button"
             aria-label="Add listing"
@@ -166,12 +167,12 @@ export const MobileNav: React.FC<MobileNavProps> = ({ currentView, onNavigate, o
             }}
             className="min-h-[48px] flex items-center justify-center cursor-pointer active:scale-95 transition-transform"
           >
-            <span className="w-12 h-12 rounded-full bg-white border-2 border-[#D0D0D0] ring-2 ring-slate-100 text-[#FF6B18] flex items-center justify-center">
-              <Plus size={25} strokeWidth={2.4} />
+            <span className="w-12 h-12 rounded-full bg-white border-2 border-slate-300 ring-2 ring-slate-100 text-[#FF6B18] flex items-center justify-center shadow-2xs">
+              <Plus size={25} strokeWidth={2.5} />
             </span>
           </button>
 
-          {/* 4. Bookings: Medium-Grey Filled Clipboard */}
+          {/* 4. Bookings: Crisp High-Contrast Clipboard List Icon */}
           <button
             type="button"
             aria-label="Bookings"
@@ -184,17 +185,18 @@ export const MobileNav: React.FC<MobileNavProps> = ({ currentView, onNavigate, o
             }}
             className="min-h-[48px] flex items-center justify-center cursor-pointer active:scale-95 transition-transform"
           >
-            <ClipboardList
-              size={29}
-              className={
+            <span
+              className={`w-11 h-11 rounded-full flex items-center justify-center transition-colors ${
                 currentView === 'customer_dashboard'
-                  ? 'fill-[#FF6B18] text-white stroke-[1.8]'
-                  : 'fill-[#AEAEAE] text-white stroke-[1.8]'
-              }
-            />
+                  ? 'bg-orange-50 text-[#FF6B18]'
+                  : 'bg-slate-100/90 text-slate-700 hover:text-slate-950'
+              }`}
+            >
+              <ClipboardList size={23} strokeWidth={2.2} />
+            </span>
           </button>
 
-          {/* 5. Profile: Solid Grey Circle with White User Silhouette */}
+          {/* 5. Profile: Solid Dark-Slate Circle with Crisp White User Icon */}
           <button
             type="button"
             aria-label="Profile"
@@ -203,10 +205,10 @@ export const MobileNav: React.FC<MobileNavProps> = ({ currentView, onNavigate, o
           >
             <span
               className={`w-11 h-11 rounded-full flex items-center justify-center transition-colors ${
-                isProfileSheetOpen ? 'bg-[#FF6B18] text-white' : 'bg-[#B0B0B0] text-white'
+                isProfileSheetOpen ? 'bg-[#FF6B18] text-white' : 'bg-slate-600 text-white'
               }`}
             >
-              <User size={23} className="fill-white text-white stroke-[2]" />
+              <User size={22} strokeWidth={2.2} />
             </span>
           </button>
         </div>

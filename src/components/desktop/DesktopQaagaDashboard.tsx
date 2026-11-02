@@ -1652,10 +1652,10 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
       {/* ===================================================================== */}
       <div className="md:border-b md:border-slate-200/90 bg-white">
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-12 pt-4 md:pt-5 pb-2 md:pb-6 space-y-3.5 md:space-y-5">
-          {/* Row 1: Brand Wordmark — 4 Illustrated Category Tabs — Desktop Host & Utilities */}
-          <header className="flex flex-col md:flex-row md:flex-wrap md:items-center md:justify-between gap-3 md:gap-4">
+          {/* Row 1: Brand Wordmark — Centered 4 Category Tabs — Desktop Host & Utilities */}
+          <header className="flex flex-col md:grid md:grid-cols-[1fr_auto_1fr] md:items-center gap-3 md:gap-4">
             {/* Zone 1: Left Brand Wordmark ("qaaga.com" on Mobile, "qaaga" on Desktop) */}
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-start md:justify-self-start">
               <button
                 type="button"
                 onClick={() => {
@@ -1678,10 +1678,10 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
               </button>
             </div>
 
-            {/* Zone 2: 4 Category Tabs with Exact 3D Icons & Active Bottom Line */}
+            {/* Zone 2: Mathematically Centered 4 Category Tabs (Mobile & Desktop) */}
             <nav
               aria-label="Listing categories"
-              className="w-full md:w-auto flex items-center justify-between md:justify-center gap-2 sm:gap-7 md:gap-9 lg:gap-11 overflow-x-auto scrollbar-none pt-0.5 md:pt-0"
+              className="w-full md:w-auto md:justify-self-center flex items-center justify-center gap-3.5 min-[400px]:gap-5 sm:gap-8 md:gap-8 lg:gap-11 overflow-x-auto scrollbar-none pt-0.5 md:pt-0"
             >
               {CATEGORY_TABS.map((tab) => {
                 const isActive = activeCategory === tab.id;
@@ -1722,16 +1722,16 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
             </nav>
 
             {/* Zone 3: Desktop Right "become a host" + Messages(1) + Trips(2) + Avatar */}
-            <div className="hidden md:flex items-center gap-5 shrink-0">
+            <div className="hidden md:flex md:justify-self-end items-center gap-3.5 lg:gap-5 shrink-0">
               <button
                 type="button"
                 onClick={() => setIsHostModalOpen(true)}
-                className="inline-flex items-center text-[15px] text-slate-800 hover:text-slate-950 font-normal px-2.5 py-1.5 rounded-full hover:bg-slate-100/80 transition-colors whitespace-nowrap cursor-pointer"
+                className="hidden lg:inline-flex items-center text-[15px] text-slate-800 hover:text-slate-950 font-normal px-2.5 py-1.5 rounded-full hover:bg-slate-100/80 transition-colors whitespace-nowrap cursor-pointer"
               >
                 become a host
               </button>
 
-              {/* Messages Envelope Icon + Orange Superscript Count */}
+              {/* Messages Envelope Icon + Crisp Orange Count Badge */}
               <button
                 type="button"
                 aria-label="Messages"
@@ -1741,23 +1741,31 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
                     prev.map((t, idx) => (idx === 0 ? { ...t, unread: false } : t))
                   );
                 }}
-                className="relative min-w-[40px] min-h-[40px] flex items-center justify-center rounded-full hover:bg-slate-100 transition-colors cursor-pointer"
+                className="group relative min-w-[42px] min-h-[42px] flex items-center justify-center rounded-full bg-slate-100/80 hover:bg-orange-50 transition-colors cursor-pointer"
               >
-                <Mail size={23} className="fill-slate-400/85 text-white stroke-[1.6]" />
-                <span className="absolute top-0.5 right-0.5 text-[14px] font-bold text-[#FF6610] leading-none tabular-nums">
+                <Mail
+                  size={22}
+                  strokeWidth={2.2}
+                  className="text-slate-700 group-hover:text-[#FF6610] transition-colors"
+                />
+                <span className="absolute -top-0.5 -right-0.5 min-w-[19px] h-[19px] px-1 rounded-full bg-[#FF6610] text-white text-[11px] font-bold flex items-center justify-center ring-2 ring-white leading-none tabular-nums">
                   {unreadMessagesCount > 0 ? unreadMessagesCount : threads.length}
                 </span>
               </button>
 
-              {/* Trips / Bookings Icon + Orange Superscript Count */}
+              {/* Trips / Bookings Icon + Crisp Orange Count Badge */}
               <button
                 type="button"
                 aria-label="Trips and bookings"
                 onClick={() => setIsTripsOpen(true)}
-                className="relative min-w-[40px] min-h-[40px] flex items-center justify-center rounded-full hover:bg-slate-100 transition-colors cursor-pointer"
+                className="group relative min-w-[42px] min-h-[42px] flex items-center justify-center rounded-full bg-slate-100/80 hover:bg-orange-50 transition-colors cursor-pointer"
               >
-                <Luggage size={23} className="fill-slate-400/85 text-white stroke-[1.6]" />
-                <span className="absolute top-0.5 right-0.5 text-[14px] font-bold text-[#FF6610] leading-none tabular-nums">
+                <Luggage
+                  size={22}
+                  strokeWidth={2.2}
+                  className="text-slate-700 group-hover:text-[#FF6610] transition-colors"
+                />
+                <span className="absolute -top-0.5 -right-0.5 min-w-[19px] h-[19px] px-1 rounded-full bg-[#FF6610] text-white text-[11px] font-bold flex items-center justify-center ring-2 ring-white leading-none tabular-nums">
                   {bookings.length}
                 </span>
               </button>
@@ -1768,9 +1776,9 @@ export const DesktopQaagaDashboard: React.FC<DesktopQaagaDashboardProps> = ({ on
                   type="button"
                   aria-label="Account menu"
                   onClick={() => setIsAccountMenuOpen((prev) => !prev)}
-                  className="w-9 h-9 rounded-full bg-slate-400/80 hover:bg-slate-500/80 text-white flex items-center justify-center transition-colors cursor-pointer"
+                  className="w-10 h-10 rounded-full bg-slate-700 hover:bg-slate-800 text-white flex items-center justify-center transition-colors cursor-pointer"
                 >
-                  <User size={20} className="fill-white text-white" />
+                  <User size={20} strokeWidth={2.2} className="text-white" />
                 </button>
 
                 {isAccountMenuOpen && (
