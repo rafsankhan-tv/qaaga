@@ -88,6 +88,33 @@ export const CURRENCY_CONFIG: Record<
   BDT: { symbol: '৳', rate: 120, label: '৳ BDT' },
 };
 
+export type LogoSizePreset = 'sm' | 'md' | 'lg' | 'xl';
+
+export interface SiteBranding {
+  logoUrl: string | null;
+  altText: string;
+  fallbackText: string;
+  fallbackDomain: string;
+  showTextWhenRemoved: boolean;
+  size: LogoSizePreset;
+  blendMultiply: boolean;
+  updatedAt: string;
+}
+
+export const DEFAULT_SITE_LOGO_URL =
+  '/assets/aistudio/Screenshot_2026-11-04_at_2.55.29_AM_bd5ef49c.png';
+
+export const DEFAULT_BRANDING: SiteBranding = {
+  logoUrl: DEFAULT_SITE_LOGO_URL,
+  altText: 'qaaga.com',
+  fallbackText: 'qaaga',
+  fallbackDomain: '.com',
+  showTextWhenRemoved: true,
+  size: 'md',
+  blendMultiply: true,
+  updatedAt: '2026-11-04T00:00:00.000Z',
+};
+
 export const STORAGE_KEYS = {
   wishlist: 'qaaga_v3_wishlist',
   bookings: 'qaaga_v3_bookings',
@@ -96,6 +123,7 @@ export const STORAGE_KEYS = {
   customListings: 'qaaga_v3_custom_listings',
   currency: 'qaaga_v3_currency',
   profile: 'qaaga_v3_profile',
+  branding: 'qaaga_v3_branding',
 };
 
 export const CATEGORY_TABS: { id: QaagaCategory; label: string; iconSrc: string }[] = [

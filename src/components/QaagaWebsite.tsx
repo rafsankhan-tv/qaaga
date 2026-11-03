@@ -12,6 +12,7 @@ import {
   MessageSquare,
   Plus,
   RotateCcw,
+  Shield,
   ShieldCheck,
   SlidersHorizontal,
   X,
@@ -22,6 +23,7 @@ import {
   CURRENCY_CONFIG,
   CurrencyCode,
   DATE_OPTIONS,
+  DEFAULT_BRANDING,
   DEFAULT_REVIEWS,
   GuestProfile,
   HostThread,
@@ -32,8 +34,11 @@ import {
   ListingReview,
   QaagaCategory,
   QaagaListing,
+  SiteBranding,
   STORAGE_KEYS,
 } from '@/data/listings';
+import { AdminPanelModal } from './AdminPanelModal';
+import { BrandLogo } from './BrandLogo';
 import { HeaderSearch } from './HeaderSearch';
 import { ListingCard } from './ListingCard';
 import { ListingDetailModal } from './ListingDetailModal';
@@ -142,11 +147,14 @@ export const QaagaWebsite: React.FC = () => {
   const [selectedListing, setSelectedListing] = useState<QaagaListing | null>(null);
   const [bookingSuccessCode, setBookingSuccessCode] = useState<string | null>(null);
 
+  const [branding, setBranding] = useState<SiteBranding>(DEFAULT_BRANDING);
+
   const [isHostModalOpen, setIsHostModalOpen] = useState<boolean>(false);
   const [isMessagesOpen, setIsMessagesOpen] = useState<boolean>(false);
   const [isTripsOpen, setIsTripsOpen] = useState<boolean>(false);
   const [isProfileOpen, setIsProfileOpen] = useState<boolean>(false);
   const [isHelpOpen, setIsHelpOpen] = useState<boolean>(false);
+  const [isAdminOpen, setIsAdminOpen] = useState<boolean>(false);
 
   const [explorerCollection, setExplorerCollection] = useState<{
     mode: 'popular-kl' | 'wishlist' | 'experiences-services';
@@ -214,11 +222,48 @@ export const QaagaWebsite: React.FC = () => {
         const parsed = JSON.parse(savedProfile);
         if (parsed && typeof parsed.fullName === 'string') setProfile(parsed);
       }
+      const savedBranding = localStorage.getItem(STORAGE_KEYS.branding);
+      if (savedBranding) {
+        const parsed = JSON.parse(savedBranding);
+        if (parsed && typeof parsed === 'object') {
+          setBranding({ ...DEFAULT_BRANDING, ...parsed });
+        }
+      }
     } catch {
       // Ignore storage parse issues in restricted frames
     } finally {
       setHydrated(true);
     }
+
+    fetch('/api/branding')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.branding) {
+          setBranding(data.branding);
+          try {
+            localStorage.setItem(
+              STORAGE_KEYS.branding,
+              JSON.stringify(data.branding)
+            );
+          } catch {}
+        }
+      })
+      .catch(() => {});
+
+    const syncBrandingFromStorage = () => {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEYS.branding);
+        if (raw) {
+          setBranding({ ...DEFAULT_BRANDING, ...JSON.parse(raw) });
+        }
+      } catch {}
+    };
+    window.addEventListener('qaaga-branding-updated', syncBrandingFromStorage);
+    window.addEventListener('storage', syncBrandingFromStorage);
+    return () => {
+      window.removeEventListener('qaaga-branding-updated', syncBrandingFromStorage);
+      window.removeEventListener('storage', syncBrandingFromStorage);
+    };
   }, []);
 
   useEffect(() => {
@@ -283,12 +328,79 @@ export const QaagaWebsite: React.FC = () => {
         setIsTripsOpen(false);
         setIsProfileOpen(false);
         setIsHelpOpen(false);
+        setIsAdminOpen(false);
         setExplorerCollection(null);
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
+
+  const handleUpdateBranding = useCallback(
+    async (next: SiteBranding, toastMsg?: string) => {
+      setBranding(next);
+      try {
+        localStorage.setItem(STORAGE_KEYS.branding, JSON.stringify(next));
+      } catch {}
+      try {
+        await fetch('/api/branding', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(next),
+        });
+      } catch {}
+      if (toastMsg) {
+        showToast({ message: toastMsg });
+      }
+    },
+    [showToast]
+  );
+
+  const handleRemoveLogo = useCallback(async () => {
+    const removed: SiteBranding = {
+      ...branding,
+      logoUrl: null,
+      updatedAt: new Date().toISOString(),
+    };
+    setBranding(removed);
+    try {
+      localStorage.setItem(STORAGE_KEYS.branding, JSON.stringify(removed));
+    } catch {}
+    try {
+      await fetch('/api/branding', { method: 'DELETE' });
+    } catch {}
+    showToast({
+      message: 'Logo removed from qaaga.com',
+      undoLabel: 'Restore',
+      onUndo: () => {
+        const restored: SiteBranding = {
+          ...DEFAULT_BRANDING,
+          updatedAt: new Date().toISOString(),
+        };
+        setBranding(restored);
+        try {
+          localStorage.setItem(STORAGE_KEYS.branding, JSON.stringify(restored));
+        } catch {}
+        fetch('/api/branding?reset=true', { method: 'DELETE' }).catch(() => {});
+        setToast(null);
+      },
+    });
+  }, [branding, showToast]);
+
+  const handleRestoreDefaultLogo = useCallback(async () => {
+    const restored: SiteBranding = {
+      ...DEFAULT_BRANDING,
+      updatedAt: new Date().toISOString(),
+    };
+    setBranding(restored);
+    try {
+      localStorage.setItem(STORAGE_KEYS.branding, JSON.stringify(restored));
+    } catch {}
+    try {
+      await fetch('/api/branding?reset=true', { method: 'DELETE' });
+    } catch {}
+    showToast({ message: 'Restored official qaaga.com logo' });
+  }, [showToast]);
 
   /* ======================================================================= */
   /* COMPUTED DATA & PRICE FORMATTER                                         */
@@ -787,6 +899,7 @@ export const QaagaWebsite: React.FC = () => {
       {/* TOP HEADER + CENTERED CATEGORY TABS + 3-SEGMENT SEARCH PILL + '+'   */}
       {/* =================================================================== */}
       <HeaderSearch
+        branding={branding}
         activeCategory={activeCategory}
         onSelectCategory={handleSelectCategory}
         onResetHome={handleResetHome}
@@ -848,6 +961,7 @@ export const QaagaWebsite: React.FC = () => {
         }
         onOpenProfileModal={() => setIsProfileOpen(true)}
         onOpenHelpModal={() => setIsHelpOpen(true)}
+        onOpenAdminModal={() => setIsAdminOpen(true)}
       />
 
       {/* =================================================================== */}
@@ -1318,13 +1432,11 @@ export const QaagaWebsite: React.FC = () => {
             <div className="space-y-2.5">
               <button
                 type="button"
+                aria-label="qaaga.com footer home"
                 onClick={handleResetHome}
-                className="inline-flex items-baseline leading-none cursor-pointer"
+                className="inline-flex items-center leading-none cursor-pointer"
               >
-                <span className="text-xl font-bold tracking-[-0.03em] text-[#C72B62]">
-                  qaaga
-                </span>
-                <span className="text-xs font-bold text-[#C72B62] ml-0.5">.com</span>
+                <BrandLogo branding={branding} variant="footer" />
               </button>
               <p className="leading-relaxed text-slate-500">
                 Stays, local experiences, and hospitality services across Kuala Lumpur —
@@ -1427,6 +1539,16 @@ export const QaagaWebsite: React.FC = () => {
                     className="hover:text-[#C72B62] hover:underline cursor-pointer"
                   >
                     24/7 Guest Help Center
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => setIsAdminOpen(true)}
+                    className="inline-flex items-center gap-1 font-semibold text-slate-800 hover:text-[#C72B62] hover:underline cursor-pointer"
+                  >
+                    <Shield size={13} className="text-[#C72B62]" />
+                    <span>Admin Panel (Logo & Site)</span>
                   </button>
                 </li>
               </ul>
@@ -1656,6 +1778,25 @@ export const QaagaWebsite: React.FC = () => {
       )}
 
       {isHelpOpen && <HelpCenterModal onClose={() => setIsHelpOpen(false)} />}
+
+      {isAdminOpen && (
+        <AdminPanelModal
+          branding={branding}
+          onUpdateBranding={handleUpdateBranding}
+          onRemoveLogo={handleRemoveLogo}
+          onRestoreDefaultLogo={handleRestoreDefaultLogo}
+          allListings={allListings}
+          customListings={customListings}
+          onDeleteCustomListing={handleDeleteCustomListing}
+          onOpenHostModal={() => setIsHostModalOpen(true)}
+          bookings={bookings}
+          onCancelBooking={(id) => {
+            setBookings((prev) => prev.filter((b) => b.id !== id));
+            showToast({ message: 'Reservation cancelled' });
+          }}
+          onClose={() => setIsAdminOpen(false)}
+        />
+      )}
     </div>
   );
 };

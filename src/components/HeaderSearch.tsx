@@ -10,6 +10,7 @@ import {
   Minus,
   Plus,
   Search,
+  Shield,
   User,
   X,
 } from 'lucide-react';
@@ -22,9 +23,12 @@ import {
   GuestProfile,
   KL_DESTINATIONS,
   QaagaCategory,
+  SiteBranding,
 } from '@/data/listings';
+import { BrandLogo } from './BrandLogo';
 
 interface HeaderSearchProps {
+  branding: SiteBranding;
   activeCategory: QaagaCategory;
   onSelectCategory: (cat: QaagaCategory) => void;
   onResetHome: () => void;
@@ -77,9 +81,11 @@ interface HeaderSearchProps {
   onOpenWishlist: () => void;
   onOpenProfileModal: () => void;
   onOpenHelpModal: () => void;
+  onOpenAdminModal: () => void;
 }
 
 export const HeaderSearch: React.FC<HeaderSearchProps> = ({
+  branding,
   activeCategory,
   onSelectCategory,
   onResetHome,
@@ -123,6 +129,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
   onOpenWishlist,
   onOpenProfileModal,
   onOpenHelpModal,
+  onOpenAdminModal,
 }) => {
   const searchRef = useRef<HTMLDivElement | null>(null);
   const whereInputRef = useRef<HTMLInputElement | null>(null);
@@ -159,19 +166,15 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
         {/* ROW 1: qaaga.com — Centered 4 Category Tabs — Host, Bell 2, User  */}
         {/* ================================================================= */}
         <header className="flex flex-col md:grid md:grid-cols-[1fr_auto_1fr] md:items-center gap-3 md:gap-4">
-          {/* Top-Left Brand Wordmark ("qaaga.com" in #C72B62) + Mobile Right Icons */}
+          {/* Top-Left Official Brand Logo + Mobile Right Icons */}
           <div className="flex items-center justify-between md:justify-self-start">
             <button
               type="button"
+              aria-label="qaaga.com home"
               onClick={onResetHome}
-              className="inline-flex items-baseline leading-none cursor-pointer whitespace-nowrap shrink-0 text-left"
+              className="inline-flex items-center leading-none cursor-pointer shrink-0 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C72B62] rounded-xl"
             >
-              <span className="text-[27px] sm:text-[28px] font-bold tracking-[-0.035em] text-[#C72B62]">
-                qaaga
-              </span>
-              <span className="text-[15.5px] sm:text-[16px] font-bold tracking-[-0.02em] text-[#C72B62] ml-0.5">
-                .com
-              </span>
+              <BrandLogo branding={branding} variant="header" />
             </button>
 
             {/* Mobile Compact Bell & Profile Trigger */}
@@ -404,6 +407,23 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
                   >
                     <span>Become a host</span>
                     <Plus size={15} strokeWidth={2.4} />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onCloseMenus();
+                      onOpenAdminModal();
+                    }}
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold cursor-pointer mt-1"
+                  >
+                    <span className="inline-flex items-center gap-2">
+                      <Shield size={14} />
+                      <span>Admin Panel</span>
+                    </span>
+                    <span className="text-[10px] font-medium text-white/80">
+                      Logo & Site
+                    </span>
                   </button>
                 </div>
 
