@@ -1,8 +1,5 @@
-'use client';
-
-import React from 'react';
-import App from '../App';
+import { QaagaWebsite } from '@/components/QaagaWebsite';
 
 export default function HomePage() {
-  return <App />;
+  return <QaagaWebsite />;
 }
