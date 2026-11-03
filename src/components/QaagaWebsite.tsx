@@ -341,6 +341,7 @@ export const QaagaWebsite: React.FC = () => {
       setBranding(next);
       try {
         localStorage.setItem(STORAGE_KEYS.branding, JSON.stringify(next));
+        window.dispatchEvent(new Event('qaaga-branding-updated'));
       } catch {}
       try {
         await fetch('/api/branding', {
@@ -365,23 +366,28 @@ export const QaagaWebsite: React.FC = () => {
     setBranding(removed);
     try {
       localStorage.setItem(STORAGE_KEYS.branding, JSON.stringify(removed));
+      window.dispatchEvent(new Event('qaaga-branding-updated'));
     } catch {}
     try {
-      await fetch('/api/branding', { method: 'DELETE' });
+      await fetch('/api/branding?target=logo', { method: 'DELETE' });
     } catch {}
     showToast({
       message: 'Logo removed from qaaga.com',
       undoLabel: 'Restore',
       onUndo: () => {
         const restored: SiteBranding = {
-          ...DEFAULT_BRANDING,
+          ...removed,
+          logoUrl: DEFAULT_BRANDING.logoUrl,
           updatedAt: new Date().toISOString(),
         };
         setBranding(restored);
         try {
           localStorage.setItem(STORAGE_KEYS.branding, JSON.stringify(restored));
+          window.dispatchEvent(new Event('qaaga-branding-updated'));
         } catch {}
-        fetch('/api/branding?reset=true', { method: 'DELETE' }).catch(() => {});
+        fetch('/api/branding?target=logo&reset=true', { method: 'DELETE' }).catch(
+          () => {}
+        );
         setToast(null);
       },
     });
@@ -389,18 +395,20 @@ export const QaagaWebsite: React.FC = () => {
 
   const handleRestoreDefaultLogo = useCallback(async () => {
     const restored: SiteBranding = {
-      ...DEFAULT_BRANDING,
+      ...branding,
+      logoUrl: DEFAULT_BRANDING.logoUrl,
       updatedAt: new Date().toISOString(),
     };
     setBranding(restored);
     try {
       localStorage.setItem(STORAGE_KEYS.branding, JSON.stringify(restored));
+      window.dispatchEvent(new Event('qaaga-branding-updated'));
     } catch {}
     try {
-      await fetch('/api/branding?reset=true', { method: 'DELETE' });
+      await fetch('/api/branding?target=logo&reset=true', { method: 'DELETE' });
     } catch {}
     showToast({ message: 'Restored official qaaga.com logo' });
-  }, [showToast]);
+  }, [branding, showToast]);
 
   /* ======================================================================= */
   /* COMPUTED DATA & PRICE FORMATTER                                         */

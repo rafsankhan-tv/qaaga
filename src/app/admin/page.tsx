@@ -62,13 +62,14 @@ export default function AdminPage() {
       window.dispatchEvent(new Event('qaaga-branding-updated'));
     } catch {}
     try {
-      await fetch('/api/branding', { method: 'DELETE' });
+      await fetch('/api/branding?target=logo', { method: 'DELETE' });
     } catch {}
   }, [branding]);
 
-  const handleRestoreDefault = useCallback(async () => {
+  const handleRestoreDefaultLogo = useCallback(async () => {
     const restored: SiteBranding = {
-      ...DEFAULT_BRANDING,
+      ...branding,
+      logoUrl: DEFAULT_BRANDING.logoUrl,
       updatedAt: new Date().toISOString(),
     };
     setBranding(restored);
@@ -77,16 +78,16 @@ export default function AdminPage() {
       window.dispatchEvent(new Event('qaaga-branding-updated'));
     } catch {}
     try {
-      await fetch('/api/branding?reset=true', { method: 'DELETE' });
+      await fetch('/api/branding?target=logo&reset=true', { method: 'DELETE' });
     } catch {}
-  }, []);
+  }, [branding]);
 
   return (
     <AdminPanelModal
       branding={branding}
       onUpdateBranding={persistBranding}
       onRemoveLogo={handleRemoveLogo}
-      onRestoreDefaultLogo={handleRestoreDefault}
+      onRestoreDefaultLogo={handleRestoreDefaultLogo}
       standalone={true}
     />
   );

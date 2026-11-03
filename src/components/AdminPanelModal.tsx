@@ -8,6 +8,7 @@ import {
   Crop,
   Eraser,
   ExternalLink,
+  Globe,
   ImagePlus,
   LayoutGrid,
   Pencil,
@@ -20,6 +21,7 @@ import {
 import {
   BookingRecord,
   DEFAULT_BRANDING,
+  DEFAULT_FAVICON_URL,
   DEFAULT_SITE_LOGO_URL,
   LogoSizePreset,
   QaagaListing,
@@ -81,6 +83,45 @@ function readImageFileOptimized(file: File): Promise<string> {
         }
         ctx.clearRect(0, 0, targetW, targetH);
         ctx.drawImage(img, 0, 0, targetW, targetH);
+        resolve(canvas.toDataURL('image/png'));
+      };
+      img.onerror = () => resolve(dataUrl);
+      img.src = dataUrl;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function readFaviconFileSquare(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Failed to read favicon file'));
+    reader.onload = () => {
+      const dataUrl = String(reader.result || '');
+      if (file.type === 'image/svg+xml' || file.name.toLowerCase().endsWith('.ico')) {
+        resolve(dataUrl);
+        return;
+      }
+      const img = new Image();
+      img.onload = () => {
+        const size = 64;
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(dataUrl);
+          return;
+        }
+        const w = img.naturalWidth || img.width || size;
+        const h = img.naturalHeight || img.height || size;
+        const scale = Math.min((size - 6) / w, (size - 6) / h);
+        const drawW = Math.round(w * scale);
+        const drawH = Math.round(h * scale);
+        const dx = Math.round((size - drawW) / 2);
+        const dy = Math.round((size - drawH) / 2);
+        ctx.clearRect(0, 0, size, size);
+        ctx.drawImage(img, dx, dy, drawW, drawH);
         resolve(canvas.toDataURL('image/png'));
       };
       img.onerror = () => resolve(dataUrl);
@@ -198,17 +239,25 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
     'branding'
   );
   const [urlInput, setUrlInput] = useState<string>(branding.logoUrl || '');
+  const [faviconUrlInput, setFaviconUrlInput] = useState<string>(
+    branding.faviconUrl || ''
+  );
   const [altText, setAltText] = useState<string>(branding.altText);
   const [fallbackText, setFallbackText] = useState<string>(branding.fallbackText);
   const [fallbackDomain, setFallbackDomain] = useState<string>(branding.fallbackDomain);
   const [isDragging, setIsDragging] = useState<boolean>(false);
+  const [isFaviconDragging, setIsFaviconDragging] = useState<boolean>(false);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [statusBanner, setStatusBanner] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const faviconFileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     setUrlInput(branding.logoUrl?.startsWith('data:') ? '' : branding.logoUrl || '');
+    setFaviconUrlInput(
+      branding.faviconUrl?.startsWith('data:') ? '' : branding.faviconUrl || ''
+    );
     setAltText(branding.altText);
     setFallbackText(branding.fallbackText);
     setFallbackDomain(branding.fallbackDomain);
@@ -305,6 +354,73 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
     flashBanner('Brand settings saved!');
   };
 
+  const handleFaviconFileUpload = async (file?: File | null) => {
+    if (!file) return;
+    const isIconFile =
+      file.type.startsWith('image/') || file.name.toLowerCase().endsWith('.ico');
+    if (!isIconFile) {
+      flashBanner('Please select a valid PNG, ICO, SVG, WEBP, or JPG favicon file.');
+      return;
+    }
+    setIsProcessing(true);
+    try {
+      const squareDataUrl = await readFaviconFileSquare(file);
+      await onUpdateBranding(
+        {
+          ...branding,
+          faviconUrl: squareDataUrl,
+          updatedAt: new Date().toISOString(),
+        },
+        `Favicon "${file.name}" added live`
+      );
+      flashBanner(`Favicon "${file.name}" uploaded and applied to browser tab!`);
+    } catch {
+      flashBanner('Could not process that favicon file. Please try another image.');
+    } finally {
+      setIsProcessing(false);
+      if (faviconFileInputRef.current) faviconFileInputRef.current.value = '';
+    }
+  };
+
+  const handleApplyFaviconUrl = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = faviconUrlInput.trim();
+    if (!trimmed) return;
+    await onUpdateBranding(
+      {
+        ...branding,
+        faviconUrl: trimmed,
+        updatedAt: new Date().toISOString(),
+      },
+      'Updated site favicon URL'
+    );
+    flashBanner('Custom favicon URL applied live!');
+  };
+
+  const handleRemoveFaviconClick = async () => {
+    await onUpdateBranding(
+      {
+        ...branding,
+        faviconUrl: null,
+        updatedAt: new Date().toISOString(),
+      },
+      'Favicon removed from browser tab'
+    );
+    flashBanner('Favicon removed!');
+  };
+
+  const handleRestoreFaviconClick = async () => {
+    await onUpdateBranding(
+      {
+        ...branding,
+        faviconUrl: DEFAULT_FAVICON_URL,
+        updatedAt: new Date().toISOString(),
+      },
+      'Restored official qaaga.com favicon'
+    );
+    flashBanner('Restored official qaaga.com Q-pin favicon!');
+  };
+
   const panelCard = (
     <div
       onClick={(e) => e.stopPropagation()}
@@ -325,7 +441,7 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
               qaaga.com Admin Panel
             </h2>
             <p className="text-xs text-slate-500">
-              Logo Upload, Edit & Remove · Site Branding & Marketplace Controls
+              Logo & Favicon Upload, Edit & Remove · Site Branding Controls
             </p>
           </div>
         </div>
@@ -373,7 +489,7 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
           }`}
         >
           <ImagePlus size={16} />
-          <span>Logo & Branding</span>
+          <span>Logo & Favicon</span>
         </button>
 
         {allListings.length > 0 && (
@@ -745,6 +861,168 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
                     Save Brand Details
                   </button>
                 </form>
+              </div>
+            </div>
+
+            {/* ============================================================= */}
+            {/* SITE FAVICON (BROWSER TAB ICON) — ADD / UPLOAD, EDIT & REMOVE */}
+            {/* ============================================================= */}
+            <div className="rounded-2xl border border-slate-200 overflow-hidden bg-white">
+              <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs">
+                <div>
+                  <span className="font-bold text-slate-900">
+                    Site Favicon (Browser Tab Icon)
+                  </span>
+                  <span className="text-slate-400 mx-1.5">·</span>
+                  <span className="text-slate-500">
+                    {branding.faviconUrl
+                      ? branding.faviconUrl === DEFAULT_FAVICON_URL
+                        ? 'Active: Official qaaga.com Q-Pin Favicon'
+                        : 'Active: Custom Uploaded Favicon'
+                      : 'Favicon Removed (No Browser Tab Icon)'}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    ref={faviconFileInputRef}
+                    data-testid="favicon-file-input"
+                    type="file"
+                    accept="image/png,image/x-icon,image/vnd.microsoft.icon,image/svg+xml,image/webp,image/jpeg,.ico"
+                    onChange={(e) => handleFaviconFileUpload(e.target.files?.[0])}
+                    className="hidden"
+                  />
+
+                  <button
+                    type="button"
+                    disabled={isProcessing}
+                    onClick={() => faviconFileInputRef.current?.click()}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#C72B62] hover:bg-[#ad2253] text-white text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    <Upload size={14} />
+                    <span>
+                      {branding.faviconUrl ? 'Change / Add Favicon' : 'Add Favicon'}
+                    </span>
+                  </button>
+
+                  {branding.faviconUrl && (
+                    <button
+                      type="button"
+                      disabled={isProcessing}
+                      onClick={handleRemoveFaviconClick}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-rose-300 bg-rose-50/70 hover:bg-rose-100 text-rose-700 text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50"
+                    >
+                      <Trash2 size={14} />
+                      <span>Remove Favicon</span>
+                    </button>
+                  )}
+
+                  {branding.faviconUrl !== DEFAULT_FAVICON_URL && (
+                    <button
+                      type="button"
+                      disabled={isProcessing}
+                      onClick={handleRestoreFaviconClick}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-300 hover:border-slate-900 bg-white text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+                    >
+                      <RotateCcw size={14} />
+                      <span>Restore Default Favicon</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="p-5 grid grid-cols-1 lg:grid-cols-2 gap-5 items-center">
+                {/* Left: Realistic Browser Tab Preview + Icon Badge */}
+                <div className="space-y-3">
+                  <p className="text-xs font-semibold text-slate-600">
+                    Live Browser Tab Preview
+                  </p>
+                  <div className="rounded-2xl bg-slate-200/80 pt-2.5 px-3 pb-0 border border-slate-300/80">
+                    <div className="inline-flex items-center gap-2.5 bg-white rounded-t-xl px-3.5 py-2 shadow-2xs max-w-full">
+                      {branding.faviconUrl ? (
+                        <img
+                          src={branding.faviconUrl}
+                          alt="Favicon preview"
+                          referrerPolicy="no-referrer"
+                          className="w-4 h-4 object-contain mix-blend-multiply shrink-0"
+                        />
+                      ) : (
+                        <Globe size={15} className="text-slate-400 shrink-0" />
+                      )}
+                      <span className="text-xs font-semibold text-slate-800 truncate">
+                        QAAGA Super Marketplace
+                      </span>
+                      <X size={12} className="text-slate-400 shrink-0 ml-2" />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 pt-1">
+                    <div className="w-12 h-12 rounded-2xl border border-slate-200 bg-white flex items-center justify-center p-1.5 shrink-0">
+                      {branding.faviconUrl ? (
+                        <img
+                          src={branding.faviconUrl}
+                          alt="Active favicon"
+                          referrerPolicy="no-referrer"
+                          className="w-full h-full object-contain mix-blend-multiply"
+                        />
+                      ) : (
+                        <span className="text-[10px] font-semibold text-slate-400 text-center leading-tight">
+                          None
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-500 leading-relaxed">
+                      Automatically centered as a crisp 64×64 transparent icon for browser
+                      tabs, bookmarks, and mobile shortcuts.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Right: Favicon Drag & Drop + Custom URL */}
+                <div className="space-y-3">
+                  <div
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setIsFaviconDragging(true);
+                    }}
+                    onDragLeave={() => setIsFaviconDragging(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setIsFaviconDragging(false);
+                      handleFaviconFileUpload(e.dataTransfer.files?.[0]);
+                    }}
+                    onClick={() => faviconFileInputRef.current?.click()}
+                    className={`p-4 rounded-2xl border-2 border-dashed text-center transition-colors cursor-pointer ${
+                      isFaviconDragging
+                        ? 'border-[#C72B62] bg-[#C72B62]/[0.05]'
+                        : 'border-slate-300 hover:border-[#C72B62] bg-slate-50/50'
+                    }`}
+                  >
+                    <p className="text-xs font-bold text-slate-900">
+                      Upload or drop Favicon icon (PNG, ICO, SVG, WEBP)
+                    </p>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Updates browser tab icon immediately
+                    </p>
+                  </div>
+
+                  <form onSubmit={handleApplyFaviconUrl} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      aria-label="Favicon image URL"
+                      value={faviconUrlInput}
+                      onChange={(e) => setFaviconUrlInput(e.target.value)}
+                      placeholder="/assets/aistudio/Screenshot_2026-11-04_at_3.36.38_AM_8097a68e.png"
+                      className="flex-1 h-10 px-3 rounded-xl border border-slate-300 text-xs focus:outline-none focus:border-[#C72B62]"
+                    />
+                    <button
+                      type="submit"
+                      className="h-10 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold shrink-0 cursor-pointer"
+                    >
+                      Set Favicon
+                    </button>
+                  </form>
+                </div>
               </div>
             </div>
           </div>

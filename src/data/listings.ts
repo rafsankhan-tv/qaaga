@@ -92,6 +92,7 @@ export type LogoSizePreset = 'sm' | 'md' | 'lg' | 'xl';
 
 export interface SiteBranding {
   logoUrl: string | null;
+  faviconUrl: string | null;
   altText: string;
   fallbackText: string;
   fallbackDomain: string;
@@ -104,8 +105,12 @@ export interface SiteBranding {
 export const DEFAULT_SITE_LOGO_URL =
   '/assets/aistudio/Screenshot_2026-11-04_at_2.55.29_AM_bd5ef49c.png';
 
+export const DEFAULT_FAVICON_URL =
+  '/assets/aistudio/Screenshot_2026-11-04_at_3.36.38_AM_8097a68e.png';
+
 export const DEFAULT_BRANDING: SiteBranding = {
   logoUrl: DEFAULT_SITE_LOGO_URL,
+  faviconUrl: DEFAULT_FAVICON_URL,
   altText: 'qaaga.com',
   fallbackText: 'qaaga',
   fallbackDomain: '.com',

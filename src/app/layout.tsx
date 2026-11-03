@@ -1,5 +1,7 @@
 import React, { ReactNode } from 'react';
 import type { Metadata, Viewport } from 'next';
+import { DEFAULT_FAVICON_URL } from '@/data/listings';
+import { FaviconHeadSync } from '@/components/FaviconHeadSync';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -13,7 +15,9 @@ export const metadata: Metadata = {
     type: 'website',
   },
   icons: {
-    icon: '/favicon.ico',
+    icon: DEFAULT_FAVICON_URL,
+    shortcut: DEFAULT_FAVICON_URL,
+    apple: DEFAULT_FAVICON_URL,
   },
 };
 
@@ -36,6 +40,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         />
       </head>
       <body className="font-['Plus_Jakarta_Sans',sans-serif] antialiased bg-white text-slate-900 selection:bg-[#C72B62] selection:text-white">
+        <FaviconHeadSync />
         {children}
       </body>
     </html>
