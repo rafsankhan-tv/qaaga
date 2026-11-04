@@ -1,25 +1,35 @@
 import React, { ReactNode } from 'react';
 import type { Metadata, Viewport } from 'next';
-import { DEFAULT_FAVICON_URL } from '@/data/listings';
 import { FaviconHeadSync } from '@/components/FaviconHeadSync';
+import { readServerBranding } from '@/lib/brandingStorage.server';
 import './globals.css';
 
-export const metadata: Metadata = {
-  title: 'QAAGA Super Marketplace',
-  description:
-    "qaaga.com is Bangladesh's verified multi-service super marketplace for on-demand services, repairs, doctors, home care, hotels, products, and jobs.",
-  openGraph: {
+export const dynamic = 'force-dynamic';
+
+const BLANK_TRANSPARENT_ICON =
+  'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+
+export async function generateMetadata(): Promise<Metadata> {
+  const branding = await readServerBranding();
+  const activeIcon = branding.faviconUrl || BLANK_TRANSPARENT_ICON;
+
+  return {
     title: 'QAAGA Super Marketplace',
     description:
       "qaaga.com is Bangladesh's verified multi-service super marketplace for on-demand services, repairs, doctors, home care, hotels, products, and jobs.",
-    type: 'website',
-  },
-  icons: {
-    icon: DEFAULT_FAVICON_URL,
-    shortcut: DEFAULT_FAVICON_URL,
-    apple: DEFAULT_FAVICON_URL,
-  },
-};
+    openGraph: {
+      title: 'QAAGA Super Marketplace',
+      description:
+        "qaaga.com is Bangladesh's verified multi-service super marketplace for on-demand services, repairs, doctors, home care, hotels, products, and jobs.",
+      type: 'website',
+    },
+    icons: {
+      icon: activeIcon,
+      shortcut: activeIcon,
+      apple: activeIcon,
+    },
+  };
+}
 
 export const viewport: Viewport = {
   width: 'device-width',
@@ -28,7 +38,9 @@ export const viewport: Viewport = {
   themeColor: '#C72B62',
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  const initialBranding = await readServerBranding();
+
   return (
     <html lang="en">
       <head>
@@ -40,7 +52,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         />
       </head>
       <body className="font-['Plus_Jakarta_Sans',sans-serif] antialiased bg-white text-slate-900 selection:bg-[#C72B62] selection:text-white">
-        <FaviconHeadSync />
+        <FaviconHeadSync initialBranding={initialBranding} />
         {children}
       </body>
     </html>

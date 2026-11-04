@@ -43,6 +43,12 @@ import { HeaderSearch } from './HeaderSearch';
 import { ListingCard } from './ListingCard';
 import { ListingDetailModal } from './ListingDetailModal';
 import {
+  loadBestClientBranding,
+  persistBrandingEverywhere,
+  readSyncLocalBranding,
+  reconcileBrandingOnLoad,
+} from '@/lib/brandingStorage.client';
+import {
   CollectionExplorerModal,
   HelpCenterModal,
   HostStudioModal,
@@ -84,7 +90,9 @@ const SERVICE_SUBFILTERS = [
   { id: 'concierge', label: 'Photography & care' },
 ] as const;
 
-export const QaagaWebsite: React.FC = () => {
+export const QaagaWebsite: React.FC<{ initialBranding?: SiteBranding }> = ({
+  initialBranding = DEFAULT_BRANDING,
+}) => {
   /* ======================================================================= */
   /* NAVIGATION & SEARCH STATE                                               */
   /* ======================================================================= */
@@ -147,7 +155,12 @@ export const QaagaWebsite: React.FC = () => {
   const [selectedListing, setSelectedListing] = useState<QaagaListing | null>(null);
   const [bookingSuccessCode, setBookingSuccessCode] = useState<string | null>(null);
 
-  const [branding, setBranding] = useState<SiteBranding>(DEFAULT_BRANDING);
+  const [branding, setBranding] = useState<SiteBranding>(initialBranding);
+  const brandingRef = useRef<SiteBranding>(initialBranding);
+
+  useEffect(() => {
+    brandingRef.current = branding;
+  }, [branding]);
 
   const [isHostModalOpen, setIsHostModalOpen] = useState<boolean>(false);
   const [isMessagesOpen, setIsMessagesOpen] = useState<boolean>(false);
@@ -222,12 +235,10 @@ export const QaagaWebsite: React.FC = () => {
         const parsed = JSON.parse(savedProfile);
         if (parsed && typeof parsed.fullName === 'string') setProfile(parsed);
       }
-      const savedBranding = localStorage.getItem(STORAGE_KEYS.branding);
-      if (savedBranding) {
-        const parsed = JSON.parse(savedBranding);
-        if (parsed && typeof parsed === 'object') {
-          setBranding({ ...DEFAULT_BRANDING, ...parsed });
-        }
+      const syncLocal = readSyncLocalBranding();
+      if (syncLocal && syncLocal.revision >= (initialBranding?.revision || 0)) {
+        setBranding(syncLocal);
+        brandingRef.current = syncLocal;
       }
     } catch {
       // Ignore storage parse issues in restricted frames
@@ -235,36 +246,37 @@ export const QaagaWebsite: React.FC = () => {
       setHydrated(true);
     }
 
-    fetch('/api/branding')
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data?.branding) {
-          setBranding(data.branding);
-          try {
-            localStorage.setItem(
-              STORAGE_KEYS.branding,
-              JSON.stringify(data.branding)
-            );
-          } catch {}
-        }
-      })
-      .catch(() => {});
+    let cancelled = false;
+    reconcileBrandingOnLoad(initialBranding).then((resolved) => {
+      if (!cancelled) {
+        setBranding(resolved);
+        brandingRef.current = resolved;
+      }
+    });
 
-    const syncBrandingFromStorage = () => {
-      try {
-        const raw = localStorage.getItem(STORAGE_KEYS.branding);
-        if (raw) {
-          setBranding({ ...DEFAULT_BRANDING, ...JSON.parse(raw) });
+    const syncBrandingFromEvent = (evt: Event) => {
+      const custom = evt as CustomEvent<SiteBranding | undefined>;
+      if (custom?.detail) {
+        setBranding(custom.detail);
+        brandingRef.current = custom.detail;
+        return;
+      }
+      loadBestClientBranding().then((best) => {
+        if (best && !cancelled) {
+          setBranding(best);
+          brandingRef.current = best;
         }
-      } catch {}
+      });
     };
-    window.addEventListener('qaaga-branding-updated', syncBrandingFromStorage);
-    window.addEventListener('storage', syncBrandingFromStorage);
+
+    window.addEventListener('qaaga-branding-updated', syncBrandingFromEvent);
+    window.addEventListener('storage', syncBrandingFromEvent);
     return () => {
-      window.removeEventListener('qaaga-branding-updated', syncBrandingFromStorage);
-      window.removeEventListener('storage', syncBrandingFromStorage);
+      cancelled = true;
+      window.removeEventListener('qaaga-branding-updated', syncBrandingFromEvent);
+      window.removeEventListener('storage', syncBrandingFromEvent);
     };
-  }, []);
+  }, [initialBranding]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -339,17 +351,10 @@ export const QaagaWebsite: React.FC = () => {
   const handleUpdateBranding = useCallback(
     async (next: SiteBranding, toastMsg?: string) => {
       setBranding(next);
-      try {
-        localStorage.setItem(STORAGE_KEYS.branding, JSON.stringify(next));
-        window.dispatchEvent(new Event('qaaga-branding-updated'));
-      } catch {}
-      try {
-        await fetch('/api/branding', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(next),
-        });
-      } catch {}
+      brandingRef.current = next;
+      const saved = await persistBrandingEverywhere(next);
+      setBranding(saved);
+      brandingRef.current = saved;
       if (toastMsg) {
         showToast({ message: toastMsg });
       }
@@ -359,56 +364,46 @@ export const QaagaWebsite: React.FC = () => {
 
   const handleRemoveLogo = useCallback(async () => {
     const removed: SiteBranding = {
-      ...branding,
+      ...brandingRef.current,
       logoUrl: null,
-      updatedAt: new Date().toISOString(),
     };
     setBranding(removed);
-    try {
-      localStorage.setItem(STORAGE_KEYS.branding, JSON.stringify(removed));
-      window.dispatchEvent(new Event('qaaga-branding-updated'));
-    } catch {}
-    try {
-      await fetch('/api/branding?target=logo', { method: 'DELETE' });
-    } catch {}
+    brandingRef.current = removed;
+    const savedRemoved = await persistBrandingEverywhere(removed);
+    setBranding(savedRemoved);
+    brandingRef.current = savedRemoved;
+
     showToast({
-      message: 'Logo removed from qaaga.com',
+      message: 'Logo removed permanently',
       undoLabel: 'Restore',
       onUndo: () => {
         const restored: SiteBranding = {
-          ...removed,
+          ...brandingRef.current,
           logoUrl: DEFAULT_BRANDING.logoUrl,
-          updatedAt: new Date().toISOString(),
         };
         setBranding(restored);
-        try {
-          localStorage.setItem(STORAGE_KEYS.branding, JSON.stringify(restored));
-          window.dispatchEvent(new Event('qaaga-branding-updated'));
-        } catch {}
-        fetch('/api/branding?target=logo&reset=true', { method: 'DELETE' }).catch(
-          () => {}
-        );
+        brandingRef.current = restored;
+        persistBrandingEverywhere(restored).then((saved) => {
+          setBranding(saved);
+          brandingRef.current = saved;
+        });
         setToast(null);
       },
     });
-  }, [branding, showToast]);
+  }, [showToast]);
 
   const handleRestoreDefaultLogo = useCallback(async () => {
     const restored: SiteBranding = {
-      ...branding,
+      ...brandingRef.current,
       logoUrl: DEFAULT_BRANDING.logoUrl,
-      updatedAt: new Date().toISOString(),
     };
     setBranding(restored);
-    try {
-      localStorage.setItem(STORAGE_KEYS.branding, JSON.stringify(restored));
-      window.dispatchEvent(new Event('qaaga-branding-updated'));
-    } catch {}
-    try {
-      await fetch('/api/branding?target=logo&reset=true', { method: 'DELETE' });
-    } catch {}
+    brandingRef.current = restored;
+    const saved = await persistBrandingEverywhere(restored);
+    setBranding(saved);
+    brandingRef.current = saved;
     showToast({ message: 'Restored official qaaga.com logo' });
-  }, [branding, showToast]);
+  }, [showToast]);
 
   /* ======================================================================= */
   /* COMPUTED DATA & PRICE FORMATTER                                         */

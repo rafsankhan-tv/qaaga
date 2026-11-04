@@ -1,82 +1,43 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { promises as fs } from 'fs';
 import {
   DEFAULT_BRANDING,
   DEFAULT_FAVICON_URL,
   DEFAULT_SITE_LOGO_URL,
-  LogoSizePreset,
   SiteBranding,
 } from '@/data/listings';
+import {
+  readServerBranding,
+  sanitizeBranding,
+  writeServerBranding,
+} from '@/lib/brandingStorage.server';
 
-const BRANDING_FILE_PATH = '/tmp/qaaga-branding-state.json';
-const VALID_SIZES: LogoSizePreset[] = ['sm', 'md', 'lg', 'xl'];
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
-async function readBrandingState(): Promise<SiteBranding> {
-  try {
-    const raw = await fs.readFile(BRANDING_FILE_PATH, 'utf-8');
-    const parsed = JSON.parse(raw) as Partial<SiteBranding>;
-    return {
-      logoUrl:
-        parsed.logoUrl === null
-          ? null
-          : typeof parsed.logoUrl === 'string' && parsed.logoUrl.trim()
-          ? parsed.logoUrl
-          : DEFAULT_BRANDING.logoUrl,
-      faviconUrl:
-        parsed.faviconUrl === null
-          ? null
-          : typeof parsed.faviconUrl === 'string' && parsed.faviconUrl.trim()
-          ? parsed.faviconUrl
-          : DEFAULT_BRANDING.faviconUrl,
-      altText:
-        typeof parsed.altText === 'string' && parsed.altText.trim()
-          ? parsed.altText.trim()
-          : DEFAULT_BRANDING.altText,
-      fallbackText:
-        typeof parsed.fallbackText === 'string'
-          ? parsed.fallbackText
-          : DEFAULT_BRANDING.fallbackText,
-      fallbackDomain:
-        typeof parsed.fallbackDomain === 'string'
-          ? parsed.fallbackDomain
-          : DEFAULT_BRANDING.fallbackDomain,
-      showTextWhenRemoved:
-        typeof parsed.showTextWhenRemoved === 'boolean'
-          ? parsed.showTextWhenRemoved
-          : DEFAULT_BRANDING.showTextWhenRemoved,
-      size:
-        parsed.size && VALID_SIZES.includes(parsed.size)
-          ? parsed.size
-          : DEFAULT_BRANDING.size,
-      blendMultiply:
-        typeof parsed.blendMultiply === 'boolean'
-          ? parsed.blendMultiply
-          : DEFAULT_BRANDING.blendMultiply,
-      updatedAt:
-        typeof parsed.updatedAt === 'string'
-          ? parsed.updatedAt
-          : DEFAULT_BRANDING.updatedAt,
-    };
-  } catch {
-    return DEFAULT_BRANDING;
-  }
-}
-
-async function writeBrandingState(next: SiteBranding): Promise<void> {
-  await fs.writeFile(BRANDING_FILE_PATH, JSON.stringify(next, null, 2), 'utf-8');
-}
+const NO_STORE_HEADERS = {
+  'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+  Pragma: 'no-cache',
+  Expires: '0',
+};
 
 export async function GET() {
-  const branding = await readBrandingState();
-  return NextResponse.json({ branding });
+  const branding = await readServerBranding();
+  return NextResponse.json({ branding }, { headers: NO_STORE_HEADERS });
 }
 
 export async function PUT(req: NextRequest) {
   try {
     const body = (await req.json()) as Partial<SiteBranding>;
-    const current = await readBrandingState();
+    const current = await readServerBranding();
 
-    const updated: SiteBranding = {
+    const nextRevision =
+      typeof body.revision === 'number' && body.revision > current.revision
+        ? body.revision
+        : Math.max(Date.now(), current.revision + 1);
+
+    const merged = sanitizeBranding({
+      ...current,
+      ...body,
       logoUrl:
         body.logoUrl === null
           ? null
@@ -89,74 +50,66 @@ export async function PUT(req: NextRequest) {
           : typeof body.faviconUrl === 'string'
           ? body.faviconUrl.trim() || null
           : current.faviconUrl,
-      altText:
-        typeof body.altText === 'string'
-          ? body.altText.trim() || 'qaaga.com'
-          : current.altText,
-      fallbackText:
-        typeof body.fallbackText === 'string' ? body.fallbackText : current.fallbackText,
-      fallbackDomain:
-        typeof body.fallbackDomain === 'string'
-          ? body.fallbackDomain
-          : current.fallbackDomain,
-      showTextWhenRemoved:
-        typeof body.showTextWhenRemoved === 'boolean'
-          ? body.showTextWhenRemoved
-          : current.showTextWhenRemoved,
-      size: body.size && VALID_SIZES.includes(body.size) ? body.size : current.size,
-      blendMultiply:
-        typeof body.blendMultiply === 'boolean'
-          ? body.blendMultiply
-          : current.blendMultiply,
+      revision: nextRevision,
       updatedAt: new Date().toISOString(),
-    };
+    });
 
-    await writeBrandingState(updated);
-    return NextResponse.json({ branding: updated });
+    const saved = await writeServerBranding(merged);
+    return NextResponse.json({ branding: saved }, { headers: NO_STORE_HEADERS });
   } catch {
-    return NextResponse.json({ error: 'Invalid branding payload' }, { status: 400 });
+    return NextResponse.json(
+      { error: 'Invalid branding payload' },
+      { status: 400, headers: NO_STORE_HEADERS }
+    );
   }
 }
 
 export async function DELETE(req: NextRequest) {
   const reset = req.nextUrl.searchParams.get('reset') === 'true';
   const target = req.nextUrl.searchParams.get('target');
-  const current = await readBrandingState();
+  const current = await readServerBranding();
+  const nextRevision = Math.max(Date.now(), current.revision + 1);
 
   if (target === 'favicon') {
-    const updatedFavicon: SiteBranding = {
+    const updatedFavicon = await writeServerBranding({
       ...current,
       faviconUrl: reset ? DEFAULT_FAVICON_URL : null,
+      revision: nextRevision,
       updatedAt: new Date().toISOString(),
-    };
-    await writeBrandingState(updatedFavicon);
-    return NextResponse.json({ branding: updatedFavicon });
+    });
+    return NextResponse.json(
+      { branding: updatedFavicon },
+      { headers: NO_STORE_HEADERS }
+    );
   }
 
   if (target === 'logo') {
-    const updatedLogo: SiteBranding = {
+    const updatedLogo = await writeServerBranding({
       ...current,
       logoUrl: reset ? DEFAULT_SITE_LOGO_URL : null,
+      revision: nextRevision,
       updatedAt: new Date().toISOString(),
-    };
-    await writeBrandingState(updatedLogo);
-    return NextResponse.json({ branding: updatedLogo });
+    });
+    return NextResponse.json(
+      { branding: updatedLogo },
+      { headers: NO_STORE_HEADERS }
+    );
   }
 
   if (reset) {
-    const restored: SiteBranding = {
+    const restored = await writeServerBranding({
       ...DEFAULT_BRANDING,
+      revision: nextRevision,
       updatedAt: new Date().toISOString(),
-    };
-    await writeBrandingState(restored);
-    return NextResponse.json({ branding: restored });
+    });
+    return NextResponse.json({ branding: restored }, { headers: NO_STORE_HEADERS });
   }
 
-  const removed: SiteBranding = {
+  const removed = await writeServerBranding({
     ...current,
     logoUrl: null,
+    revision: nextRevision,
     updatedAt: new Date().toISOString(),
-  };
-  await writeBrandingState(removed);
-  return NextResponse.json({ branding: removed });
+  });
+  return NextResponse.json({ branding: removed }, { headers: NO_STORE_HEADERS });
 }

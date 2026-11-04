@@ -1,7 +1,11 @@
 'use client';
 
 import { useEffect } from 'react';
-import { DEFAULT_BRANDING, STORAGE_KEYS } from '@/data/listings';
+import { SiteBranding } from '@/data/listings';
+import {
+  loadBestClientBranding,
+  reconcileBrandingOnLoad,
+} from '@/lib/brandingStorage.client';
 
 const BLANK_TRANSPARENT_ICON =
   'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
@@ -30,7 +34,6 @@ function buildCrispSquareFavicon(src: string): Promise<string> {
         const w = img.naturalWidth || img.width || size;
         const h = img.naturalHeight || img.height || size;
 
-        // First read source pixels to trim blank margins & remove white background
         const srcCanvas = document.createElement('canvas');
         srcCanvas.width = w;
         srcCanvas.height = h;
@@ -105,70 +108,65 @@ function applyFaviconHref(href: string, activeState: 'active' | 'removed') {
   const rels = ['icon', 'shortcut icon', 'apple-touch-icon'];
 
   rels.forEach((rel) => {
-    let link = document.head.querySelector<HTMLLinkElement>(`link[rel="${rel}"]`);
-    if (!link) {
-      link = document.createElement('link');
+    const existingAll = document.head.querySelectorAll<HTMLLinkElement>(
+      `link[rel="${rel}"]`
+    );
+    if (existingAll.length === 0) {
+      const link = document.createElement('link');
       link.rel = rel;
+      link.href = href;
+      link.dataset.qaagaFaviconState = activeState;
       document.head.appendChild(link);
+    } else {
+      existingAll.forEach((link, idx) => {
+        if (idx === 0) {
+          link.href = href;
+          link.dataset.qaagaFaviconState = activeState;
+        } else {
+          link.remove();
+        }
+      });
     }
-    link.href = href;
-    link.dataset.qaagaFaviconState = activeState;
   });
 }
 
-export function FaviconHeadSync() {
+export function FaviconHeadSync({
+  initialBranding,
+}: {
+  initialBranding?: SiteBranding;
+}) {
   useEffect(() => {
     let cancelled = false;
 
     const syncFavicon = async (faviconUrl: string | null | undefined) => {
       if (cancelled) return;
-      if (faviconUrl === null) {
+      if (!faviconUrl) {
         applyFaviconHref(BLANK_TRANSPARENT_ICON, 'removed');
         return;
       }
-      const target = faviconUrl || DEFAULT_BRANDING.faviconUrl;
-      if (!target) {
-        applyFaviconHref(BLANK_TRANSPARENT_ICON, 'removed');
-        return;
-      }
-      const optimizedHref = await buildCrispSquareFavicon(target);
+      const optimizedHref = await buildCrispSquareFavicon(faviconUrl);
       if (!cancelled) {
         applyFaviconHref(optimizedHref, 'active');
       }
     };
 
-    const readFromLocalAndApply = () => {
-      try {
-        const raw = localStorage.getItem(STORAGE_KEYS.branding);
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          syncFavicon(
-            parsed.faviconUrl === null
-              ? null
-              : parsed.faviconUrl || DEFAULT_BRANDING.faviconUrl
-          );
-          return true;
-        }
-      } catch {}
-      return false;
-    };
+    reconcileBrandingOnLoad(initialBranding).then((resolved) => {
+      if (!cancelled) {
+        syncFavicon(resolved.faviconUrl);
+      }
+    });
 
-    const hadLocal = readFromLocalAndApply();
-    if (!hadLocal) {
-      syncFavicon(DEFAULT_BRANDING.faviconUrl);
-    }
-
-    fetch('/api/branding')
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (data?.branding && !cancelled) {
-          syncFavicon(data.branding.faviconUrl);
-        }
-      })
-      .catch(() => {});
-
-    const onBrandingUpdated = () => {
-      readFromLocalAndApply();
+    const onBrandingUpdated = (evt: Event) => {
+      const custom = evt as CustomEvent<SiteBranding | undefined>;
+      if (custom?.detail) {
+        syncFavicon(custom.detail.faviconUrl);
+      } else {
+        loadBestClientBranding().then((best) => {
+          if (best && !cancelled) {
+            syncFavicon(best.faviconUrl);
+          }
+        });
+      }
     };
 
     window.addEventListener('qaaga-branding-updated', onBrandingUpdated);
@@ -178,7 +176,7 @@ export function FaviconHeadSync() {
       window.removeEventListener('qaaga-branding-updated', onBrandingUpdated);
       window.removeEventListener('storage', onBrandingUpdated);
     };
-  }, []);
+  }, [initialBranding]);
 
   return null;
 }

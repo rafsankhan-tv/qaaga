@@ -64,8 +64,8 @@ function readImageFileOptimized(file: File): Promise<string> {
       }
       const img = new Image();
       img.onload = () => {
-        const maxWidth = 1200;
-        const maxHeight = 500;
+        const maxWidth = 720;
+        const maxHeight = 260;
         let targetW = img.naturalWidth || img.width;
         let targetH = img.naturalHeight || img.height;
         if (targetW > maxWidth || targetH > maxHeight) {
@@ -252,8 +252,10 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const faviconFileInputRef = useRef<HTMLInputElement | null>(null);
+  const latestBrandingRef = useRef<SiteBranding>(branding);
 
   useEffect(() => {
+    latestBrandingRef.current = branding;
     setUrlInput(branding.logoUrl?.startsWith('data:') ? '' : branding.logoUrl || '');
     setFaviconUrlInput(
       branding.faviconUrl?.startsWith('data:') ? '' : branding.faviconUrl || ''
@@ -270,6 +272,19 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
     }, 3500);
   };
 
+  const commitBrandingPatch = async (
+    patch: Partial<SiteBranding>,
+    toastMsg?: string
+  ) => {
+    const merged: SiteBranding = {
+      ...latestBrandingRef.current,
+      ...patch,
+      updatedAt: new Date().toISOString(),
+    };
+    latestBrandingRef.current = merged;
+    await onUpdateBranding(merged, toastMsg);
+  };
+
   const handleFileUpload = async (file?: File | null) => {
     if (!file) return;
     if (!file.type.startsWith('image/')) {
@@ -279,15 +294,11 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
     setIsProcessing(true);
     try {
       const optimizedDataUrl = await readImageFileOptimized(file);
-      await onUpdateBranding(
-        {
-          ...branding,
-          logoUrl: optimizedDataUrl,
-          updatedAt: new Date().toISOString(),
-        },
-        `Uploaded new logo "${file.name}"`
+      await commitBrandingPatch(
+        { logoUrl: optimizedDataUrl },
+        `Logo "${file.name}" saved permanently`
       );
-      flashBanner(`Logo "${file.name}" uploaded and applied live!`);
+      flashBanner(`Logo "${file.name}" uploaded and saved permanently!`);
     } catch {
       flashBanner('Could not process that image file. Please try another file.');
     } finally {
@@ -297,25 +308,27 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
   };
 
   const handleCanvasEdit = async (mode: 'trim' | 'transparent-bg') => {
-    if (!branding.logoUrl) return;
+    const activeLogo = latestBrandingRef.current.logoUrl;
+    if (!activeLogo) return;
     setIsProcessing(true);
     try {
-      const editedDataUrl = await processLogoCanvas(branding.logoUrl, mode);
-      await onUpdateBranding(
+      const editedDataUrl = await processLogoCanvas(activeLogo, mode);
+      await commitBrandingPatch(
         {
-          ...branding,
           logoUrl: editedDataUrl,
-          blendMultiply: mode === 'transparent-bg' ? false : branding.blendMultiply,
-          updatedAt: new Date().toISOString(),
+          blendMultiply:
+            mode === 'transparent-bg'
+              ? false
+              : latestBrandingRef.current.blendMultiply,
         },
         mode === 'trim'
-          ? 'Cropped excess logo whitespace'
-          : 'Removed white background from logo'
+          ? 'Cropped excess logo whitespace permanently'
+          : 'Removed white background permanently'
       );
       flashBanner(
         mode === 'trim'
-          ? 'Auto-cropped logo margins and saved live!'
-          : 'Converted white background to transparent PNG!'
+          ? 'Auto-cropped logo margins and saved permanently!'
+          : 'Converted white background to transparent PNG and saved!'
       );
     } catch {
       flashBanner('Unable to edit remote image due to browser CORS restrictions.');
@@ -328,30 +341,21 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
     e.preventDefault();
     const trimmed = urlInput.trim();
     if (!trimmed) return;
-    await onUpdateBranding(
-      {
-        ...branding,
-        logoUrl: trimmed,
-        updatedAt: new Date().toISOString(),
-      },
-      'Updated logo image URL'
-    );
-    flashBanner('Custom logo URL applied live!');
+    await commitBrandingPatch({ logoUrl: trimmed }, 'Updated logo image URL');
+    flashBanner('Custom logo URL saved permanently!');
   };
 
   const handleSaveTextSettings = async (e: React.FormEvent) => {
     e.preventDefault();
-    await onUpdateBranding(
+    await commitBrandingPatch(
       {
-        ...branding,
         altText: altText.trim() || 'qaaga.com',
         fallbackText: fallbackText.trim() || 'qaaga',
         fallbackDomain: fallbackDomain.trim(),
-        updatedAt: new Date().toISOString(),
       },
       'Saved brand text & edit settings'
     );
-    flashBanner('Brand settings saved!');
+    flashBanner('Brand settings saved permanently!');
   };
 
   const handleFaviconFileUpload = async (file?: File | null) => {
@@ -365,15 +369,11 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
     setIsProcessing(true);
     try {
       const squareDataUrl = await readFaviconFileSquare(file);
-      await onUpdateBranding(
-        {
-          ...branding,
-          faviconUrl: squareDataUrl,
-          updatedAt: new Date().toISOString(),
-        },
-        `Favicon "${file.name}" added live`
+      await commitBrandingPatch(
+        { faviconUrl: squareDataUrl },
+        `Favicon "${file.name}" saved permanently`
       );
-      flashBanner(`Favicon "${file.name}" uploaded and applied to browser tab!`);
+      flashBanner(`Favicon "${file.name}" uploaded and saved permanently!`);
     } catch {
       flashBanner('Could not process that favicon file. Please try another image.');
     } finally {
@@ -386,36 +386,21 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
     e.preventDefault();
     const trimmed = faviconUrlInput.trim();
     if (!trimmed) return;
-    await onUpdateBranding(
-      {
-        ...branding,
-        faviconUrl: trimmed,
-        updatedAt: new Date().toISOString(),
-      },
-      'Updated site favicon URL'
-    );
-    flashBanner('Custom favicon URL applied live!');
+    await commitBrandingPatch({ faviconUrl: trimmed }, 'Updated site favicon URL');
+    flashBanner('Custom favicon URL saved permanently!');
   };
 
   const handleRemoveFaviconClick = async () => {
-    await onUpdateBranding(
-      {
-        ...branding,
-        faviconUrl: null,
-        updatedAt: new Date().toISOString(),
-      },
-      'Favicon removed from browser tab'
+    await commitBrandingPatch(
+      { faviconUrl: null },
+      'Favicon removed permanently'
     );
-    flashBanner('Favicon removed!');
+    flashBanner('Favicon removed permanently!');
   };
 
   const handleRestoreFaviconClick = async () => {
-    await onUpdateBranding(
-      {
-        ...branding,
-        faviconUrl: DEFAULT_FAVICON_URL,
-        updatedAt: new Date().toISOString(),
-      },
+    await commitBrandingPatch(
+      { faviconUrl: DEFAULT_FAVICON_URL },
       'Restored official qaaga.com favicon'
     );
     flashBanner('Restored official qaaga.com Q-pin favicon!');
@@ -738,12 +723,8 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
                           key={opt.id}
                           type="button"
                           onClick={() =>
-                            onUpdateBranding(
-                              {
-                                ...branding,
-                                size: opt.id,
-                                updatedAt: new Date().toISOString(),
-                              },
+                            commitBrandingPatch(
+                              { size: opt.id },
                               `Logo size set to ${opt.label}`
                             )
                           }
@@ -776,11 +757,7 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
                       aria-label="Seamless White-Background Blend"
                       checked={branding.blendMultiply}
                       onChange={(e) =>
-                        onUpdateBranding({
-                          ...branding,
-                          blendMultiply: e.target.checked,
-                          updatedAt: new Date().toISOString(),
-                        })
+                        commitBrandingPatch({ blendMultiply: e.target.checked })
                       }
                       className="w-4 h-4 accent-[#C72B62] cursor-pointer"
                     />
@@ -800,11 +777,7 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
                       aria-label="Show text fallback when logo is removed"
                       checked={branding.showTextWhenRemoved}
                       onChange={(e) =>
-                        onUpdateBranding({
-                          ...branding,
-                          showTextWhenRemoved: e.target.checked,
-                          updatedAt: new Date().toISOString(),
-                        })
+                        commitBrandingPatch({ showTextWhenRemoved: e.target.checked })
                       }
                       className="w-4 h-4 accent-[#C72B62] cursor-pointer"
                     />

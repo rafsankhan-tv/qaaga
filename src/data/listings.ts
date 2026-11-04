@@ -99,6 +99,7 @@ export interface SiteBranding {
   showTextWhenRemoved: boolean;
   size: LogoSizePreset;
   blendMultiply: boolean;
+  revision: number;
   updatedAt: string;
 }
 
@@ -117,6 +118,7 @@ export const DEFAULT_BRANDING: SiteBranding = {
   showTextWhenRemoved: true,
   size: 'md',
   blendMultiply: true,
+  revision: 0,
   updatedAt: '2026-11-04T00:00:00.000Z',
 };
 

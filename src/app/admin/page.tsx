@@ -1,86 +1,58 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
-import {
-  DEFAULT_BRANDING,
-  SiteBranding,
-  STORAGE_KEYS,
-} from '@/data/listings';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { DEFAULT_BRANDING, SiteBranding } from '@/data/listings';
 import { AdminPanelModal } from '@/components/AdminPanelModal';
+import {
+  persistBrandingEverywhere,
+  readSyncLocalBranding,
+  reconcileBrandingOnLoad,
+} from '@/lib/brandingStorage.client';
 
 export default function AdminPage() {
   const [branding, setBranding] = useState<SiteBranding>(DEFAULT_BRANDING);
+  const brandingRef = useRef<SiteBranding>(DEFAULT_BRANDING);
 
   useEffect(() => {
-    try {
-      const local = localStorage.getItem(STORAGE_KEYS.branding);
-      if (local) {
-        setBranding({ ...DEFAULT_BRANDING, ...JSON.parse(local) });
-      }
-    } catch {}
+    brandingRef.current = branding;
+  }, [branding]);
 
-    fetch('/api/branding')
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (data?.branding) {
-          setBranding(data.branding);
-          try {
-            localStorage.setItem(
-              STORAGE_KEYS.branding,
-              JSON.stringify(data.branding)
-            );
-          } catch {}
-        }
-      })
-      .catch(() => {});
+  useEffect(() => {
+    const syncLocal = readSyncLocalBranding();
+    if (syncLocal) {
+      setBranding(syncLocal);
+      brandingRef.current = syncLocal;
+    }
+
+    reconcileBrandingOnLoad().then((resolved) => {
+      setBranding(resolved);
+      brandingRef.current = resolved;
+    });
   }, []);
 
   const persistBranding = useCallback(async (next: SiteBranding) => {
     setBranding(next);
-    try {
-      localStorage.setItem(STORAGE_KEYS.branding, JSON.stringify(next));
-      window.dispatchEvent(new Event('qaaga-branding-updated'));
-    } catch {}
-    try {
-      await fetch('/api/branding', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(next),
-      });
-    } catch {}
+    brandingRef.current = next;
+    const saved = await persistBrandingEverywhere(next);
+    setBranding(saved);
+    brandingRef.current = saved;
   }, []);
 
   const handleRemoveLogo = useCallback(async () => {
     const removed: SiteBranding = {
-      ...branding,
+      ...brandingRef.current,
       logoUrl: null,
-      updatedAt: new Date().toISOString(),
     };
-    setBranding(removed);
-    try {
-      localStorage.setItem(STORAGE_KEYS.branding, JSON.stringify(removed));
-      window.dispatchEvent(new Event('qaaga-branding-updated'));
-    } catch {}
-    try {
-      await fetch('/api/branding?target=logo', { method: 'DELETE' });
-    } catch {}
-  }, [branding]);
+    await persistBranding(removed);
+  }, [persistBranding]);
 
   const handleRestoreDefaultLogo = useCallback(async () => {
     const restored: SiteBranding = {
-      ...branding,
+      ...brandingRef.current,
       logoUrl: DEFAULT_BRANDING.logoUrl,
-      updatedAt: new Date().toISOString(),
     };
-    setBranding(restored);
-    try {
-      localStorage.setItem(STORAGE_KEYS.branding, JSON.stringify(restored));
-      window.dispatchEvent(new Event('qaaga-branding-updated'));
-    } catch {}
-    try {
-      await fetch('/api/branding?target=logo&reset=true', { method: 'DELETE' });
-    } catch {}
-  }, [branding]);
+    await persistBranding(restored);
+  }, [persistBranding]);
 
   return (
     <AdminPanelModal
