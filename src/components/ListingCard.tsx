@@ -44,6 +44,8 @@ interface ListingCardProps {
   formattedPrice: string;
   activeNights: number;
   carouselItem?: boolean;
+  variant?: 'recent' | 'wishlist' | 'default';
+  cardWidthClass?: string;
   vividSavedState?: boolean;
   onOpen: (item: QaagaListing) => void;
   onToggleWishlist: (e: React.MouseEvent, item: QaagaListing) => void;
@@ -56,6 +58,8 @@ export const ListingCard: React.FC<ListingCardProps> = ({
   formattedPrice,
   activeNights,
   carouselItem = false,
+  variant = 'default',
+  cardWidthClass,
   vividSavedState = false,
   onOpen,
   onToggleWishlist,
@@ -66,16 +70,33 @@ export const ListingCard: React.FC<ListingCardProps> = ({
       ? `for ${activeNights} night${activeNights > 1 ? 's' : ''}`
       : 'per booking';
 
+  let responsiveWidthClass = '';
+  if (cardWidthClass) {
+    responsiveWidthClass = cardWidthClass;
+  } else if (carouselItem) {
+    if (variant === 'recent') {
+      // Mobile: 3.25 cards shown (3 full + 0.25 peek) with gap-3 (12px)
+      // Laptop: 8 cards shown with gap-4 (16px)
+      responsiveWidthClass =
+        'snap-start shrink-0 w-[calc((100%-36px)/3.25)] min-[540px]:w-[calc((100%-48px)/4.25)] sm:w-[calc((100%-60px)/5.25)] md:w-[calc((100%-80px)/6)] lg:w-[calc((100%-112px)/8)] xl:w-[calc((100%-112px)/8)] 2xl:w-[calc((100%-112px)/8)]';
+    } else if (variant === 'wishlist') {
+      // Mobile: 2 cards shown with gap-3.5 (14px)
+      // Laptop: 5 cards shown with gap-4 (16px)
+      responsiveWidthClass =
+        'snap-start shrink-0 w-[calc((100%-14px)/2)] min-[500px]:w-[calc((100%-28px)/3)] md:w-[calc((100%-48px)/4)] lg:w-[calc((100%-64px)/5)] xl:w-[calc((100%-64px)/5)] 2xl:w-[calc((100%-64px)/5)]';
+    } else {
+      // Default: mobile 2 cards, laptop 5-6 cards
+      responsiveWidthClass =
+        'snap-start shrink-0 w-[calc((100%-14px)/2)] min-[500px]:w-[calc((100%-28px)/3)] md:w-[calc((100%-48px)/4)] lg:w-[calc((100%-64px)/5)] xl:w-[calc((100%-80px)/6)] 2xl:w-[calc((100%-100px)/7)]';
+    }
+  }
+
   return (
     <article
-      className={`group relative flex flex-col text-left rounded-[20px] ${
-        carouselItem
-          ? 'snap-start shrink-0 w-[47%] sm:w-[31%] lg:w-[calc((100%-100px)/6)]'
-          : ''
-      }`}
+      className={`group relative flex flex-col text-left rounded-[16px] sm:rounded-[20px] ${responsiveWidthClass}`}
     >
       {/* Rounded Square Photo Frame matching Screenshot_2026-11-04_at_2.23.12_AM */}
-      <div className="relative w-full aspect-[1.05/1] rounded-[20px] overflow-hidden bg-slate-100">
+      <div className="relative w-full aspect-[1.05/1] rounded-[16px] sm:rounded-[20px] overflow-hidden bg-slate-100">
         <button
           type="button"
           aria-label={`View details for ${item.title}`}
@@ -91,7 +112,13 @@ export const ListingCard: React.FC<ListingCardProps> = ({
 
         {/* Top-Left "Guest favorite" Pill */}
         {item.guestFavorite && (
-          <span className="absolute top-3 left-3 z-10 bg-white/95 backdrop-blur-xs text-slate-900 text-[12px] font-semibold px-3 py-1 rounded-full shadow-[0_2px_8px_rgba(0,0,0,0.12)] leading-tight pointer-events-none">
+          <span
+            className={`absolute top-2 left-2 sm:top-3 sm:left-3 z-10 bg-white/95 backdrop-blur-xs text-slate-900 font-semibold rounded-full shadow-[0_2px_8px_rgba(0,0,0,0.12)] leading-tight pointer-events-none ${
+              variant === 'recent'
+                ? 'hidden sm:inline-block text-[11px] px-2 py-0.5'
+                : 'text-[11px] sm:text-[12px] px-2.5 sm:px-3 py-0.5 sm:py-1'
+            }`}
+          >
             Guest favorite
           </span>
         )}
@@ -104,10 +131,14 @@ export const ListingCard: React.FC<ListingCardProps> = ({
             isSaved ? `Remove ${item.title} from wishlist` : `Save ${item.title} to wishlist`
           }
           onClick={(e) => onToggleWishlist(e, item)}
-          className="absolute top-2 right-2 z-20 min-w-[40px] min-h-[40px] flex items-center justify-center rounded-full cursor-pointer hover:scale-110 active:scale-90 transition-transform"
+          className={`absolute top-1.5 right-1.5 sm:top-2 sm:right-2 z-20 flex items-center justify-center rounded-full cursor-pointer hover:scale-110 active:scale-90 transition-transform ${
+            variant === 'recent'
+              ? 'min-w-[32px] min-h-[32px] sm:min-w-[40px] sm:min-h-[40px]'
+              : 'min-w-[40px] min-h-[40px]'
+          }`}
         >
           <Heart
-            size={22}
+            size={variant === 'recent' ? 18 : 22}
             className={
               showCrimsonHeart
                 ? 'fill-[#C72B62] text-white stroke-[2] drop-shadow-[0_1px_4px_rgba(0,0,0,0.3)]'
@@ -122,13 +153,23 @@ export const ListingCard: React.FC<ListingCardProps> = ({
       {/* Clean Unboxed Metadata Underneath Photo */}
       <div
         onClick={() => onOpen(item)}
-        className="pt-2.5 px-0.5 space-y-0.5 cursor-pointer"
+        className="pt-2 sm:pt-2.5 px-0.5 space-y-0.5 cursor-pointer"
       >
-        <h3 className="text-[13.5px] font-semibold text-slate-900 tracking-[-0.01em] leading-snug truncate">
+        <h3
+          className={`font-semibold text-slate-900 tracking-[-0.01em] leading-snug truncate ${
+            variant === 'recent' ? 'text-[12px] sm:text-[13.5px]' : 'text-[13.5px]'
+          }`}
+        >
           {item.title}
         </h3>
-        <div className="flex items-center gap-1 text-[12.5px] text-slate-500 tabular-nums leading-snug">
-          <span>
+        <div
+          className={`flex items-center gap-1 text-slate-500 tabular-nums leading-snug ${
+            variant === 'recent'
+              ? 'text-[11px] sm:text-[12.5px]'
+              : 'text-[12px] sm:text-[12.5px]'
+          }`}
+        >
+          <span className="truncate">
             {formattedPrice} {nightsLabel}
           </span>
           <span aria-hidden="true">·</span>

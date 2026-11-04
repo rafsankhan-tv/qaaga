@@ -3,8 +3,7 @@
 html,
 body {
   width: 100%;
-  max-width: 100%;
-  overflow-x: clip;
+  min-height: 100%;
   -webkit-tap-highlight-color: transparent;
   scroll-behavior: smooth;
 }

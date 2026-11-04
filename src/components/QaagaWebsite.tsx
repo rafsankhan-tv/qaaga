@@ -6,15 +6,16 @@ import {
   CalendarCheck2,
   ChevronLeft,
   ChevronRight,
-  Compass,
   Globe,
   Heart,
+  Home,
   MessageSquare,
   Plus,
   RotateCcw,
   Shield,
   ShieldCheck,
   SlidersHorizontal,
+  User,
   X,
 } from 'lucide-react';
 import {
@@ -504,7 +505,7 @@ export const QaagaWebsite: React.FC<{ initialBranding?: SiteBranding }> = ({
     const extraStays = allListings.filter(
       (item) => item.category === 'stay' && !recentlyViewedIds.includes(item.id)
     );
-    return [...ordered, ...extraStays.slice(0, 6)];
+    return [...ordered, ...extraStays].slice(0, 16);
   }, [allListings, recentlyViewedIds]);
 
   const wishlistListings = useMemo(() => {
@@ -970,7 +971,7 @@ export const QaagaWebsite: React.FC<{ initialBranding?: SiteBranding }> = ({
       {/* =================================================================== */}
       {/* MAIN MARKETPLACE CANVAS                                             */}
       {/* =================================================================== */}
-      <main className="flex-1 w-full max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-12 pt-6 sm:pt-7 pb-14 space-y-9 sm:space-y-11">
+      <main className="flex-1 w-full px-4 sm:px-6 lg:px-10 xl:px-12 2xl:px-16 3xl:px-20 pt-6 sm:pt-7 pb-14 space-y-9 sm:space-y-11">
         {/* ----------------------------------------------------------------- */}
         {/* CASE A: ACTIVE SEARCH RESULTS ON "ALL"                            */}
         {/* ----------------------------------------------------------------- */}
@@ -1017,7 +1018,7 @@ export const QaagaWebsite: React.FC<{ initialBranding?: SiteBranding }> = ({
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-x-5 gap-y-7">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 2xl:grid-cols-7 min-[1920px]:grid-cols-8 min-[2560px]:grid-cols-10 gap-x-5 gap-y-7">
                 {filteredSearchListings.map((item) => (
                   <ListingCard
                     key={`search-${item.id}`}
@@ -1075,7 +1076,7 @@ export const QaagaWebsite: React.FC<{ initialBranding?: SiteBranding }> = ({
 
               <div
                 ref={recentCarouselRef}
-                className="flex gap-5 overflow-x-auto scrollbar-none snap-x snap-mandatory pb-1"
+                className="flex gap-3 sm:gap-3.5 lg:gap-4 overflow-x-auto scrollbar-none snap-x snap-mandatory pb-1"
               >
                 {recentlyViewedListings.map((item) => (
                   <ListingCard
@@ -1086,6 +1087,7 @@ export const QaagaWebsite: React.FC<{ initialBranding?: SiteBranding }> = ({
                     formattedPrice={formatPrice(item.twoNightPriceUsd)}
                     activeNights={activeNights}
                     carouselItem={true}
+                    variant="recent"
                     onOpen={handleOpenListing}
                     onToggleWishlist={handleToggleWishlist}
                   />
@@ -1158,7 +1160,7 @@ export const QaagaWebsite: React.FC<{ initialBranding?: SiteBranding }> = ({
               ) : (
                 <div
                   ref={wishlistCarouselRef}
-                  className="flex gap-5 overflow-x-auto scrollbar-none snap-x snap-mandatory pb-1"
+                  className="flex gap-3.5 sm:gap-4 overflow-x-auto scrollbar-none snap-x snap-mandatory pb-1"
                 >
                   {wishlistListings.map((item) => (
                     <ListingCard
@@ -1169,6 +1171,7 @@ export const QaagaWebsite: React.FC<{ initialBranding?: SiteBranding }> = ({
                       formattedPrice={formatPrice(item.twoNightPriceUsd)}
                       activeNights={activeNights}
                       carouselItem={true}
+                      variant="wishlist"
                       onOpen={handleOpenListing}
                       onToggleWishlist={handleToggleWishlist}
                     />
@@ -1230,7 +1233,7 @@ export const QaagaWebsite: React.FC<{ initialBranding?: SiteBranding }> = ({
 
               <div
                 ref={popularCarouselRef}
-                className="flex gap-5 overflow-x-auto scrollbar-none snap-x snap-mandatory pb-1"
+                className="flex gap-3.5 sm:gap-4 overflow-x-auto scrollbar-none snap-x snap-mandatory pb-1"
               >
                 {popularKLListings.map((item) => (
                   <ListingCard
@@ -1241,6 +1244,7 @@ export const QaagaWebsite: React.FC<{ initialBranding?: SiteBranding }> = ({
                     formattedPrice={formatPrice(item.twoNightPriceUsd)}
                     activeNights={activeNights}
                     carouselItem={true}
+                    variant="wishlist"
                     onOpen={handleOpenListing}
                     onToggleWishlist={handleToggleWishlist}
                   />
@@ -1304,7 +1308,7 @@ export const QaagaWebsite: React.FC<{ initialBranding?: SiteBranding }> = ({
 
               <div
                 ref={curatedCarouselRef}
-                className="flex gap-5 overflow-x-auto scrollbar-none snap-x snap-mandatory pb-1"
+                className="flex gap-3.5 sm:gap-4 overflow-x-auto scrollbar-none snap-x snap-mandatory pb-1"
               >
                 {curatedExperiencesAndServices.map((item) => (
                   <ListingCard
@@ -1315,6 +1319,7 @@ export const QaagaWebsite: React.FC<{ initialBranding?: SiteBranding }> = ({
                     formattedPrice={formatPrice(item.twoNightPriceUsd)}
                     activeNights={activeNights}
                     carouselItem={true}
+                    variant="wishlist"
                     onOpen={handleOpenListing}
                     onToggleWishlist={handleToggleWishlist}
                   />
@@ -1406,7 +1411,7 @@ export const QaagaWebsite: React.FC<{ initialBranding?: SiteBranding }> = ({
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-x-5 gap-y-7">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 2xl:grid-cols-7 min-[1920px]:grid-cols-8 min-[2560px]:grid-cols-10 gap-x-5 gap-y-7">
                 {categoryListings.map((item) => (
                   <ListingCard
                     key={`cat-${item.id}`}
@@ -1430,8 +1435,8 @@ export const QaagaWebsite: React.FC<{ initialBranding?: SiteBranding }> = ({
       {/* HOSPITALITY FOOTER                                                  */}
       {/* =================================================================== */}
       <footer className="border-t border-slate-200 bg-slate-50/70">
-        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-12 py-10 space-y-8">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 text-xs text-slate-600">
+        <div className="w-full px-4 sm:px-6 lg:px-10 xl:px-12 2xl:px-16 3xl:px-20 py-10 space-y-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-5 gap-8 text-xs text-slate-600">
             <div className="space-y-2.5">
               <button
                 type="button"
@@ -1597,26 +1602,35 @@ export const QaagaWebsite: React.FC<{ initialBranding?: SiteBranding }> = ({
       >
         <button
           type="button"
+          aria-label="Home"
           onClick={handleResetHome}
           className={`flex flex-col items-center justify-center py-1 gap-0.5 text-[11px] font-semibold cursor-pointer ${
-            activeCategory === 'all' && !isTripsOpen && !isMessagesOpen
+            activeCategory === 'all' && !isTripsOpen && !isMessagesOpen && !isProfileOpen
               ? 'text-[#C72B62]'
               : 'text-slate-600'
           }`}
         >
-          <Compass size={20} />
-          <span>Explore</span>
+          <Home size={20} />
+          <span>Home</span>
         </button>
 
         <button
           type="button"
-          onClick={() =>
-            setExplorerCollection({ mode: 'wishlist', title: 'Wishlist' })
-          }
-          className="flex flex-col items-center justify-center py-1 gap-0.5 text-[11px] font-semibold text-slate-600 cursor-pointer"
+          aria-label="Booking"
+          onClick={() => setIsTripsOpen(true)}
+          className={`flex flex-col items-center justify-center py-1 gap-0.5 text-[11px] font-semibold cursor-pointer relative ${
+            isTripsOpen ? 'text-[#C72B62]' : 'text-slate-600'
+          }`}
         >
-          <Heart size={20} />
-          <span>Wishlist</span>
+          <div className="relative">
+            <CalendarCheck2 size={20} />
+            {bookings.length > 0 && (
+              <span className="absolute -top-1 -right-2 bg-[#C72B62] text-white text-[9px] font-bold rounded-full w-3.5 h-3.5 flex items-center justify-center">
+                {bookings.length}
+              </span>
+            )}
+          </div>
+          <span>Booking</span>
         </button>
 
         <button
@@ -1632,20 +1646,31 @@ export const QaagaWebsite: React.FC<{ initialBranding?: SiteBranding }> = ({
 
         <button
           type="button"
-          onClick={() => setIsTripsOpen(true)}
-          className="flex flex-col items-center justify-center py-1 gap-0.5 text-[11px] font-semibold text-slate-600 cursor-pointer"
+          aria-label="Inbox"
+          onClick={() => setIsMessagesOpen(true)}
+          className={`flex flex-col items-center justify-center py-1 gap-0.5 text-[11px] font-semibold cursor-pointer relative ${
+            isMessagesOpen ? 'text-[#C72B62]' : 'text-slate-600'
+          }`}
         >
-          <CalendarCheck2 size={20} />
-          <span>Trips</span>
+          <div className="relative">
+            <MessageSquare size={20} />
+            {threads.some((t) => t.unread) && (
+              <span className="absolute -top-1 -right-1.5 bg-[#C72B62] w-2 h-2 rounded-full ring-2 ring-white" />
+            )}
+          </div>
+          <span>Inbox</span>
         </button>
 
         <button
           type="button"
-          onClick={() => setIsMessagesOpen(true)}
-          className="flex flex-col items-center justify-center py-1 gap-0.5 text-[11px] font-semibold text-slate-600 cursor-pointer"
+          aria-label="Profile"
+          onClick={() => setIsProfileOpen(true)}
+          className={`flex flex-col items-center justify-center py-1 gap-0.5 text-[11px] font-semibold cursor-pointer ${
+            isProfileOpen ? 'text-[#C72B62]' : 'text-slate-600'
+          }`}
         >
-          <MessageSquare size={20} />
-          <span>Inbox</span>
+          <User size={20} />
+          <span>Profile</span>
         </button>
       </nav>
 

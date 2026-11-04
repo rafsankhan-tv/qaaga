@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import {
   Bell,
   ChevronLeft,
@@ -132,21 +132,67 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
   onOpenAdminModal,
 }) => {
   const searchRef = useRef<HTMLDivElement | null>(null);
+  const compactPillRef = useRef<HTMLDivElement | null>(null);
   const whereInputRef = useRef<HTMLInputElement | null>(null);
   const rightUtilsRef = useRef<HTMLDivElement | null>(null);
 
+  const [isScrolled, setIsScrolled] = useState(false);
+  const [isManualExpand, setIsManualExpand] = useState(false);
+  const shouldCollapse = isScrolled && !isManualExpand;
+
   useEffect(() => {
     const handleOutside = (e: MouseEvent) => {
-      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      const inSearch = searchRef.current && searchRef.current.contains(target);
+      const inCompact = compactPillRef.current && compactPillRef.current.contains(target);
+      if (!inSearch && !inCompact) {
         onSetActivePopover(null);
+        setIsManualExpand(false);
       }
-      if (rightUtilsRef.current && !rightUtilsRef.current.contains(e.target as Node)) {
+      if (rightUtilsRef.current && !rightUtilsRef.current.contains(target)) {
         onCloseMenus();
       }
     };
     document.addEventListener('mousedown', handleOutside);
     return () => document.removeEventListener('mousedown', handleOutside);
   }, [onSetActivePopover, onCloseMenus]);
+
+  useEffect(() => {
+    const getScrollY = () => {
+      if (typeof window === 'undefined') return 0;
+      return (
+        window.pageYOffset ||
+        window.scrollY ||
+        document.documentElement?.scrollTop ||
+        document.body?.scrollTop ||
+        0
+      );
+    };
+
+    const handleScroll = () => {
+      const currentY = getScrollY();
+      const scrolled = currentY > 20;
+      setIsScrolled((prev) => {
+        if (prev !== scrolled) {
+          if (!scrolled) {
+            setIsManualExpand(false);
+          }
+          return scrolled;
+        }
+        return prev;
+      });
+    };
+
+    handleScroll();
+    window.addEventListener('scroll', handleScroll, { passive: true, capture: true });
+    document.addEventListener('scroll', handleScroll, { passive: true, capture: true });
+    window.addEventListener('touchmove', handleScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', handleScroll, true);
+      document.removeEventListener('scroll', handleScroll, true);
+      window.removeEventListener('touchmove', handleScroll);
+    };
+  }, []);
 
   useEffect(() => {
     if (activePopover === 'where') {
@@ -157,103 +203,192 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
     }
   }, [activePopover]);
 
+  const handleExecuteSearch = () => {
+    setIsManualExpand(false);
+    onExecuteSearch();
+  };
+
   const unreadNotifCount = notifications.filter((n) => n.unread).length;
+  const activeTabObj =
+    CATEGORY_TABS.find((tab) => tab.id === activeCategory) || CATEGORY_TABS[0];
+  const stayTab = CATEGORY_TABS.find((tab) => tab.id === 'stay');
+  const displayCategoryIcon =
+    activeCategory === 'experiences' || activeCategory === 'services'
+      ? activeTabObj.iconSrc
+      : stayTab?.iconSrc || '/assets/kl-ui/icon-stay.png';
+  const displayWhere = whereQuery.trim() ? whereQuery : 'Where';
+  const displayWhen = selectedDates.display ? selectedDates.display : 'When';
+  const displayWho = guestSummaryText ? guestSummaryText : 'Who';
 
   return (
-    <div className="border-b border-slate-200/90 bg-white">
-      <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-12 pt-4 sm:pt-5 pb-4 sm:pb-6 space-y-4 sm:space-y-5">
+    <div
+      className={`sticky top-0 z-50 bg-white/98 backdrop-blur-md w-full transition-all duration-300 ${
+        shouldCollapse
+          ? 'border-b border-slate-200/90 shadow-[0_4px_20px_rgba(15,23,42,0.06)]'
+          : 'border-b border-slate-200/90'
+      }`}
+    >
+      <div
+        className={`w-full px-3 sm:px-6 lg:px-10 xl:px-12 2xl:px-16 transition-all duration-300 ease-in-out ${
+          shouldCollapse
+            ? 'py-2 sm:py-2.5 space-y-0'
+            : 'pt-3 sm:pt-5 pb-3 sm:pb-6 space-y-3 sm:space-y-5'
+        }`}
+      >
         {/* ================================================================= */}
-        {/* ROW 1: qaaga.com — Centered 4 Category Tabs — Host, Bell 2, User  */}
+        {/* ROW 1: qaaga.com — Centered Tabs / Compact Pill — Host, Bell, User */}
         {/* ================================================================= */}
-        <header className="flex flex-col md:grid md:grid-cols-[1fr_auto_1fr] md:items-center gap-3 md:gap-4">
-          {/* Top-Left Official Brand Logo + Mobile Right Icons */}
-          <div className="flex items-center justify-between md:justify-self-start">
+        <header
+          className={`w-full transition-all duration-300 ${
+            shouldCollapse
+              ? 'flex items-center justify-between gap-1.5 sm:gap-3 md:gap-4'
+              : 'flex flex-col md:grid md:grid-cols-[1fr_auto_1fr] md:items-center gap-2.5 md:gap-4'
+          }`}
+        >
+          {/* Top-Left Official Brand Logo */}
+          <div className="flex items-center shrink-0 md:justify-self-start">
             <button
               type="button"
               aria-label="qaaga.com home"
               onClick={onResetHome}
-              className="inline-flex items-center leading-none cursor-pointer shrink-0 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C72B62] rounded-xl"
+              className={`inline-flex items-center leading-none cursor-pointer shrink-0 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C72B62] rounded-xl transition-transform duration-300 origin-left ${
+                shouldCollapse ? 'scale-[0.82] sm:scale-[0.92]' : 'scale-100'
+              }`}
             >
               <BrandLogo branding={branding} variant="header" />
             </button>
+          </div>
 
-            {/* Mobile Compact Bell & Profile Trigger */}
-            <div className="flex md:hidden items-center gap-2">
+          {/* Center: Category Tabs (Top) OR Compact Search Pill + Plus Button (Scrolled) */}
+          <div
+            ref={compactPillRef}
+            className={`flex items-center justify-center relative min-h-[44px] sm:min-h-[48px] ${
+              shouldCollapse
+                ? 'flex-1 md:flex-initial md:justify-self-center min-w-0 px-1'
+                : 'w-full md:w-auto md:justify-self-center'
+            }`}
+          >
+            {/* Category Tabs: Shown at top */}
+            <nav
+              aria-label="Listing categories"
+              className={`flex items-center justify-between min-[410px]:justify-center gap-2 min-[410px]:gap-4 sm:gap-7 lg:gap-10 overflow-x-auto scrollbar-none px-0.5 transition-all duration-300 ease-in-out ${
+                shouldCollapse
+                  ? 'opacity-0 scale-95 pointer-events-none -translate-y-2 absolute invisible'
+                  : 'opacity-100 scale-100 pointer-events-auto translate-y-0 visible'
+              }`}
+            >
+              {CATEGORY_TABS.map((tab) => {
+                const isActive = activeCategory === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => onSelectCategory(tab.id)}
+                    className={`relative flex items-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0 transition-all duration-300 cursor-pointer pb-2.5 pt-1 ${
+                      isActive
+                        ? 'text-slate-950 font-semibold'
+                        : 'text-slate-500 hover:text-slate-800 font-semibold'
+                    }`}
+                  >
+                    <img
+                      src={tab.iconSrc}
+                      alt=""
+                      aria-hidden="true"
+                      referrerPolicy="no-referrer"
+                      className={`w-6 h-6 min-[410px]:w-7 min-[410px]:h-7 sm:w-9 sm:h-9 object-contain transition-all duration-300 ${
+                        isActive ? 'scale-105' : 'opacity-95 hover:opacity-100'
+                      }`}
+                    />
+                    <span className="text-[12.5px] min-[410px]:text-[13.5px] sm:text-[14.5px] font-semibold tracking-[-0.01em]">
+                      {tab.label}
+                    </span>
+
+                    {isActive && (
+                      <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-slate-900 rounded-full" />
+                    )}
+                  </button>
+                );
+              })}
+            </nav>
+
+            {/* Compact Search Pill + Adjacent '+' Button: Shown on scroll */}
+            <div
+              className={`flex items-center gap-1.5 sm:gap-2.5 transition-all duration-300 ease-in-out max-w-full ${
+                shouldCollapse
+                  ? 'opacity-100 scale-100 pointer-events-auto translate-y-0 visible'
+                  : 'opacity-0 scale-95 pointer-events-none translate-y-2 absolute invisible'
+              }`}
+            >
               <button
                 type="button"
-                aria-label="Notifications"
-                onClick={onToggleNotif}
-                className="relative min-w-[40px] min-h-[40px] flex items-center justify-center rounded-full hover:bg-slate-100 cursor-pointer"
+                data-testid="compact-search-pill"
+                aria-label="Search destination, dates, guests"
+                onClick={() => {
+                  setIsManualExpand(true);
+                  onSetActivePopover('where');
+                }}
+                className="inline-flex items-center gap-1.5 sm:gap-2.5 bg-white border border-slate-300/90 hover:border-slate-400 rounded-full pl-2.5 sm:pl-3.5 pr-1 sm:pr-1.5 py-1 sm:py-1.5 shadow-[0_2px_8px_rgba(15,23,42,0.08)] hover:shadow-[0_4px_14px_rgba(15,23,42,0.14)] transition-all cursor-pointer group min-w-0"
               >
-                <Bell size={22} className="fill-[#8F8F8F] text-[#737373]" />
-                {unreadNotifCount > 0 && (
-                  <span className="absolute top-0.5 right-1 text-[13px] font-bold text-[#C72B62] leading-none tabular-nums">
-                    {unreadNotifCount}
-                  </span>
-                )}
+                {/* Stay / Category Logo beside Where */}
+                <img
+                  src={displayCategoryIcon}
+                  alt="Stay"
+                  aria-hidden="true"
+                  referrerPolicy="no-referrer"
+                  className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6 object-contain shrink-0"
+                />
+
+                <span className="text-[11px] sm:text-[12.5px] md:text-[13.5px] font-bold text-slate-900 truncate max-w-[65px] sm:max-w-[100px] md:max-w-[130px]">
+                  {displayWhere}
+                </span>
+
+                <span className="w-[1px] sm:w-[1.5px] h-3 sm:h-3.5 md:h-4 bg-slate-300 shrink-0" aria-hidden="true" />
+
+                <span className="text-[11px] sm:text-[12.5px] md:text-[13.5px] font-bold text-slate-900 truncate max-w-[60px] sm:max-w-[90px] md:max-w-[120px]">
+                  {displayWhen}
+                </span>
+
+                <span className="w-[1px] sm:w-[1.5px] h-3 sm:h-3.5 md:h-4 bg-slate-300 shrink-0" aria-hidden="true" />
+
+                <span className="text-[11px] sm:text-[12.5px] md:text-[13.5px] font-normal text-slate-700 truncate max-w-[55px] sm:max-w-[85px] md:max-w-[110px]">
+                  {displayWho}
+                </span>
+
+                {/* Solid #C72B62 Search Circle Button */}
+                <span className="w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8 rounded-full bg-[#C72B62] group-hover:bg-[#ad2253] text-white flex items-center justify-center shrink-0 ml-0.5 sm:ml-1 shadow-[0_2px_8px_rgba(199,43,98,0.28)] transition-transform group-hover:scale-105">
+                  <Search size={13} strokeWidth={2.6} />
+                </span>
               </button>
+
+              {/* Plus Button beside Search Button ("হোয়ার, হোয়েন, হু এর পাশে সার্চ বাটন, তার পাশে প্লাস আইকন বাটন থাকবে") */}
               <button
                 type="button"
-                aria-label="Open account menu"
-                onClick={onToggleAccount}
-                className="w-9 h-9 rounded-full bg-[#9E9E9E] text-white flex items-center justify-center cursor-pointer"
+                aria-label="Create new listing"
+                onClick={onOpenHostModal}
+                className="flex w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8 rounded-full bg-white border border-slate-300 hover:border-[#C72B62]/60 items-center justify-center text-[#C72B62] active:scale-95 transition-all shrink-0 cursor-pointer shadow-xs hover:shadow-sm"
               >
-                <User size={19} className="fill-white text-white" />
+                <Plus size={15} strokeWidth={2.4} />
               </button>
             </div>
           </div>
 
-          {/* Center: Mathematically Centered 4 Illustrated Category Tabs */}
-          <nav
-            aria-label="Listing categories"
-            className="w-full md:w-auto md:justify-self-center flex items-center justify-between min-[410px]:justify-center gap-2 min-[410px]:gap-5 sm:gap-8 lg:gap-11 overflow-x-auto scrollbar-none px-0.5"
-          >
-            {CATEGORY_TABS.map((tab) => {
-              const isActive = activeCategory === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => onSelectCategory(tab.id)}
-                  className={`relative flex items-center gap-1.5 sm:gap-2.5 pb-2.5 pt-1 whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
-                    isActive
-                      ? 'text-slate-950 font-semibold'
-                      : 'text-slate-500 hover:text-slate-800 font-semibold'
-                  }`}
-                >
-                  <img
-                    src={tab.iconSrc}
-                    alt=""
-                    aria-hidden="true"
-                    referrerPolicy="no-referrer"
-                    className={`w-6 h-6 min-[410px]:w-7 min-[410px]:h-7 sm:w-9 sm:h-9 object-contain transition-transform duration-150 ${
-                      isActive ? 'scale-105' : 'opacity-95 hover:opacity-100'
-                    }`}
-                  />
-                  <span className="text-[12.5px] min-[410px]:text-[13.5px] sm:text-[14.5px] tracking-[-0.01em]">
-                    {tab.label}
-                  </span>
-
-                  {isActive && (
-                    <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-slate-900 rounded-full" />
-                  )}
-                </button>
-              );
-            })}
-          </nav>
-
           {/* Right: "become a host" + Notification Bell(2) + Avatar Menu */}
           <div
             ref={rightUtilsRef}
-            className="relative flex md:justify-self-end items-center justify-end gap-3.5 lg:gap-4 shrink-0"
+            className={`relative flex items-center justify-end shrink-0 gap-1.5 sm:gap-2.5 md:gap-3 lg:gap-4 md:justify-self-end`}
           >
-            <div className="hidden md:flex items-center gap-3.5 lg:gap-4">
+            <div
+              className={`items-center gap-1.5 sm:gap-2.5 md:gap-3.5 lg:gap-4 ${
+                shouldCollapse ? 'flex' : 'hidden md:flex'
+              }`}
+            >
               <button
                 type="button"
                 onClick={onOpenHostModal}
-                className="inline-flex items-center text-[15px] text-slate-800 hover:text-slate-950 font-normal px-2.5 py-1.5 rounded-full hover:bg-slate-100/80 transition-colors whitespace-nowrap cursor-pointer"
+                className="inline-flex items-center text-xs sm:text-[13px] md:text-[15px] text-slate-800 hover:text-slate-950 font-medium px-2 py-1 rounded-full hover:bg-slate-100/80 transition-colors whitespace-nowrap cursor-pointer"
               >
-                become a host
+                <span className="hidden sm:inline">become a host</span>
+                <span className="inline sm:hidden">Host</span>
               </button>
 
               {/* Notification Bell Icon + #C72B62 Superscript Count matching screenshot */}
@@ -261,14 +396,14 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
                 type="button"
                 aria-label="Notifications"
                 onClick={onToggleNotif}
-                className="relative min-w-[42px] min-h-[42px] flex items-center justify-center rounded-full hover:bg-slate-100 transition-colors cursor-pointer"
+                className="relative min-w-[34px] min-h-[34px] sm:min-w-[40px] sm:min-h-[40px] flex items-center justify-center rounded-full hover:bg-slate-100 transition-colors cursor-pointer"
               >
                 <Bell
-                  size={25}
+                  size={21}
                   className="fill-[#949494] text-[#767676] hover:fill-[#767676] transition-colors"
                 />
                 {notifications.length > 0 && (
-                  <span className="absolute top-0.5 right-1 text-[14px] font-bold text-[#C72B62] leading-none tabular-nums">
+                  <span className="absolute top-0.5 right-0.5 text-[12px] sm:text-[14px] font-bold text-[#C72B62] leading-none tabular-nums">
                     {unreadNotifCount > 0 ? unreadNotifCount : notifications.length}
                   </span>
                 )}
@@ -279,9 +414,9 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
                 type="button"
                 aria-label="Account menu"
                 onClick={onToggleAccount}
-                className="w-9 h-9 rounded-full bg-[#9E9E9E] hover:bg-[#828282] text-white flex items-center justify-center transition-colors cursor-pointer"
+                className="w-7 h-7 sm:w-8 sm:h-8 md:w-9 md:h-9 rounded-full bg-[#9E9E9E] hover:bg-[#828282] text-white flex items-center justify-center transition-colors cursor-pointer shrink-0"
               >
-                <User size={20} className="fill-white text-white" />
+                <User size={18} className="fill-white text-white" />
               </button>
             </div>
 
@@ -473,23 +608,35 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
         {/* ================================================================= */}
         <div
           ref={searchRef}
-          className="relative flex items-center justify-center gap-2.5 sm:gap-3.5"
+          className={`relative flex items-center justify-center gap-2 sm:gap-3.5 transition-all duration-300 ease-in-out ${
+            shouldCollapse
+              ? 'max-h-0 opacity-0 -translate-y-4 scale-95 pointer-events-none overflow-hidden my-0 py-0'
+              : 'max-h-[160px] opacity-100 translate-y-0 scale-100 pointer-events-auto mt-3 sm:mt-4'
+          }`}
         >
-          <div className="w-full max-w-[780px] min-h-[56px] sm:min-h-[64px] rounded-full bg-white border border-slate-300/90 shadow-[0_3px_14px_rgba(15,23,42,0.05)] pl-4 sm:pl-7 pr-1.5 sm:pr-2 py-1 sm:py-1.5 flex items-center">
+          <div
+            className={`w-full rounded-full bg-white border border-slate-300/90 shadow-[0_3px_14px_rgba(15,23,42,0.05)] flex items-center transition-all duration-300 ${
+              shouldCollapse
+                ? 'max-w-[680px] sm:max-w-[720px] min-h-[46px] sm:min-h-[50px] pl-3.5 sm:pl-5 pr-1 sm:pr-1.5 py-0.5 sm:py-1'
+                : 'max-w-[780px] min-h-[56px] sm:min-h-[64px] pl-4 sm:pl-7 pr-1.5 sm:pr-2 py-1 sm:py-1.5'
+            }`}
+          >
             {/* Segment 1: Where */}
             <div
               onClick={() => {
                 onSetActivePopover('where');
                 whereInputRef.current?.focus();
               }}
-              className={`flex-1 min-w-0 py-1 pr-2 rounded-full flex items-center justify-between gap-1 cursor-pointer transition-colors ${
+              className={`flex-1 min-w-0 py-0.5 sm:py-1 pr-1.5 sm:pr-2 rounded-full flex items-center justify-between gap-1 cursor-pointer transition-colors ${
                 activePopover === 'where' ? 'bg-slate-50 px-3 -ml-2' : ''
               }`}
             >
               <div className="min-w-0 flex-1">
                 <label
                   htmlFor="qaaga-where-input"
-                  className="block text-[12px] font-bold text-slate-950 leading-tight cursor-pointer"
+                  className={`block font-bold text-slate-950 leading-tight cursor-pointer transition-all ${
+                    shouldCollapse ? 'text-[11px]' : 'text-[12px]'
+                  }`}
                 >
                   Where
                 </label>
@@ -503,11 +650,15 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       e.preventDefault();
-                      onExecuteSearch();
+                      handleExecuteSearch();
                     }
                   }}
                   placeholder="Search destination"
-                  className="w-full bg-transparent text-[12.5px] sm:text-[14px] text-slate-800 placeholder:text-slate-400 focus:outline-none truncate mt-0.5"
+                  className={`w-full bg-transparent text-slate-800 placeholder:text-slate-400 focus:outline-none truncate transition-all ${
+                    shouldCollapse
+                      ? 'text-[12px] sm:text-[13px] mt-0'
+                      : 'text-[12.5px] sm:text-[14px] mt-0.5'
+                  }`}
                 />
               </div>
               {whereQuery && (
@@ -527,7 +678,9 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
 
             {/* Crisp Dark Vertical Divider */}
             <div
-              className="h-6 sm:h-7 w-[1.5px] bg-slate-800/80 mx-2 sm:mx-4 shrink-0"
+              className={`w-[1.5px] bg-slate-800/80 mx-1.5 sm:mx-3 shrink-0 transition-all ${
+                shouldCollapse ? 'h-4 sm:h-5' : 'h-6 sm:h-7'
+              }`}
               aria-hidden="true"
             />
 
@@ -535,15 +688,23 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
             <button
               type="button"
               onClick={() => onSetActivePopover(activePopover === 'when' ? null : 'when')}
-              className={`w-[26%] sm:w-[30%] min-w-0 text-left py-1 px-1.5 sm:px-2 rounded-full hover:bg-slate-50/80 transition-colors cursor-pointer ${
+              className={`w-[26%] sm:w-[30%] min-w-0 text-left py-0.5 sm:py-1 px-1.5 sm:px-2 rounded-full hover:bg-slate-50/80 transition-colors cursor-pointer ${
                 activePopover === 'when' ? 'bg-slate-100/80' : ''
               }`}
             >
-              <span className="block text-[12px] font-bold text-slate-950 leading-tight">
+              <span
+                className={`block font-bold text-slate-950 leading-tight transition-all ${
+                  shouldCollapse ? 'text-[11px]' : 'text-[12px]'
+                }`}
+              >
                 When
               </span>
               <span
-                className={`block text-[12.5px] sm:text-[14px] leading-tight truncate mt-0.5 ${
+                className={`block leading-tight truncate transition-all ${
+                  shouldCollapse
+                    ? 'text-[12px] sm:text-[13px] mt-0'
+                    : 'text-[12.5px] sm:text-[14px] mt-0.5'
+                } ${
                   selectedDates.display ? 'text-slate-900 font-medium' : 'text-slate-400'
                 }`}
               >
@@ -553,7 +714,9 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
 
             {/* Crisp Dark Vertical Divider */}
             <div
-              className="h-6 sm:h-7 w-[1.5px] bg-slate-800/80 mx-2 sm:mx-4 shrink-0"
+              className={`w-[1.5px] bg-slate-800/80 mx-1.5 sm:mx-3 shrink-0 transition-all ${
+                shouldCollapse ? 'h-4 sm:h-5' : 'h-6 sm:h-7'
+              }`}
               aria-hidden="true"
             />
 
@@ -561,15 +724,23 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
             <button
               type="button"
               onClick={() => onSetActivePopover(activePopover === 'who' ? null : 'who')}
-              className={`w-[23%] sm:w-[25%] min-w-0 text-left py-1 px-1.5 sm:px-2 rounded-full hover:bg-slate-50/80 transition-colors cursor-pointer ${
+              className={`w-[23%] sm:w-[25%] min-w-0 text-left py-0.5 sm:py-1 px-1.5 sm:px-2 rounded-full hover:bg-slate-50/80 transition-colors cursor-pointer ${
                 activePopover === 'who' ? 'bg-slate-100/80' : ''
               }`}
             >
-              <span className="block text-[12px] font-bold text-slate-950 leading-tight">
+              <span
+                className={`block font-bold text-slate-950 leading-tight transition-all ${
+                  shouldCollapse ? 'text-[11px]' : 'text-[12px]'
+                }`}
+              >
                 Who
               </span>
               <span
-                className={`block text-[12.5px] sm:text-[14px] leading-tight truncate mt-0.5 tabular-nums ${
+                className={`block leading-tight truncate tabular-nums transition-all ${
+                  shouldCollapse
+                    ? 'text-[12px] sm:text-[13px] mt-0'
+                    : 'text-[12.5px] sm:text-[14px] mt-0.5'
+                } ${
                   guestSummaryText ? 'text-slate-900 font-medium' : 'text-slate-400'
                 }`}
               >
@@ -581,26 +752,34 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
             <button
               type="button"
               aria-label="Search listings"
-              onClick={onExecuteSearch}
-              className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#C72B62] hover:bg-[#ad2253] active:scale-95 text-white flex items-center justify-center shrink-0 ml-1.5 sm:ml-2 shadow-[0_3px_10px_rgba(199,43,98,0.28)] transition-all cursor-pointer"
+              onClick={handleExecuteSearch}
+              className={`rounded-full bg-[#C72B62] hover:bg-[#ad2253] active:scale-95 text-white flex items-center justify-center shrink-0 ml-1 sm:ml-2 shadow-[0_3px_10px_rgba(199,43,98,0.28)] transition-all cursor-pointer ${
+                shouldCollapse ? 'w-8 h-8 sm:w-9 sm:h-9' : 'w-10 h-10 sm:w-12 sm:h-12'
+              }`}
             >
-              <Search size={18} strokeWidth={2.5} />
+              <Search size={shouldCollapse ? 15 : 18} strokeWidth={2.5} />
             </button>
           </div>
 
-          {/* Adjacent '+' Circle Button with #C72B62 Plus matching screenshot */}
+          {/* Adjacent '+' Circle Button with #C72B62 Plus matching screenshot (hidden on mobile view) */}
           <button
             type="button"
             aria-label="Create new listing"
             onClick={onOpenHostModal}
-            className="w-11 h-11 sm:w-[50px] sm:h-[50px] rounded-full bg-white border border-slate-300 hover:border-[#C72B62]/60 flex items-center justify-center text-[#C72B62] active:scale-95 transition-all shrink-0 cursor-pointer"
+            className={`hidden md:flex rounded-full bg-white border border-slate-300 hover:border-[#C72B62]/60 items-center justify-center text-[#C72B62] active:scale-95 transition-all shrink-0 cursor-pointer ${
+              shouldCollapse ? 'w-9 h-9 sm:w-10 sm:h-10' : 'w-11 h-11 sm:w-[50px] sm:h-[50px]'
+            }`}
           >
-            <Plus size={25} strokeWidth={2.4} />
+            <Plus size={shouldCollapse ? 20 : 25} strokeWidth={2.4} />
           </button>
 
           {/* POPOVER 1: WHERE */}
           {activePopover === 'where' && (
-            <div className="absolute top-[66px] sm:top-[74px] left-0 right-0 mx-auto md:left-1/2 md:-translate-x-1/2 md:mx-0 w-full max-w-[440px] bg-white rounded-3xl shadow-[0_16px_48px_rgba(15,23,42,0.16)] border border-slate-200 p-4 z-40 text-left">
+            <div
+              className={`absolute left-0 right-0 mx-auto md:left-1/2 md:-translate-x-1/2 md:mx-0 w-full max-w-[440px] bg-white rounded-3xl shadow-[0_16px_48px_rgba(15,23,42,0.16)] border border-slate-200 p-4 z-40 text-left transition-all ${
+                shouldCollapse ? 'top-[50px] sm:top-[56px]' : 'top-[66px] sm:top-[74px]'
+              }`}
+            >
               <div className="flex items-center justify-between px-2 pb-2">
                 <span className="text-xs font-bold text-slate-500">
                   Suggested destinations in Kuala Lumpur
@@ -642,7 +821,11 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
 
           {/* POPOVER 2: WHEN */}
           {activePopover === 'when' && (
-            <div className="absolute top-[66px] sm:top-[74px] left-0 right-0 mx-auto md:left-1/2 md:-translate-x-1/2 md:mx-0 w-full max-w-[500px] bg-white rounded-3xl shadow-[0_16px_48px_rgba(15,23,42,0.16)] border border-slate-200 p-5 z-40 text-left space-y-4">
+            <div
+              className={`absolute left-0 right-0 mx-auto md:left-1/2 md:-translate-x-1/2 md:mx-0 w-full max-w-[500px] bg-white rounded-3xl shadow-[0_16px_48px_rgba(15,23,42,0.16)] border border-slate-200 p-5 z-40 text-left space-y-4 transition-all ${
+                shouldCollapse ? 'top-[50px] sm:top-[56px]' : 'top-[66px] sm:top-[74px]'
+              }`}
+            >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <button
@@ -740,7 +923,11 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
 
           {/* POPOVER 3: WHO */}
           {activePopover === 'who' && (
-            <div className="absolute top-[66px] sm:top-[74px] left-0 right-0 mx-auto md:left-auto md:mx-0 md:right-20 w-full max-w-[380px] bg-white rounded-3xl shadow-[0_16px_48px_rgba(15,23,42,0.16)] border border-slate-200 p-5 z-40 text-left">
+            <div
+              className={`absolute left-0 right-0 mx-auto md:left-auto md:mx-0 md:right-20 w-full max-w-[380px] bg-white rounded-3xl shadow-[0_16px_48px_rgba(15,23,42,0.16)] border border-slate-200 p-5 z-40 text-left transition-all ${
+                shouldCollapse ? 'top-[50px] sm:top-[56px]' : 'top-[66px] sm:top-[74px]'
+              }`}
+            >
               <div className="divide-y divide-slate-100">
                 {[
                   {
@@ -825,7 +1012,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
                 </button>
                 <button
                   type="button"
-                  onClick={onExecuteSearch}
+                  onClick={handleExecuteSearch}
                   className="px-5 py-2 rounded-full bg-[#C72B62] hover:bg-[#ad2253] text-white text-xs font-semibold cursor-pointer"
                 >
                   Apply ({matchingCount} matches)

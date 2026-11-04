@@ -514,7 +514,7 @@ export const CollectionExplorerModal: React.FC<{
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-6xl max-h-[90vh] flex flex-col overflow-hidden"
+        className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-6xl 2xl:max-w-7xl min-[1920px]:max-w-[1700px] max-h-[90vh] flex flex-col overflow-hidden"
       >
         <div className="px-6 py-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -562,7 +562,7 @@ export const CollectionExplorerModal: React.FC<{
           </div>
         </div>
 
-        <div className="p-6 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-5">
+        <div className="p-6 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 2xl:grid-cols-6 min-[1920px]:grid-cols-7 gap-5">
           {items.map((item) => (
             <ListingCard
               key={`explorer-${item.id}`}
