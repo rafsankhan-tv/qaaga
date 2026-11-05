@@ -57,6 +57,20 @@ import {
   ProfileModal,
   TripsModal,
 } from './PlatformModals';
+import { AuthModal } from './AuthModal';
+import {
+  cancelBookingInDatabase,
+  deleteListingFromDatabase,
+  getBookingsFromDatabase,
+  getListingsFromDatabase,
+  getReviewsFromDatabase,
+  getThreadsFromDatabase,
+  insertBookingToDatabase,
+  insertListingToDatabase,
+  insertReviewToDatabase,
+  sendMessageToDatabase,
+  subscribeToSupabaseTable,
+} from '@/lib/supabaseService';
 
 type SortOption = 'recommended' | 'price-asc' | 'price-desc' | 'rating';
 
@@ -91,13 +105,34 @@ const SERVICE_SUBFILTERS = [
   { id: 'concierge', label: 'Photography & care' },
 ] as const;
 
-export const QaagaWebsite: React.FC<{ initialBranding?: SiteBranding }> = ({
+export interface QaagaWebsiteProps {
+  initialBranding?: SiteBranding;
+  initialRoute?: string;
+  initialListingId?: string;
+  initialBookingId?: string;
+}
+
+export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
   initialBranding = DEFAULT_BRANDING,
+  initialRoute,
+  initialListingId,
+  initialBookingId,
 }) => {
+  /* ======================================================================= */
+  /* URL ROUTING HELPERS & STATE                                             */
+  /* ======================================================================= */
+  const navigateTo = useCallback((path: string, state: Record<string, any> = {}) => {
+    if (typeof window !== 'undefined' && window.location.pathname !== path) {
+      window.history.pushState(state, '', path);
+    }
+  }, []);
+
   /* ======================================================================= */
   /* NAVIGATION & SEARCH STATE                                               */
   /* ======================================================================= */
-  const [activeCategory, setActiveCategory] = useState<QaagaCategory>('all');
+  const [activeCategory, setActiveCategory] = useState<QaagaCategory>(
+    initialRoute === '/rooms' ? 'stay' : 'all'
+  );
   const [subFilter, setSubFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<SortOption>('recommended');
 
@@ -153,7 +188,12 @@ export const QaagaWebsite: React.FC<{ initialBranding?: SiteBranding }> = ({
   const [isNotifOpen, setIsNotifOpen] = useState<boolean>(false);
   const [isAccountOpen, setIsAccountOpen] = useState<boolean>(false);
 
-  const [selectedListing, setSelectedListing] = useState<QaagaListing | null>(null);
+  const [selectedListing, setSelectedListing] = useState<QaagaListing | null>(() => {
+    if (initialListingId) {
+      return INITIAL_LISTINGS.find((item) => item.id === initialListingId) || null;
+    }
+    return null;
+  });
   const [bookingSuccessCode, setBookingSuccessCode] = useState<string | null>(null);
 
   const [branding, setBranding] = useState<SiteBranding>(initialBranding);
@@ -163,12 +203,17 @@ export const QaagaWebsite: React.FC<{ initialBranding?: SiteBranding }> = ({
     brandingRef.current = branding;
   }, [branding]);
 
-  const [isHostModalOpen, setIsHostModalOpen] = useState<boolean>(false);
-  const [isMessagesOpen, setIsMessagesOpen] = useState<boolean>(false);
-  const [isTripsOpen, setIsTripsOpen] = useState<boolean>(false);
-  const [isProfileOpen, setIsProfileOpen] = useState<boolean>(false);
-  const [isHelpOpen, setIsHelpOpen] = useState<boolean>(false);
-  const [isAdminOpen, setIsAdminOpen] = useState<boolean>(false);
+  const [isHostModalOpen, setIsHostModalOpen] = useState<boolean>(initialRoute === '/host');
+  const [isMessagesOpen, setIsMessagesOpen] = useState<boolean>(initialRoute === '/messages');
+  const [isTripsOpen, setIsTripsOpen] = useState<boolean>(
+    initialRoute === '/my-bookings' || Boolean(initialBookingId)
+  );
+  const [isProfileOpen, setIsProfileOpen] = useState<boolean>(initialRoute === '/profile');
+  const [isHelpOpen, setIsHelpOpen] = useState<boolean>(initialRoute === '/contact');
+  const [isAdminOpen, setIsAdminOpen] = useState<boolean>(initialRoute === '/admin');
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(
+    initialRoute === '/login' || initialRoute === '/register'
+  );
 
   const [explorerCollection, setExplorerCollection] = useState<{
     mode: 'popular-kl' | 'wishlist' | 'experiences-services';
@@ -278,6 +323,114 @@ export const QaagaWebsite: React.FC<{ initialBranding?: SiteBranding }> = ({
       window.removeEventListener('storage', syncBrandingFromEvent);
     };
   }, [initialBranding]);
+
+  // Supabase Database Hydration & Realtime Subscriptions
+  useEffect(() => {
+    let active = true;
+
+    // 1. Fetch remote listings
+    getListingsFromDatabase().then((remoteListings) => {
+      if (!active) return;
+      if (remoteListings && remoteListings.length > 0) {
+        const custom = remoteListings.filter(
+          (i) => i.id.startsWith('host-') || !INITIAL_LISTINGS.some((init) => init.id === i.id)
+        );
+        if (custom.length > 0) {
+          setCustomListings(custom);
+        }
+      }
+    });
+
+    // 2. Fetch remote bookings
+    getBookingsFromDatabase(profile.email).then((remoteBookings) => {
+      if (!active) return;
+      if (remoteBookings && remoteBookings.length > 0) {
+        setBookings(remoteBookings);
+      }
+    });
+
+    // 3. Fetch remote inbox threads
+    getThreadsFromDatabase().then((remoteThreads) => {
+      if (!active) return;
+      if (remoteThreads && remoteThreads.length > 0) {
+        setThreads(remoteThreads);
+      }
+    });
+
+    // 4. Supabase Realtime Channels
+    const unsubListings = subscribeToSupabaseTable('listings', (payload) => {
+      if (payload.eventType === 'INSERT') {
+        const item = payload.new;
+        if (item) {
+          const mapped: QaagaListing = {
+            id: String(item.id),
+            title: item.title,
+            area: item.area,
+            city: item.city || 'Kuala Lumpur',
+            subType: item.sub_type || 'Apartment',
+            category: item.category || 'stay',
+            twoNightPriceUsd: Number(item.two_night_price_usd) || 120,
+            rating: String(item.rating || '5.0'),
+            reviewsCount: Number(item.reviews_count) || 0,
+            guestFavorite: Boolean(item.guest_favorite),
+            image: item.image,
+            gallery: Array.isArray(item.gallery) ? item.gallery : [item.image],
+            maxGuests: Number(item.max_guests) || 2,
+            bedrooms: item.bedrooms || '1 bedroom',
+            hostName: item.host_name || 'Host',
+            hostYears: Number(item.host_years) || 1,
+            amenities: Array.isArray(item.amenities) ? item.amenities : [],
+            description: item.description || '',
+            inPopularKL: Boolean(item.in_popular_kl),
+          };
+          setCustomListings((prev) => [mapped, ...prev.filter((i) => i.id !== mapped.id)]);
+        }
+      } else if (payload.eventType === 'DELETE') {
+        const delId = String(payload.old?.id);
+        if (delId) {
+          setCustomListings((prev) => prev.filter((i) => i.id !== delId));
+        }
+      }
+    });
+
+    const unsubBookings = subscribeToSupabaseTable('bookings', (payload) => {
+      if (payload.eventType === 'INSERT') {
+        const b = payload.new;
+        if (b) {
+          const mappedBooking: BookingRecord = {
+            id: b.id,
+            confirmationCode: b.confirmation_code,
+            listingId: b.listing_id,
+            title: b.title,
+            area: b.area,
+            image: b.image,
+            checkInLabel: b.check_in_label,
+            nights: Number(b.nights),
+            guests: Number(b.guests),
+            totalUsd: Number(b.total_usd),
+            hostName: b.host_name,
+            status: b.status,
+          };
+          setBookings((prev) => [mappedBooking, ...prev.filter((item) => item.id !== mappedBooking.id)]);
+        }
+      } else if (payload.eventType === 'UPDATE') {
+        const b = payload.new;
+        if (b) {
+          setBookings((prev) =>
+            prev.map((item) =>
+              item.id === b.id ? { ...item, status: b.status } : item
+            )
+          );
+        }
+      }
+    });
+
+    return () => {
+      active = false;
+      unsubListings();
+      unsubBookings();
+    };
+  }, [profile.email]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -586,12 +739,29 @@ export const QaagaWebsite: React.FC<{ initialBranding?: SiteBranding }> = ({
     setPets(0);
     setSearchSubmitted(false);
     setActivePopover(null);
-  }, []);
+    setSelectedListing(null);
+    setIsTripsOpen(false);
+    setIsProfileOpen(false);
+    setIsAuthModalOpen(false);
+    setIsHelpOpen(false);
+    setIsHostModalOpen(false);
+    setIsAdminOpen(false);
+    setIsMessagesOpen(false);
+    setExplorerCollection(null);
+    navigateTo('/');
+  }, [navigateTo]);
 
   const handleSelectCategory = (cat: QaagaCategory) => {
     setActiveCategory(cat);
     setSubFilter('all');
     setActivePopover(null);
+    if (cat === 'stay') {
+      navigateTo('/rooms');
+    } else if (cat === 'all') {
+      navigateTo('/');
+    } else {
+      navigateTo(`/${cat}`);
+    }
   };
 
   const handleSelectCalendarDay = (day: number) => {
@@ -706,6 +876,7 @@ export const QaagaWebsite: React.FC<{ initialBranding?: SiteBranding }> = ({
       item.id,
       ...prev.filter((existing) => existing !== item.id),
     ]);
+    navigateTo(`/rooms/${item.id}`, { listingId: item.id });
   };
 
   const handleConfirmBooking = (nights: number, guestsCount: number) => {
@@ -730,6 +901,10 @@ export const QaagaWebsite: React.FC<{ initialBranding?: SiteBranding }> = ({
     };
 
     setBookings((prev) => [newBooking, ...prev]);
+    insertBookingToDatabase(newBooking, profile.email, profile.fullName).catch((err) =>
+      console.warn('Booking sync notice:', err)
+    );
+
     setNotifications((prev) => [
       {
         id: `notif-${Date.now()}`,
@@ -777,6 +952,13 @@ export const QaagaWebsite: React.FC<{ initialBranding?: SiteBranding }> = ({
   const handleSendMessage = (text: string) => {
     const targetId = activeThreadId || threads[0]?.id;
     if (!targetId) return;
+
+    sendMessageToDatabase(targetId, {
+      sender: 'guest',
+      text,
+      time: 'Just now',
+    }).catch((err) => console.warn('Message sync notice:', err));
+
     setThreads((prev) =>
       prev.map((t) =>
         t.id === targetId
@@ -850,6 +1032,10 @@ export const QaagaWebsite: React.FC<{ initialBranding?: SiteBranding }> = ({
 
     setCustomListings((prev) => [newItem, ...prev]);
     setRecentlyViewedIds((prev) => [newItem.id, ...prev]);
+    insertListingToDatabase(newItem).catch((err) =>
+      console.warn('Listing sync notice:', err)
+    );
+
     setIsHostModalOpen(false);
     if (data.category !== 'stay' && activeCategory !== 'all') {
       setActiveCategory(data.category);
@@ -861,6 +1047,9 @@ export const QaagaWebsite: React.FC<{ initialBranding?: SiteBranding }> = ({
     setCustomListings((prev) => prev.filter((item) => item.id !== id));
     setWishlistIds((prev) => prev.filter((wId) => wId !== id));
     setRecentlyViewedIds((prev) => prev.filter((rId) => rId !== id));
+    deleteListingFromDatabase(id).catch((err) =>
+      console.warn('Listing delete sync notice:', err)
+    );
     showToast({ message: 'Removed host listing' });
   };
 
@@ -875,8 +1064,13 @@ export const QaagaWebsite: React.FC<{ initialBranding?: SiteBranding }> = ({
     };
     setReviewsByListing((prev) => ({
       ...prev,
-      [selectedListing.id]: [rev, ...(prev[selectedListing.id] || DEFAULT_REVIEWS)],
+      [selectedListing.id]: [rev, ...(prev[selectedListing.id] || DEFAULT_REVIEWS[selectedListing.id] || [])],
     }));
+    insertReviewToDatabase(selectedListing.id, {
+      author: profile.fullName,
+      rating,
+      comment,
+    }).catch((err) => console.warn('Review sync notice:', err));
     showToast({ message: 'Your guest review has been posted' });
   };
 
@@ -957,15 +1151,38 @@ export const QaagaWebsite: React.FC<{ initialBranding?: SiteBranding }> = ({
           setCurrency(c);
           showToast({ message: `Switched currency to ${CURRENCY_CONFIG[c].label}` });
         }}
-        onOpenHostModal={() => setIsHostModalOpen(true)}
-        onOpenTrips={() => setIsTripsOpen(true)}
-        onOpenMessages={() => setIsMessagesOpen(true)}
-        onOpenWishlist={() =>
-          setExplorerCollection({ mode: 'wishlist', title: 'Wishlist' })
-        }
-        onOpenProfileModal={() => setIsProfileOpen(true)}
-        onOpenHelpModal={() => setIsHelpOpen(true)}
-        onOpenAdminModal={() => setIsAdminOpen(true)}
+        onOpenHostModal={() => {
+          setIsHostModalOpen(true);
+          navigateTo('/host');
+        }}
+        onOpenTrips={() => {
+          setIsTripsOpen(true);
+          navigateTo('/my-bookings');
+        }}
+        onOpenMessages={() => {
+          setIsMessagesOpen(true);
+          navigateTo('/messages');
+        }}
+        onOpenWishlist={() => {
+          setExplorerCollection({ mode: 'wishlist', title: 'Wishlist' });
+          navigateTo('/wishlist');
+        }}
+        onOpenProfileModal={() => {
+          setIsProfileOpen(true);
+          navigateTo('/profile');
+        }}
+        onOpenHelpModal={() => {
+          setIsHelpOpen(true);
+          navigateTo('/contact');
+        }}
+        onOpenAdminModal={() => {
+          setIsAdminOpen(true);
+          navigateTo('/admin');
+        }}
+        onOpenAuthModal={() => {
+          setIsAuthModalOpen(true);
+          navigateTo('/login');
+        }}
       />
 
       {/* =================================================================== */}
@@ -1605,7 +1822,7 @@ export const QaagaWebsite: React.FC<{ initialBranding?: SiteBranding }> = ({
           aria-label="Home"
           onClick={handleResetHome}
           className={`flex flex-col items-center justify-center py-1 gap-0.5 text-[11px] font-semibold cursor-pointer ${
-            activeCategory === 'all' && !isTripsOpen && !isMessagesOpen && !isProfileOpen
+            activeCategory === 'all' && !isTripsOpen && !isMessagesOpen && !isProfileOpen && !isAuthModalOpen
               ? 'text-[#C72B62]'
               : 'text-slate-600'
           }`}
@@ -1617,7 +1834,10 @@ export const QaagaWebsite: React.FC<{ initialBranding?: SiteBranding }> = ({
         <button
           type="button"
           aria-label="Booking"
-          onClick={() => setIsTripsOpen(true)}
+          onClick={() => {
+            setIsTripsOpen(true);
+            navigateTo('/my-bookings');
+          }}
           className={`flex flex-col items-center justify-center py-1 gap-0.5 text-[11px] font-semibold cursor-pointer relative ${
             isTripsOpen ? 'text-[#C72B62]' : 'text-slate-600'
           }`}
@@ -1636,7 +1856,10 @@ export const QaagaWebsite: React.FC<{ initialBranding?: SiteBranding }> = ({
         <button
           type="button"
           aria-label="Host a listing"
-          onClick={() => setIsHostModalOpen(true)}
+          onClick={() => {
+            setIsHostModalOpen(true);
+            navigateTo('/host');
+          }}
           className="flex flex-col items-center justify-center cursor-pointer"
         >
           <span className="w-10 h-10 rounded-full bg-[#C72B62] text-white flex items-center justify-center shadow-sm">
@@ -1647,7 +1870,10 @@ export const QaagaWebsite: React.FC<{ initialBranding?: SiteBranding }> = ({
         <button
           type="button"
           aria-label="Inbox"
-          onClick={() => setIsMessagesOpen(true)}
+          onClick={() => {
+            setIsMessagesOpen(true);
+            navigateTo('/messages');
+          }}
           className={`flex flex-col items-center justify-center py-1 gap-0.5 text-[11px] font-semibold cursor-pointer relative ${
             isMessagesOpen ? 'text-[#C72B62]' : 'text-slate-600'
           }`}
@@ -1664,9 +1890,12 @@ export const QaagaWebsite: React.FC<{ initialBranding?: SiteBranding }> = ({
         <button
           type="button"
           aria-label="Profile"
-          onClick={() => setIsProfileOpen(true)}
+          onClick={() => {
+            setIsAuthModalOpen(true);
+            navigateTo('/login');
+          }}
           className={`flex flex-col items-center justify-center py-1 gap-0.5 text-[11px] font-semibold cursor-pointer ${
-            isProfileOpen ? 'text-[#C72B62]' : 'text-slate-600'
+            isAuthModalOpen ? 'text-[#C72B62]' : 'text-slate-600'
           }`}
         >
           <User size={20} />
@@ -1717,7 +1946,10 @@ export const QaagaWebsite: React.FC<{ initialBranding?: SiteBranding }> = ({
           dateRangeLabel={selectedDates.display || 'Nov 14 – Nov 16'}
           formatPrice={formatPrice}
           bookingSuccessCode={bookingSuccessCode}
-          onClose={() => setSelectedListing(null)}
+          onClose={() => {
+            setSelectedListing(null);
+            navigateTo('/');
+          }}
           onToggleWishlist={handleToggleWishlist}
           onShare={() => {
             if (typeof navigator !== 'undefined' && navigator.clipboard) {
@@ -1730,6 +1962,7 @@ export const QaagaWebsite: React.FC<{ initialBranding?: SiteBranding }> = ({
           onOpenTrips={() => {
             setSelectedListing(null);
             setIsTripsOpen(true);
+            navigateTo('/my-bookings');
           }}
           onAddReview={handleAddReview}
         />
@@ -1738,7 +1971,10 @@ export const QaagaWebsite: React.FC<{ initialBranding?: SiteBranding }> = ({
       {isHostModalOpen && (
         <HostStudioModal
           customListings={customListings}
-          onClose={() => setIsHostModalOpen(false)}
+          onClose={() => {
+            setIsHostModalOpen(false);
+            navigateTo('/');
+          }}
           onPublish={handlePublishHostListing}
           onDeleteCustomListing={handleDeleteCustomListing}
         />
@@ -1755,7 +1991,10 @@ export const QaagaWebsite: React.FC<{ initialBranding?: SiteBranding }> = ({
             );
           }}
           onSendMessage={handleSendMessage}
-          onClose={() => setIsMessagesOpen(false)}
+          onClose={() => {
+            setIsMessagesOpen(false);
+            navigateTo('/');
+          }}
         />
       )}
 
@@ -1765,6 +2004,9 @@ export const QaagaWebsite: React.FC<{ initialBranding?: SiteBranding }> = ({
           formatPrice={formatPrice}
           onCancelBooking={(id) => {
             setBookings((prev) => prev.filter((b) => b.id !== id));
+            cancelBookingInDatabase(id).catch((err) =>
+              console.warn('Cancel booking sync notice:', err)
+            );
             showToast({ message: 'Reservation cancelled' });
           }}
           onOpenListingById={(listingId) => {
@@ -1772,7 +2014,10 @@ export const QaagaWebsite: React.FC<{ initialBranding?: SiteBranding }> = ({
             setIsTripsOpen(false);
             if (match) handleOpenListing(match);
           }}
-          onClose={() => setIsTripsOpen(false)}
+          onClose={() => {
+            setIsTripsOpen(false);
+            navigateTo('/');
+          }}
         />
       )}
 
@@ -1790,7 +2035,10 @@ export const QaagaWebsite: React.FC<{ initialBranding?: SiteBranding }> = ({
           formatPrice={(usd) => formatPrice(usd)}
           onOpenListing={handleOpenListing}
           onToggleWishlist={handleToggleWishlist}
-          onClose={() => setExplorerCollection(null)}
+          onClose={() => {
+            setExplorerCollection(null);
+            navigateTo('/');
+          }}
         />
       )}
 
@@ -1799,13 +2047,23 @@ export const QaagaWebsite: React.FC<{ initialBranding?: SiteBranding }> = ({
           profile={profile}
           onSave={(updated) => {
             setProfile(updated);
-            showToast({ message: 'Guest profile updated' });
+            showToast({ message: 'Account profile updated' });
           }}
-          onClose={() => setIsProfileOpen(false)}
+          onClose={() => {
+            setIsProfileOpen(false);
+            navigateTo('/');
+          }}
         />
       )}
 
-      {isHelpOpen && <HelpCenterModal onClose={() => setIsHelpOpen(false)} />}
+      {isHelpOpen && (
+        <HelpCenterModal
+          onClose={() => {
+            setIsHelpOpen(false);
+            navigateTo('/');
+          }}
+        />
+      )}
 
       {isAdminOpen && (
         <AdminPanelModal
@@ -1816,15 +2074,44 @@ export const QaagaWebsite: React.FC<{ initialBranding?: SiteBranding }> = ({
           allListings={allListings}
           customListings={customListings}
           onDeleteCustomListing={handleDeleteCustomListing}
-          onOpenHostModal={() => setIsHostModalOpen(true)}
+          onOpenHostModal={() => {
+            setIsHostModalOpen(true);
+            navigateTo('/host');
+          }}
           bookings={bookings}
           onCancelBooking={(id) => {
             setBookings((prev) => prev.filter((b) => b.id !== id));
+            cancelBookingInDatabase(id).catch((err) =>
+              console.warn('Cancel booking sync notice:', err)
+            );
             showToast({ message: 'Reservation cancelled' });
           }}
-          onClose={() => setIsAdminOpen(false)}
+          onClose={() => {
+            setIsAdminOpen(false);
+            navigateTo('/');
+          }}
         />
       )}
+
+      {/* Supabase Email OTP / Social Login Modal */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => {
+          setIsAuthModalOpen(false);
+          navigateTo('/');
+        }}
+        branding={branding}
+        profile={profile}
+        onUpdateProfile={(updated) => {
+          setProfile(updated);
+          try {
+            localStorage.setItem(STORAGE_KEYS.profile, JSON.stringify(updated));
+          } catch {
+            // ignore
+          }
+        }}
+        onShowToast={showToast}
+      />
     </div>
   );
 };

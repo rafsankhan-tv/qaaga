@@ -7,6 +7,7 @@ import {
   ChevronRight,
   HelpCircle,
   MapPin,
+  Menu,
   Minus,
   Plus,
   Search,
@@ -82,6 +83,7 @@ interface HeaderSearchProps {
   onOpenProfileModal: () => void;
   onOpenHelpModal: () => void;
   onOpenAdminModal: () => void;
+  onOpenAuthModal: () => void;
 }
 
 export const HeaderSearch: React.FC<HeaderSearchProps> = ({
@@ -130,6 +132,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
   onOpenProfileModal,
   onOpenHelpModal,
   onOpenAdminModal,
+  onOpenAuthModal,
 }) => {
   const searchRef = useRef<HTMLDivElement | null>(null);
   const compactPillRef = useRef<HTMLDivElement | null>(null);
@@ -409,15 +412,25 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
                 )}
               </button>
 
-              {/* User Profile Avatar Circle */}
-              <button
-                type="button"
-                aria-label="Account menu"
-                onClick={onToggleAccount}
-                className="w-7 h-7 sm:w-8 sm:h-8 md:w-9 md:h-9 rounded-full bg-[#9E9E9E] hover:bg-[#828282] text-white flex items-center justify-center transition-colors cursor-pointer shrink-0"
-              >
-                <User size={18} className="fill-white text-white" />
-              </button>
+              {/* User Profile & Menu Pill matching Airbnb */}
+              <div className="flex items-center gap-1 sm:gap-1.5 p-1 sm:p-1.5 border border-slate-300 hover:border-slate-400 rounded-full bg-white transition-all shadow-2xs hover:shadow-xs">
+                <button
+                  type="button"
+                  aria-label="Open navigation menu"
+                  onClick={onToggleAccount}
+                  className="p-1 text-slate-600 hover:text-slate-900 cursor-pointer rounded-full"
+                >
+                  <Menu size={16} />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Log in or sign up"
+                  onClick={onOpenAuthModal}
+                  className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-[#9E9E9E] hover:bg-[#828282] text-white flex items-center justify-center transition-colors cursor-pointer shrink-0"
+                >
+                  <User size={16} className="fill-white text-white" />
+                </button>
+              </div>
             </div>
 
             {/* Notifications Dropdown Popover */}
@@ -475,6 +488,26 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
             {/* Account / Profile Dropdown Menu */}
             {isAccountOpen && (
               <div className="absolute right-0 top-2 md:top-12 w-72 bg-white rounded-2xl shadow-[0_14px_40px_rgba(15,23,42,0.16)] border border-slate-200 py-2 z-50 text-left">
+                {/* Primary Log In or Sign Up Button */}
+                <div className="p-1.5 border-b border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onCloseMenus();
+                      onOpenAuthModal();
+                    }}
+                    className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-[#C72B62]/[0.08] hover:bg-[#C72B62]/[0.15] text-[#C72B62] font-semibold cursor-pointer text-left transition-colors"
+                  >
+                    <span className="inline-flex items-center gap-2">
+                      <User size={15} />
+                      <span>Log in or sign up</span>
+                    </span>
+                    <span className="text-[10px] bg-[#C72B62] text-white px-2 py-0.5 rounded-full font-bold">
+                      OTP
+                    </span>
+                  </button>
+                </div>
+
                 <button
                   type="button"
                   onClick={() => {

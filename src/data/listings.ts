@@ -76,6 +76,8 @@ export interface GuestProfile {
   email: string;
   city: string;
   verified: boolean;
+  role?: 'guest' | 'host' | 'admin';
+  phone?: string;
 }
 
 export const CURRENCY_CONFIG: Record<

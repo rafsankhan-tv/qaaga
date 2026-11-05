@@ -1,12 +1,15 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   CheckCircle2,
   HelpCircle,
+  ImagePlus,
+  Loader2,
   Send,
   ShieldCheck,
   Trash2,
+  Upload,
   User,
   X,
 } from 'lucide-react';
@@ -17,6 +20,7 @@ import {
   QaagaListing,
 } from '@/data/listings';
 import { ListingCard, ListingImage } from './ListingCard';
+import { uploadFileToSupabaseStorage } from '@/lib/supabaseService';
 
 /* ========================================================================= */
 /* 1. BECOME A HOST / CREATE & MANAGE LISTINGS MODAL                         */
@@ -40,6 +44,28 @@ export const HostStudioModal: React.FC<{
   const [twoNightUsd, setTwoNightUsd] = useState('120');
   const [photo, setPhoto] = useState('/assets/kl-ui/kl-1.jpg');
   const [guestFav, setGuestFav] = useState(true);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadError('');
+    setIsUploading(true);
+    try {
+      const res = await uploadFileToSupabaseStorage(file, 'qaaga-listings');
+      if (res.url) {
+        setPhoto(res.url);
+      } else if (res.error) {
+        setUploadError(res.error);
+      }
+    } catch {
+      setUploadError('Failed to upload image. Please try again.');
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -160,32 +186,77 @@ export const HostStudioModal: React.FC<{
             </label>
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-slate-800 mb-1.5">
-              Cover Photo
-            </label>
-            <div className="grid grid-cols-6 gap-2">
-              {[
-                '/assets/kl-ui/kl-1.jpg',
-                '/assets/kl-ui/kl-2.jpg',
-                '/assets/kl-ui/kl-3.jpg',
-                '/assets/kl-ui/kl-4.jpg',
-                '/assets/kl-ui/kl-5.jpg',
-                '/assets/kl-ui/kl-6.jpg',
-              ].map((src) => (
-                <button
-                  key={src}
-                  type="button"
-                  onClick={() => setPhoto(src)}
-                  className={`aspect-square rounded-xl overflow-hidden border-2 transition-all cursor-pointer ${
-                    photo === src
-                      ? 'border-[#C72B62] scale-105'
-                      : 'border-transparent opacity-70 hover:opacity-100'
-                  }`}
-                >
-                  <ListingImage src={src} alt="" className="w-full h-full object-cover" />
-                </button>
-              ))}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-bold text-slate-800">
+                Listing Photo (Supabase Storage)
+              </label>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isUploading}
+                className="text-xs font-semibold text-[#C72B62] hover:underline flex items-center gap-1 cursor-pointer disabled:opacity-50"
+              >
+                {isUploading ? (
+                  <>
+                    <Loader2 size={13} className="animate-spin" />
+                    <span>Uploading...</span>
+                  </>
+                ) : (
+                  <>
+                    <Upload size={13} />
+                    <span>Upload image</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleFileUpload}
+              className="hidden"
+            />
+
+            {uploadError && (
+              <p className="text-xs text-rose-600">{uploadError}</p>
+            )}
+
+            {/* Current Active Preview */}
+            <div className="relative aspect-[16/9] w-full rounded-2xl overflow-hidden border border-slate-200 bg-slate-100">
+              <ListingImage src={photo} alt="Listing preview" className="w-full h-full object-cover" />
+              <div className="absolute bottom-2 left-2 bg-slate-900/75 backdrop-blur-xs text-white text-[11px] font-medium px-2 py-0.5 rounded-md">
+                Active Cover Photo
+              </div>
+            </div>
+
+            {/* Quick Presets */}
+            <div>
+              <p className="text-[11px] text-slate-500 mb-1.5 font-medium">Or choose from architectural presets:</p>
+              <div className="grid grid-cols-6 gap-2">
+                {[
+                  '/assets/kl-ui/kl-1.jpg',
+                  '/assets/kl-ui/kl-2.jpg',
+                  '/assets/kl-ui/kl-3.jpg',
+                  '/assets/kl-ui/kl-4.jpg',
+                  '/assets/kl-ui/kl-5.jpg',
+                  '/assets/kl-ui/kl-6.jpg',
+                ].map((src) => (
+                  <button
+                    key={src}
+                    type="button"
+                    onClick={() => setPhoto(src)}
+                    className={`aspect-square rounded-xl overflow-hidden border-2 transition-all cursor-pointer ${
+                      photo === src
+                        ? 'border-[#C72B62] scale-105'
+                        : 'border-transparent opacity-70 hover:opacity-100'
+                    }`}
+                  >
+                    <ListingImage src={src} alt="" className="w-full h-full object-cover" />
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -596,6 +667,8 @@ export const ProfileModal: React.FC<{
   const [fullName, setFullName] = useState(profile.fullName);
   const [email, setEmail] = useState(profile.email);
   const [city, setCity] = useState(profile.city);
+  const [phone, setPhone] = useState(profile.phone || '');
+  const [role, setRole] = useState<'guest' | 'host' | 'admin'>(profile.role || 'guest');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -604,6 +677,8 @@ export const ProfileModal: React.FC<{
       fullName: fullName.trim(),
       email: email.trim(),
       city: city.trim() || 'Kuala Lumpur',
+      phone: phone.trim() || undefined,
+      role,
       verified: true,
     });
     onClose();
@@ -625,10 +700,12 @@ export const ProfileModal: React.FC<{
             </div>
             <div>
               <h3 className="text-base font-bold text-slate-950 flex items-center gap-1.5">
-                <span>Guest & Host Profile</span>
+                <span>Account Profile</span>
                 <CheckCircle2 size={15} className="text-[#C72B62]" />
               </h3>
-              <p className="text-xs text-slate-500">Verified qaaga.com member</p>
+              <p className="text-xs text-slate-500 capitalize">
+                Verified member · Role: <span className="font-semibold text-slate-800">{role}</span>
+              </p>
             </div>
           </div>
           <button
@@ -662,19 +739,51 @@ export const ProfileModal: React.FC<{
               className="w-full h-11 px-3.5 rounded-xl border border-slate-300 text-sm focus:outline-none focus:border-[#C72B62]"
             />
           </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-slate-800 mb-1">Phone</label>
+              <input
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="+60 12-345 6789"
+                className="w-full h-11 px-3.5 rounded-xl border border-slate-300 text-sm focus:outline-none focus:border-[#C72B62]"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-800 mb-1">Home City</label>
+              <input
+                type="text"
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                className="w-full h-11 px-3.5 rounded-xl border border-slate-300 text-sm focus:outline-none focus:border-[#C72B62]"
+              />
+            </div>
+          </div>
+
           <div>
-            <label className="block text-xs font-bold text-slate-800 mb-1">Home City</label>
-            <input
-              type="text"
-              value={city}
-              onChange={(e) => setCity(e.target.value)}
-              className="w-full h-11 px-3.5 rounded-xl border border-slate-300 text-sm focus:outline-none focus:border-[#C72B62]"
-            />
+            <label className="block text-xs font-bold text-slate-800 mb-1">Account Role (RBAC)</label>
+            <div className="grid grid-cols-3 gap-2">
+              {(['guest', 'host', 'admin'] as const).map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => setRole(r)}
+                  className={`py-2 px-3 rounded-xl border text-xs font-semibold capitalize transition-all cursor-pointer ${
+                    role === r
+                      ? 'bg-[#C72B62] text-white border-[#C72B62]'
+                      : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
           </div>
 
           <button
             type="submit"
-            className="w-full py-3 rounded-xl bg-[#C72B62] hover:bg-[#ad2253] text-white text-sm font-semibold cursor-pointer transition-colors"
+            className="w-full py-3 rounded-xl bg-[#C72B62] hover:bg-[#ad2253] text-white text-sm font-semibold cursor-pointer transition-colors shadow-sm"
           >
             Save Profile
           </button>
