@@ -7,7 +7,6 @@ import {
   ChevronRight,
   HelpCircle,
   MapPin,
-  Menu,
   Minus,
   Plus,
   Search,
@@ -363,28 +362,24 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
                 </span>
               </button>
 
-              {/* Plus Button beside Search Button ("হোয়ার, হোয়েন, হু এর পাশে সার্চ বাটন, তার পাশে প্লাস আইকন বাটন থাকবে") */}
+              {/* Plus Button beside Search Button (desktop/tablet only, hidden on mobile view top) */}
               <button
                 type="button"
                 aria-label="Create new listing"
                 onClick={onOpenHostModal}
-                className="flex w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8 rounded-full bg-white border border-slate-300 hover:border-[#C72B62]/60 items-center justify-center text-[#C72B62] active:scale-95 transition-all shrink-0 cursor-pointer shadow-xs hover:shadow-sm"
+                className="hidden md:flex w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8 rounded-full bg-white border border-slate-300 hover:border-[#C72B62]/60 items-center justify-center text-[#C72B62] active:scale-95 transition-all shrink-0 cursor-pointer shadow-xs hover:shadow-sm"
               >
                 <Plus size={15} strokeWidth={2.4} />
               </button>
             </div>
           </div>
 
-          {/* Right: "become a host" + Notification Bell(2) + Avatar Menu */}
+          {/* Right: "become a host" + Notification Bell + Avatar Menu (desktop only, hidden on mobile view top) */}
           <div
             ref={rightUtilsRef}
-            className={`relative flex items-center justify-end shrink-0 gap-1.5 sm:gap-2.5 md:gap-3 lg:gap-4 md:justify-self-end`}
+            className="relative hidden md:flex items-center justify-end shrink-0 gap-1.5 sm:gap-2.5 md:gap-3 lg:gap-4 md:justify-self-end"
           >
-            <div
-              className={`items-center gap-1.5 sm:gap-2.5 md:gap-3.5 lg:gap-4 ${
-                shouldCollapse ? 'flex' : 'hidden md:flex'
-              }`}
-            >
+            <div className="flex items-center gap-1.5 sm:gap-2.5 md:gap-3.5 lg:gap-4">
               <button
                 type="button"
                 onClick={onOpenHostModal}
@@ -412,25 +407,38 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
                 )}
               </button>
 
-              {/* User Profile & Menu Pill matching Airbnb */}
-              <div className="flex items-center gap-1 sm:gap-1.5 p-1 sm:p-1.5 border border-slate-300 hover:border-slate-400 rounded-full bg-white transition-all shadow-2xs hover:shadow-xs">
-                <button
-                  type="button"
-                  aria-label="Open navigation menu"
-                  onClick={onToggleAccount}
-                  className="p-1 text-slate-600 hover:text-slate-900 cursor-pointer rounded-full"
-                >
-                  <Menu size={16} />
-                </button>
-                <button
-                  type="button"
-                  aria-label="Log in or sign up"
-                  onClick={onOpenAuthModal}
-                  className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-[#9E9E9E] hover:bg-[#828282] text-white flex items-center justify-center transition-colors cursor-pointer shrink-0"
-                >
-                  <User size={16} className="fill-white text-white" />
-                </button>
-              </div>
+              {/* User Profile Avatar Button (no 3-line menu next to profile) */}
+              <button
+                type="button"
+                aria-label={profile.verified ? `${profile.fullName}'s profile menu` : 'Log in or sign up'}
+                onClick={() => {
+                  if (profile.verified) {
+                    onToggleAccount();
+                  } else {
+                    onOpenAuthModal();
+                  }
+                }}
+                className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-slate-300 hover:border-slate-400 text-white flex items-center justify-center transition-all cursor-pointer shadow-2xs hover:shadow-xs shrink-0 active:scale-95 relative ${
+                  profile.verified ? 'bg-[#C72B62] hover:bg-[#ad2253]' : 'bg-[#9E9E9E] hover:bg-[#828282]'
+                }`}
+              >
+                {profile.avatarUrl ? (
+                  <img
+                    src={profile.avatarUrl}
+                    alt={profile.fullName}
+                    className="w-full h-full rounded-full object-cover"
+                  />
+                ) : profile.verified ? (
+                  <span className="text-xs sm:text-sm font-bold text-white uppercase select-none">
+                    {profile.fullName.charAt(0) || 'U'}
+                  </span>
+                ) : (
+                  <User size={18} className="fill-white text-white" />
+                )}
+                {profile.verified && (
+                  <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-white" />
+                )}
+              </button>
             </div>
 
             {/* Notifications Dropdown Popover */}

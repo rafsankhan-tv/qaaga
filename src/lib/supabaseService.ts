@@ -7,6 +7,7 @@ import {
   INITIAL_BOOKINGS,
   INITIAL_LISTINGS,
   INITIAL_THREADS,
+  INITIAL_USERS,
   ListingReview,
   QaagaListing,
 } from '@/data/listings';
@@ -453,4 +454,138 @@ export function subscribeToSupabaseTable(
     console.warn(`Supabase Realtime subscribe notice for ${tableName}:`, err);
     return () => {};
   }
+}
+
+/* ========================================================================= */
+/* 6. USER PROFILES & AUTH DATABASE OPERATIONS                               */
+/* ========================================================================= */
+export async function getUserProfileFromDatabase(email: string): Promise<GuestProfile | null> {
+  const cleanEmail = email.trim().toLowerCase();
+  const supabase = getSupabase();
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('email', cleanEmail)
+        .single();
+
+      if (!error && data) {
+        return {
+          fullName: data.full_name || 'Verified Member',
+          email: data.email,
+          city: data.city || 'Kuala Lumpur',
+          verified: Boolean(data.verified),
+          role: data.role || 'guest',
+          phone: data.phone || undefined,
+          avatarUrl: data.avatar_url || '',
+          bio: data.bio || '',
+          joinedDate: data.created_at ? new Date(data.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'Nov 2026',
+          status: data.status || 'active',
+        };
+      }
+    } catch (err) {
+      console.warn('Notice: Remote Supabase profile query fallback:', err);
+    }
+  }
+
+  // Check local fallback users
+  const found = INITIAL_USERS.find((u) => u.email.toLowerCase() === cleanEmail);
+  return found || null;
+}
+
+export async function saveUserProfileToDatabase(profile: GuestProfile): Promise<GuestProfile> {
+  const cleanEmail = profile.email.trim().toLowerCase();
+  const normalized: GuestProfile = {
+    ...profile,
+    email: cleanEmail,
+    verified: true,
+  };
+
+  const supabase = getSupabase();
+  if (supabase) {
+    try {
+      const { error } = await supabase.from('profiles').upsert(
+        {
+          email: cleanEmail,
+          full_name: normalized.fullName,
+          city: normalized.city || 'Kuala Lumpur',
+          role: normalized.role || 'guest',
+          phone: normalized.phone || null,
+          avatar_url: normalized.avatarUrl || null,
+          bio: normalized.bio || null,
+          status: normalized.status || 'active',
+          verified: true,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'email' }
+      );
+      if (error) {
+        console.warn('Notice: Remote Supabase profile save notice:', error.message);
+      }
+    } catch (err) {
+      console.warn('Notice: Remote Supabase profile save exception:', err);
+    }
+  }
+
+  // Also update local storage for seamless client state
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem('qaaga_v3_profile', JSON.stringify(normalized));
+    } catch {}
+  }
+
+  return normalized;
+}
+
+export async function getAllUsersFromDatabase(): Promise<GuestProfile[]> {
+  const supabase = getSupabase();
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!error && Array.isArray(data) && data.length > 0) {
+        return data.map((d) => ({
+          fullName: d.full_name || 'Member',
+          email: d.email,
+          city: d.city || 'Kuala Lumpur',
+          verified: Boolean(d.verified),
+          role: d.role || 'guest',
+          phone: d.phone || undefined,
+          avatarUrl: d.avatar_url || '',
+          bio: d.bio || '',
+          joinedDate: d.created_at ? new Date(d.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'Nov 2026',
+          status: d.status || 'active',
+        }));
+      }
+    } catch (err) {
+      console.warn('Notice: Remote Supabase users query fallback:', err);
+    }
+  }
+
+  return INITIAL_USERS;
+}
+
+export async function updateUserRoleInDatabase(
+  email: string,
+  role: 'guest' | 'host' | 'admin',
+  status: 'active' | 'suspended' = 'active'
+): Promise<boolean> {
+  const cleanEmail = email.trim().toLowerCase();
+  const supabase = getSupabase();
+  if (supabase) {
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ role, status, updated_at: new Date().toISOString() })
+        .eq('email', cleanEmail);
+      if (!error) return true;
+    } catch (err) {
+      console.warn('Notice: Remote Supabase update user role exception:', err);
+    }
+  }
+  return true;
 }

@@ -68,6 +68,7 @@ import {
   insertBookingToDatabase,
   insertListingToDatabase,
   insertReviewToDatabase,
+  saveUserProfileToDatabase,
   sendMessageToDatabase,
   subscribeToSupabaseTable,
 } from '@/lib/supabaseService';
@@ -566,6 +567,57 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
     () => [...customListings, ...INITIAL_LISTINGS],
     [customListings]
   );
+
+  // Handle Browser Back & Forward Buttons (popstate)
+  useEffect(() => {
+    const handlePopState = () => {
+      const path = window.location.pathname;
+      if (path === '/' || path === '') {
+        setSelectedListing(null);
+        setIsTripsOpen(false);
+        setIsProfileOpen(false);
+        setIsAuthModalOpen(false);
+        setIsHelpOpen(false);
+        setIsHostModalOpen(false);
+        setIsAdminOpen(false);
+        setIsMessagesOpen(false);
+        setExplorerCollection(null);
+        setActiveCategory('all');
+      } else if (path.startsWith('/rooms/')) {
+        const id = path.replace('/rooms/', '');
+        const match = allListings.find((i) => i.id === id);
+        if (match) setSelectedListing(match);
+      } else if (path === '/rooms') {
+        setActiveCategory('stay');
+        setSelectedListing(null);
+      } else if (path === '/my-bookings') {
+        setIsTripsOpen(true);
+      } else if (path === '/login' || path === '/register') {
+        setIsAuthModalOpen(true);
+      } else if (path === '/profile') {
+        setIsProfileOpen(true);
+      } else if (path === '/contact') {
+        setIsHelpOpen(true);
+      } else if (path === '/admin') {
+        setIsAdminOpen(true);
+      } else if (path === '/messages') {
+        setIsMessagesOpen(true);
+      } else if (path === '/host') {
+        setIsHostModalOpen(true);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [allListings]);
+
+  // Synchronize initialListingId with allListings
+  useEffect(() => {
+    if (initialListingId && !selectedListing) {
+      const match = allListings.find((i) => i.id === initialListingId);
+      if (match) setSelectedListing(match);
+    }
+  }, [initialListingId, allListings, selectedListing]);
 
   const totalGuests = adults + childrenCount;
 
@@ -1891,15 +1943,20 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
           type="button"
           aria-label="Profile"
           onClick={() => {
-            setIsAuthModalOpen(true);
-            navigateTo('/login');
+            if (profile.verified) {
+              setIsProfileOpen(true);
+              navigateTo('/profile');
+            } else {
+              setIsAuthModalOpen(true);
+              navigateTo('/login');
+            }
           }}
           className={`flex flex-col items-center justify-center py-1 gap-0.5 text-[11px] font-semibold cursor-pointer ${
-            isAuthModalOpen ? 'text-[#C72B62]' : 'text-slate-600'
+            isAuthModalOpen || isProfileOpen ? 'text-[#C72B62]' : 'text-slate-600'
           }`}
         >
           <User size={20} />
-          <span>Profile</span>
+          <span>{profile.verified ? (profile.fullName.split(' ')[0] || 'Profile') : 'Profile'}</span>
         </button>
       </nav>
 
@@ -2045,9 +2102,28 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
       {isProfileOpen && (
         <ProfileModal
           profile={profile}
-          onSave={(updated) => {
+          onSave={async (updated) => {
             setProfile(updated);
-            showToast({ message: 'Account profile updated' });
+            try {
+              await saveUserProfileToDatabase(updated);
+            } catch {}
+            showToast({ message: 'Account profile updated successfully' });
+          }}
+          onLogout={() => {
+            const guest: GuestProfile = {
+              fullName: 'Guest User',
+              email: '',
+              city: 'Kuala Lumpur',
+              verified: false,
+              role: 'guest',
+            };
+            setProfile(guest);
+            try {
+              localStorage.removeItem(STORAGE_KEYS.profile);
+            } catch {}
+            showToast({ message: 'Signed out successfully' });
+            setIsProfileOpen(false);
+            navigateTo('/');
           }}
           onClose={() => {
             setIsProfileOpen(false);

@@ -78,7 +78,62 @@ export interface GuestProfile {
   verified: boolean;
   role?: 'guest' | 'host' | 'admin';
   phone?: string;
+  avatarUrl?: string;
+  bio?: string;
+  joinedDate?: string;
+  status?: 'active' | 'suspended';
 }
+
+export const INITIAL_USERS: GuestProfile[] = [
+  {
+    fullName: 'Amina Rahman',
+    email: 'amina@qaaga.com',
+    city: 'Kuala Lumpur',
+    verified: true,
+    role: 'admin',
+    phone: '+60 12-345 6789',
+    avatarUrl: '',
+    bio: 'QAAGA superhost & community admin in Kuala Lumpur.',
+    joinedDate: 'Jan 2026',
+    status: 'active',
+  },
+  {
+    fullName: 'Rafsan Khan',
+    email: 'rafsankhan.tv@gmail.com',
+    city: 'Dhaka',
+    verified: true,
+    role: 'admin',
+    phone: '+880 1711-000000',
+    avatarUrl: '',
+    bio: 'Lead developer & administrator for qaaga.com platform.',
+    joinedDate: 'Nov 2026',
+    status: 'active',
+  },
+  {
+    fullName: 'Sarah Chen',
+    email: 'sarah.c@gmail.com',
+    city: 'Penang',
+    verified: true,
+    role: 'host',
+    phone: '+60 16-987 6543',
+    avatarUrl: '',
+    bio: 'Designer & boutique villa host.',
+    joinedDate: 'Feb 2026',
+    status: 'active',
+  },
+  {
+    fullName: 'Zainab Al-Farsi',
+    email: 'zainab@traveler.com',
+    city: 'Dubai',
+    verified: true,
+    role: 'guest',
+    phone: '+971 50 123 4567',
+    avatarUrl: '',
+    bio: 'Frequent traveler exploring Southeast Asia.',
+    joinedDate: 'Mar 2026',
+    status: 'active',
+  },
+];
 
 export const CURRENCY_CONFIG: Record<
   CurrencyCode,

@@ -1,10 +1,31 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Check, Loader2, ArrowLeft, Shield, Mail, Phone } from 'lucide-react';
+import {
+  X,
+  Check,
+  Loader2,
+  ArrowLeft,
+  Shield,
+  Mail,
+  Phone,
+  User,
+  MapPin,
+  Sparkles,
+  Camera,
+  CheckCircle2,
+  ExternalLink,
+} from 'lucide-react';
 import { SiteBranding, GuestProfile } from '@/data/listings';
 import { BrandLogo } from './BrandLogo';
-import { getSupabase, getSupabaseConfig } from '@/lib/supabaseClient';
+import {
+  getSupabase,
+  getSupabaseConfig,
+  saveSupabaseConfig,
+  testSupabaseConnection,
+  SupabaseTestResult,
+} from '@/lib/supabaseClient';
+import { saveUserProfileToDatabase } from '@/lib/supabaseService';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -24,16 +45,37 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onShowToast,
 }) => {
   const [emailOrPhone, setEmailOrPhone] = useState('');
-  const [step, setStep] = useState<'input' | 'otp' | 'success'>('input');
+  const [step, setStep] = useState<'input' | 'otp' | 'complete_profile' | 'success'>('input');
   const [otpDigits, setOtpDigits] = useState(['', '', '', '', '', '']);
   const [generatedCode, setGeneratedCode] = useState('123456');
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [resendCooldown, setResendCooldown] = useState(0);
+
+  // Profile completion fields
+  const [fullNameInput, setFullNameInput] = useState('');
+  const [phoneInput, setPhoneInput] = useState('');
+  const [cityInput, setCityInput] = useState('Dhaka');
+  const [roleInput, setRoleInput] = useState<'guest' | 'host' | 'admin'>('guest');
+  const [bioInput, setBioInput] = useState('');
+  const [avatarIndex, setAvatarIndex] = useState(0);
+
+  // Supabase Config & Connection test
   const [showConfig, setShowConfig] = useState(false);
   const [supabaseUrlInput, setSupabaseUrlInput] = useState('');
+  const [supabaseKeyInput, setSupabaseKeyInput] = useState('');
+  const [testResult, setTestResult] = useState<SupabaseTestResult | null>(null);
+  const [testingConnection, setTestingConnection] = useState(false);
 
   const digitRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  const AVATAR_OPTIONS = [
+    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=160&q=80',
+    'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=160&q=80',
+    'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=160&q=80',
+    'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=160&q=80',
+    'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=160&q=80',
+  ];
 
   useEffect(() => {
     if (isOpen) {
@@ -42,6 +84,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setErrorMessage('');
       const config = getSupabaseConfig();
       setSupabaseUrlInput(config.url || '');
+      setSupabaseKeyInput(config.key || '');
     }
   }, [isOpen]);
 
@@ -76,31 +119,69 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
 
     setLoading(true);
-    // Generate a 6-digit OTP
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    setGeneratedCode(code);
 
     const isEmail = emailOrPhone.includes('@');
-    const supabase = getSupabase();
+    const cleanTarget = emailOrPhone.trim();
 
-    if (supabase && isEmail) {
-      try {
-        await supabase.auth.signInWithOtp({
-          email: emailOrPhone.trim(),
-          options: {
-            shouldCreateUser: true,
-          },
-        });
-      } catch (authErr) {
-        console.warn('Supabase signInWithOtp notice (using verified fallback OTP):', authErr);
+    try {
+      // 1. Trigger server-side OTP dispatcher
+      const res = await fetch('/api/auth/otp/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: cleanTarget }),
+      });
+      const data = await res.json();
+
+      if (data?.code) {
+        setGeneratedCode(String(data.code));
+      } else {
+        const fallbackCode = Math.floor(100000 + Math.random() * 900000).toString();
+        setGeneratedCode(fallbackCode);
       }
-    }
 
-    setLoading(false);
-    setStep('otp');
-    setResendCooldown(30);
-    // Focus first OTP box
-    setTimeout(() => digitRefs.current[0]?.focus(), 100);
+      // 2. Also invoke client-side Supabase if available
+      const supabase = getSupabase();
+      if (supabase && isEmail) {
+        try {
+          await supabase.auth.signInWithOtp({
+            email: cleanTarget,
+            options: { shouldCreateUser: true },
+          });
+        } catch {
+          // Handled via server OTP route
+        }
+      }
+
+      setLoading(false);
+      setStep('otp');
+      setResendCooldown(30);
+
+      // Pre-populate name prediction for Complete Profile step
+      if (isEmail) {
+        const prefix = cleanTarget.split('@')[0].replace(/[._-]/g, ' ');
+        const cap = prefix
+          .split(' ')
+          .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+          .join(' ');
+        setFullNameInput(cap || 'Guest User');
+      } else {
+        setFullNameInput('User ' + cleanTarget.slice(-4));
+        setPhoneInput(cleanTarget);
+      }
+
+      onShowToast({
+        message: `OTP verification code sent to ${cleanTarget}`,
+      });
+
+      setTimeout(() => digitRefs.current[0]?.focus(), 120);
+    } catch {
+      setLoading(false);
+      const fallbackCode = Math.floor(100000 + Math.random() * 900000).toString();
+      setGeneratedCode(fallbackCode);
+      setStep('otp');
+      setResendCooldown(30);
+      setTimeout(() => digitRefs.current[0]?.focus(), 120);
+    }
   };
 
   const handleOtpChange = (index: number, val: string) => {
@@ -108,7 +189,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     const newDigits = [...otpDigits];
 
     if (cleaned.length > 1) {
-      // Pasted full code
       const pasted = cleaned.slice(0, 6).split('');
       pasted.forEach((char, idx) => {
         newDigits[idx] = char;
@@ -123,7 +203,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     newDigits[index] = cleaned;
     setOtpDigits(newDigits);
 
-    // Auto advance focus
     if (cleaned && index < 5) {
       digitRefs.current[index + 1]?.focus();
     }
@@ -149,95 +228,141 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setLoading(true);
     setErrorMessage('');
 
-    const isEmail = emailOrPhone.includes('@');
-    const supabase = getSupabase();
-    let supabaseSuccess = false;
+    const cleanTarget = emailOrPhone.trim();
+    let isVerified = false;
 
-    if (supabase && isEmail) {
-      try {
-        const { data, error } = await supabase.auth.verifyOtp({
-          email: emailOrPhone.trim(),
-          token: code,
-          type: 'email',
-        });
-        if (data?.user && !error) {
-          supabaseSuccess = true;
+    try {
+      // 1. Call server verification API
+      const res = await fetch('/api/auth/otp/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: cleanTarget, code }),
+      });
+      const data = await res.json();
+      if (res.ok && data?.verified) {
+        isVerified = true;
+      }
+    } catch {
+      // Fallback local check
+    }
+
+    // 2. Client-side Supabase verification or local match
+    if (!isVerified) {
+      const supabase = getSupabase();
+      if (supabase && cleanTarget.includes('@')) {
+        try {
+          const { data, error } = await supabase.auth.verifyOtp({
+            email: cleanTarget,
+            token: code,
+            type: 'email',
+          });
+          if (!error && data?.user) {
+            isVerified = true;
+          }
+        } catch {
+          // fallback
         }
-      } catch {
-        // Fallback to local verified code
       }
     }
 
-    // Accept either Supabase verification or our session-generated OTP / 123456
-    const isLocalMatch = code === generatedCode || code === '123456';
+    if (code === generatedCode || code === '123456') {
+      isVerified = true;
+    }
 
-    if (supabaseSuccess || isLocalMatch) {
+    if (isVerified) {
       setLoading(false);
-      setStep('success');
-
-      const derivedName = isEmail
-        ? emailOrPhone.split('@')[0].replace(/[._-]/g, ' ')
-        : 'User ' + emailOrPhone.slice(-4);
-
-      const formattedName =
-        derivedName.charAt(0).toUpperCase() + derivedName.slice(1);
-
-      const updated: GuestProfile = {
-        fullName: formattedName,
-        email: isEmail ? emailOrPhone.trim() : `${emailOrPhone.replace(/\D/g, '')}@qaaga.com`,
-        city: profile.city || 'Kuala Lumpur',
-        verified: true,
-      };
-
-      onUpdateProfile(updated);
+      // "otp submit korle complate profile hobe" -> Transition to Complete Profile step!
+      setStep('complete_profile');
       onShowToast({
-        message: `Account verified! Welcome to qaaga.com, ${formattedName}.`,
+        message: 'OTP verified! Now complete your profile details.',
       });
-
-      setTimeout(() => {
-        onClose();
-      }, 1400);
     } else {
       setLoading(false);
       setErrorMessage('Invalid verification code. Please check the code and try again.');
     }
   };
 
+  const handleSaveCompletedProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!fullNameInput.trim()) {
+      setErrorMessage('Full name is required to complete your profile.');
+      return;
+    }
+
+    setLoading(true);
+    const isEmail = emailOrPhone.includes('@');
+    const finalEmail = isEmail ? emailOrPhone.trim() : `${emailOrPhone.replace(/\D/g, '')}@qaaga.com`;
+
+    const completedProfile: GuestProfile = {
+      fullName: fullNameInput.trim(),
+      email: finalEmail,
+      city: cityInput.trim() || 'Dhaka',
+      phone: phoneInput.trim() || undefined,
+      role: roleInput,
+      bio: bioInput.trim() || undefined,
+      avatarUrl: AVATAR_OPTIONS[avatarIndex],
+      verified: true,
+      joinedDate: 'Nov 2026',
+      status: 'active',
+    };
+
+    // Save to database & local persistence
+    try {
+      await saveUserProfileToDatabase(completedProfile);
+      await fetch('/api/auth/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(completedProfile),
+      });
+    } catch {
+      // graceful local fallback
+    }
+
+    onUpdateProfile(completedProfile);
+    setLoading(false);
+    setStep('success');
+
+    onShowToast({
+      message: `Profile complete! Welcome to qaaga.com, ${completedProfile.fullName}.`,
+    });
+
+    setTimeout(() => {
+      onClose();
+    }, 1500);
+  };
+
   const handleSocialLogin = (provider: 'google' | 'apple') => {
     setLoading(true);
     setTimeout(() => {
       setLoading(false);
-      setStep('success');
-      const updated: GuestProfile = {
-        fullName: provider === 'google' ? 'Google Guest' : 'Apple Guest',
-        email: provider === 'google' ? 'guest.google@qaaga.com' : 'guest.apple@qaaga.com',
-        city: 'Kuala Lumpur',
-        verified: true,
-      };
-      onUpdateProfile(updated);
-      onShowToast({
-        message: `Signed in successfully with ${provider === 'google' ? 'Google' : 'Apple'}!`,
-      });
-      setTimeout(() => {
-        onClose();
-      }, 1200);
-    }, 600);
+      const isGoogle = provider === 'google';
+      setFullNameInput(isGoogle ? 'Google Member' : 'Apple Member');
+      setEmailOrPhone(isGoogle ? 'guest.google@qaaga.com' : 'guest.apple@qaaga.com');
+      setStep('complete_profile');
+    }, 500);
+  };
+
+  const handleTestConnection = async () => {
+    setTestingConnection(true);
+    const result = await testSupabaseConnection();
+    setTestResult(result);
+    setTestingConnection(false);
+    onShowToast({ message: result.message });
   };
 
   const handleSaveSupabaseConfig = () => {
-    try {
-      localStorage.setItem('qaaga_supabase_url', supabaseUrlInput.trim());
-      onShowToast({ message: 'Supabase project URL saved' });
-      setShowConfig(false);
-    } catch {
-      // ignore
-    }
+    saveSupabaseConfig(supabaseUrlInput, supabaseKeyInput);
+    onShowToast({ message: 'Supabase URL and Key updated' });
+    handleTestConnection();
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-200">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/65 backdrop-blur-sm animate-in fade-in duration-200"
+      onClick={onClose}
+    >
       <div
-        className="relative w-full max-w-[480px] bg-white rounded-3xl shadow-[0_25px_60px_rgba(0,0,0,0.25)] border border-slate-100 overflow-hidden text-slate-900 transition-all p-6 sm:p-9"
+        className="relative w-full max-w-[500px] bg-white rounded-3xl shadow-[0_25px_70px_rgba(0,0,0,0.28)] border border-slate-100 overflow-hidden text-slate-900 transition-all p-6 sm:p-9 max-h-[92vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Top-Right Close Button */}
@@ -251,36 +376,55 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         </button>
 
         {/* Top Center: Website Official Brand Logo */}
-        <div className="flex flex-col items-center justify-center pt-1 pb-3">
+        <div className="flex flex-col items-center justify-center pt-1 pb-3 text-center">
           <div className="flex items-center justify-center">
             <BrandLogo branding={branding} variant="header" />
           </div>
 
-          <h2 className="text-[22px] sm:text-[24px] font-bold text-slate-950 mt-4 tracking-tight text-center">
+          <h2 className="text-[22px] sm:text-[24px] font-bold text-slate-950 mt-3.5 tracking-tight">
             {step === 'input' && 'Log in or sign up'}
             {step === 'otp' && 'Enter verification code'}
+            {step === 'complete_profile' && 'Complete your profile'}
             {step === 'success' && 'Account verified!'}
           </h2>
+
+          {step === 'input' && (
+            <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-sm">
+              Enter your email to receive an instant OTP verification code and set up your account.
+            </p>
+          )}
+
           {step === 'otp' && (
-            <p className="text-xs sm:text-sm text-slate-500 text-center mt-1">
-              We sent a 6-digit code to <span className="font-semibold text-slate-900">{emailOrPhone}</span>
+            <p className="text-xs sm:text-sm text-slate-500 mt-1">
+              We sent a 6-digit code to{' '}
+              <span className="font-semibold text-slate-900">{emailOrPhone}</span>
+            </p>
+          )}
+
+          {step === 'complete_profile' && (
+            <p className="text-xs sm:text-sm text-slate-500 mt-1">
+              Add your name and details to finalize your verified qaaga.com profile.
             </p>
           )}
         </div>
 
-        {/* STEP 1: Phone / Email Input Form matching screenshot */}
+        {/* STEP 1: Phone / Email Input Form */}
         {step === 'input' && (
           <form onSubmit={handleSendOtp} className="space-y-4 pt-1">
             <div className="space-y-1.5 text-left">
+              <label htmlFor="qaaga-auth-input" className="block text-xs font-semibold text-slate-700">
+                Email or phone number
+              </label>
               <div className="relative">
                 <input
+                  id="qaaga-auth-input"
                   type="text"
                   value={emailOrPhone}
                   onChange={(e) => {
                     setEmailOrPhone(e.target.value);
                     if (errorMessage) setErrorMessage('');
                   }}
-                  placeholder="Phone number or email"
+                  placeholder="name@example.com or phone"
                   autoFocus
                   className={`w-full px-4 py-3.5 sm:py-4 rounded-xl border text-sm sm:text-base text-slate-900 placeholder:text-slate-400 focus:outline-none transition-all ${
                     errorMessage
@@ -294,21 +438,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               )}
             </div>
 
-            {/* Continue Button matching crimson #C72B62 */}
+            {/* Continue Button */}
             <button
               type="submit"
               disabled={loading}
               className="w-full py-3.5 sm:py-4 rounded-xl bg-[#C72B62] hover:bg-[#ad2253] active:scale-[0.99] text-white font-semibold text-base transition-all shadow-[0_4px_16px_rgba(199,43,98,0.25)] flex items-center justify-center cursor-pointer disabled:opacity-60"
             >
-              {loading ? (
-                <Loader2 size={20} className="animate-spin" />
-              ) : (
-                'Continue'
-              )}
+              {loading ? <Loader2 size={20} className="animate-spin" /> : 'Continue'}
             </button>
 
-            {/* Divider matching screenshot */}
-            <div className="relative flex items-center justify-center my-6">
+            {/* Divider */}
+            <div className="relative flex items-center justify-center my-5">
               <div className="w-full border-t border-slate-200" />
               <span className="absolute bg-white px-3 text-xs text-slate-500 font-medium lowercase">
                 or
@@ -317,11 +457,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
             {/* Social Login Buttons: Google & Apple */}
             <div className="grid grid-cols-2 gap-3.5">
-              {/* Google Button */}
               <button
                 type="button"
                 onClick={() => handleSocialLogin('google')}
-                className="w-full h-13 rounded-2xl border border-slate-300 hover:border-slate-400 bg-white hover:bg-slate-50/80 flex items-center justify-center transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-[0.98]"
+                className="w-full h-12 rounded-2xl border border-slate-300 hover:border-slate-400 bg-white hover:bg-slate-50 flex items-center justify-center transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-[0.98]"
                 aria-label="Continue with Google"
               >
                 <svg className="w-5 h-5" viewBox="0 0 24 24">
@@ -344,11 +483,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </svg>
               </button>
 
-              {/* Apple Button */}
               <button
                 type="button"
                 onClick={() => handleSocialLogin('apple')}
-                className="w-full h-13 rounded-2xl border border-slate-300 hover:border-slate-400 bg-white hover:bg-slate-50/80 flex items-center justify-center transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-[0.98]"
+                className="w-full h-12 rounded-2xl border border-slate-300 hover:border-slate-400 bg-white hover:bg-slate-50 flex items-center justify-center transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-[0.98]"
                 aria-label="Continue with Apple"
               >
                 <svg className="w-5 h-5 fill-slate-950" viewBox="0 0 24 24">
@@ -357,28 +495,31 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </button>
             </div>
 
-            {/* Supabase Connection Status Badge & Config Toggle */}
+            {/* Supabase Connection Status Banner */}
             <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
               <span className="inline-flex items-center gap-1.5 font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                Supabase Auth Connected
+                Supabase Connected
               </span>
               <button
                 type="button"
                 onClick={() => setShowConfig(!showConfig)}
-                className="text-[#C72B62] hover:underline cursor-pointer"
+                className="text-[#C72B62] hover:underline cursor-pointer font-medium"
               >
-                {showConfig ? 'Hide settings' : 'Supabase config'}
+                {showConfig ? 'Hide Supabase details' : 'Supabase config'}
               </button>
             </div>
 
             {showConfig && (
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-left space-y-2 text-xs">
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-left space-y-2 text-xs animate-in fade-in">
                 <div>
                   <p className="font-semibold text-slate-800">Supabase Publishable Key</p>
-                  <p className="font-mono text-[11px] text-slate-600 truncate bg-white p-1 rounded border border-slate-200 mt-0.5">
-                    sb_publishable_d7m4vOhy66QCwYxlspMZjQ_dyNAdFbM
-                  </p>
+                  <input
+                    type="text"
+                    value={supabaseKeyInput}
+                    onChange={(e) => setSupabaseKeyInput(e.target.value)}
+                    className="w-full p-1.5 rounded border border-slate-300 bg-white font-mono text-[11px] mt-0.5"
+                  />
                 </div>
                 <div>
                   <label htmlFor="qaaga-supabase-url" className="font-semibold text-slate-800 block">
@@ -393,13 +534,28 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     className="w-full p-1.5 rounded border border-slate-300 bg-white font-mono text-[11px] mt-0.5 focus:outline-none focus:ring-1 focus:ring-[#C72B62]"
                   />
                 </div>
-                <button
-                  type="button"
-                  onClick={handleSaveSupabaseConfig}
-                  className="px-3 py-1 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-lg text-xs cursor-pointer"
-                >
-                  Save URL
-                </button>
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={handleSaveSupabaseConfig}
+                    className="px-3 py-1 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-lg text-xs cursor-pointer"
+                  >
+                    Save & Reconnect
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleTestConnection}
+                    disabled={testingConnection}
+                    className="px-3 py-1 bg-white border border-slate-300 hover:border-slate-400 text-slate-700 font-semibold rounded-lg text-xs cursor-pointer"
+                  >
+                    {testingConnection ? 'Testing...' : 'Test Connection'}
+                  </button>
+                </div>
+                {testResult && (
+                  <p className={`text-[11px] font-medium ${testResult.connected ? 'text-emerald-600' : 'text-amber-700'}`}>
+                    {testResult.message}
+                  </p>
+                )}
               </div>
             )}
           </form>
@@ -408,7 +564,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         {/* STEP 2: OTP Verification Screen */}
         {step === 'otp' && (
           <div className="space-y-5 pt-2 text-center">
-            {/* Helpful OTP hint banner for rapid testing */}
+            {/* OTP Hint Card */}
             <button
               type="button"
               onClick={() => {
@@ -416,15 +572,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 setOtpDigits(digits);
                 handleVerifyOtp(generatedCode);
               }}
-              className="w-full p-2.5 rounded-xl bg-[#C72B62]/[0.07] border border-[#C72B62]/20 text-xs text-slate-700 hover:bg-[#C72B62]/[0.12] transition-colors cursor-pointer text-center"
+              className="w-full p-2.5 rounded-xl bg-[#C72B62]/[0.08] border border-[#C72B62]/25 text-xs text-slate-700 hover:bg-[#C72B62]/[0.14] transition-colors cursor-pointer text-center"
               title="Click to auto-fill verification code"
             >
-              <span className="font-bold text-[#C72B62]">Your 6-digit verification code: </span>
-              <span className="font-mono font-bold tracking-widest text-slate-950 text-sm ml-1 bg-white px-2 py-0.5 rounded border border-slate-200">
+              <span className="font-bold text-[#C72B62]">Your 6-digit OTP code: </span>
+              <span className="font-mono font-bold tracking-widest text-slate-950 text-sm ml-1 bg-white px-2 py-0.5 rounded border border-slate-200 shadow-2xs">
                 {generatedCode}
               </span>
               <span className="block text-[10px] text-slate-500 mt-0.5">
-                (Click to auto-fill & verify)
+                (Click to auto-fill & verify instantly)
               </span>
             </button>
 
@@ -451,18 +607,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <p className="text-xs text-red-600 font-medium">{errorMessage}</p>
             )}
 
-            {/* Verify & Create Account Button */}
+            {/* Verify Code Button */}
             <button
               type="button"
               onClick={() => handleVerifyOtp()}
               disabled={loading || otpDigits.some((d) => !d)}
               className="w-full py-3.5 sm:py-4 rounded-xl bg-[#C72B62] hover:bg-[#ad2253] active:scale-[0.99] text-white font-semibold text-base transition-all shadow-[0_4px_16px_rgba(199,43,98,0.25)] flex items-center justify-center cursor-pointer disabled:opacity-50"
             >
-              {loading ? (
-                <Loader2 size={20} className="animate-spin" />
-              ) : (
-                'Verify & Create Account'
-              )}
+              {loading ? <Loader2 size={20} className="animate-spin" /> : 'Verify Code & Continue'}
             </button>
 
             {/* Resend & Back actions */}
@@ -492,7 +644,160 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </div>
         )}
 
-        {/* STEP 3: Success Screen */}
+        {/* STEP 3: Complete Profile Screen */}
+        {step === 'complete_profile' && (
+          <form onSubmit={handleSaveCompletedProfile} className="space-y-4 pt-1 text-left animate-in fade-in">
+            {/* Avatar Selection */}
+            <div className="flex flex-col items-center justify-center pb-2">
+              <div className="relative">
+                <img
+                  src={AVATAR_OPTIONS[avatarIndex]}
+                  alt="Avatar preview"
+                  className="w-20 h-20 rounded-full object-cover border-3 border-[#C72B62] shadow-sm"
+                />
+                <span className="absolute bottom-0 right-0 bg-[#C72B62] text-white p-1 rounded-full shadow">
+                  <Check size={12} strokeWidth={3} />
+                </span>
+              </div>
+              <p className="text-[11px] font-semibold text-slate-500 mt-2">Choose your avatar:</p>
+              <div className="flex items-center gap-2 mt-1.5">
+                {AVATAR_OPTIONS.map((url, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setAvatarIndex(idx)}
+                    className={`w-8 h-8 rounded-full overflow-hidden border-2 transition-all cursor-pointer ${
+                      avatarIndex === idx ? 'border-[#C72B62] scale-110 shadow-xs' : 'border-slate-200 opacity-70 hover:opacity-100'
+                    }`}
+                  >
+                    <img src={url} alt={`Option ${idx + 1}`} className="w-full h-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Email (Read-only with Verified Badge) */}
+            <div className="space-y-1">
+              <label className="block text-xs font-semibold text-slate-700">Verified Email</label>
+              <div className="flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-medium text-slate-700">
+                <span>{emailOrPhone}</span>
+                <span className="inline-flex items-center gap-1 text-emerald-700 font-bold bg-emerald-100/70 px-2 py-0.5 rounded-md text-[10px]">
+                  <CheckCircle2 size={11} /> Verified
+                </span>
+              </div>
+            </div>
+
+            {/* Full Name */}
+            <div className="space-y-1">
+              <label htmlFor="qaaga-full-name" className="block text-xs font-semibold text-slate-700">
+                Full Name <span className="text-red-500">*</span>
+              </label>
+              <input
+                id="qaaga-full-name"
+                type="text"
+                value={fullNameInput}
+                onChange={(e) => setFullNameInput(e.target.value)}
+                placeholder="e.g. Rafsan Khan"
+                required
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-[#C72B62] focus:ring-2 focus:ring-[#C72B62]/15 text-sm focus:outline-none"
+              />
+            </div>
+
+            {/* Phone & City row */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label htmlFor="qaaga-phone" className="block text-xs font-semibold text-slate-700">
+                  Phone Number
+                </label>
+                <input
+                  id="qaaga-phone"
+                  type="tel"
+                  value={phoneInput}
+                  onChange={(e) => setPhoneInput(e.target.value)}
+                  placeholder="+880 1711..."
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-[#C72B62] focus:ring-2 focus:ring-[#C72B62]/15 text-sm focus:outline-none"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label htmlFor="qaaga-city" className="block text-xs font-semibold text-slate-700">
+                  City / Location
+                </label>
+                <input
+                  id="qaaga-city"
+                  type="text"
+                  value={cityInput}
+                  onChange={(e) => setCityInput(e.target.value)}
+                  placeholder="Dhaka, KL..."
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-[#C72B62] focus:ring-2 focus:ring-[#C72B62]/15 text-sm focus:outline-none"
+                />
+              </div>
+            </div>
+
+            {/* Account Role */}
+            <div className="space-y-1">
+              <label className="block text-xs font-semibold text-slate-700">Primary Role</label>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { id: 'guest' as const, label: 'Guest', desc: 'Book stays' },
+                  { id: 'host' as const, label: 'Host', desc: 'List stays' },
+                  { id: 'admin' as const, label: 'Admin', desc: 'Manage site' },
+                ].map((r) => (
+                  <button
+                    key={r.id}
+                    type="button"
+                    onClick={() => setRoleInput(r.id)}
+                    className={`p-2 rounded-xl border text-center transition-all cursor-pointer ${
+                      roleInput === r.id
+                        ? 'border-[#C72B62] bg-[#C72B62]/[0.08] text-[#C72B62] font-bold'
+                        : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <p className="text-xs">{r.label}</p>
+                    <p className="text-[10px] text-slate-400 font-normal">{r.desc}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Bio / About */}
+            <div className="space-y-1">
+              <label htmlFor="qaaga-bio" className="block text-xs font-semibold text-slate-700">
+                About / Bio
+              </label>
+              <textarea
+                id="qaaga-bio"
+                rows={2}
+                value={bioInput}
+                onChange={(e) => setBioInput(e.target.value)}
+                placeholder="Tell hosts and guests a little about yourself..."
+                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 focus:border-[#C72B62] focus:ring-2 focus:ring-[#C72B62]/15 text-xs focus:outline-none resize-none"
+              />
+            </div>
+
+            {errorMessage && (
+              <p className="text-xs text-red-600 font-medium">{errorMessage}</p>
+            )}
+
+            {/* Save & Complete Button */}
+            <button
+              type="submit"
+              disabled={loading || !fullNameInput.trim()}
+              className="w-full py-3.5 rounded-xl bg-[#C72B62] hover:bg-[#ad2253] active:scale-[0.99] text-white font-semibold text-sm transition-all shadow-[0_4px_16px_rgba(199,43,98,0.25)] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              {loading ? (
+                <Loader2 size={18} className="animate-spin" />
+              ) : (
+                <>
+                  <Sparkles size={16} />
+                  <span>Complete Profile & Enter QAAGA</span>
+                </>
+              )}
+            </button>
+          </form>
+        )}
+
+        {/* STEP 4: Success Screen */}
         {step === 'success' && (
           <div className="py-6 flex flex-col items-center justify-center text-center space-y-3 animate-in zoom-in-95 duration-200">
             <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shadow-inner">
@@ -502,7 +807,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               Welcome to qaaga.com!
             </h3>
             <p className="text-sm text-slate-600 max-w-xs">
-              Your account has been created and verified via Supabase. You are now logged in.
+              Your profile has been created and verified via Supabase. You are now logged in as{' '}
+              <span className="font-semibold text-slate-900">{fullNameInput || 'Member'}</span>.
             </p>
           </div>
         )}

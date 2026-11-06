@@ -1,13 +1,25 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { DEFAULT_BRANDING, SiteBranding, GuestProfile } from '@/data/listings';
+import {
+  DEFAULT_BRANDING,
+  SiteBranding,
+  GuestProfile,
+  INITIAL_LISTINGS,
+  INITIAL_BOOKINGS,
+  QaagaListing,
+  BookingRecord,
+} from '@/data/listings';
 import { AdminPanelModal } from '@/components/AdminPanelModal';
 import {
   persistBrandingEverywhere,
   readSyncLocalBranding,
   reconcileBrandingOnLoad,
 } from '@/lib/brandingStorage.client';
+import {
+  getListingsFromDatabase,
+  getBookingsFromDatabase,
+} from '@/lib/supabaseService';
 import { ShieldAlert, ArrowLeft, KeyRound } from 'lucide-react';
 import Link from 'next/link';
 
@@ -16,6 +28,8 @@ export default function AdminPage() {
   const brandingRef = useRef<SiteBranding>(DEFAULT_BRANDING);
   const [userProfile, setUserProfile] = useState<GuestProfile | null>(null);
   const [isAuthorized, setIsAuthorized] = useState<boolean>(true); // default true, checks on mount
+  const [listings, setListings] = useState<QaagaListing[]>(INITIAL_LISTINGS);
+  const [bookings, setBookings] = useState<BookingRecord[]>(INITIAL_BOOKINGS);
 
   useEffect(() => {
     brandingRef.current = branding;
@@ -27,7 +41,6 @@ export default function AdminPage() {
       if (stored) {
         const parsed = JSON.parse(stored);
         setUserProfile(parsed);
-        // If profile explicitly has non-admin role, flag unauthorized
         if (parsed.role && parsed.role !== 'admin') {
           setIsAuthorized(false);
         }
@@ -35,6 +48,14 @@ export default function AdminPage() {
     } catch {
       // ignore
     }
+
+    getListingsFromDatabase().then((dbListings) => {
+      if (dbListings && dbListings.length > 0) setListings(dbListings);
+    });
+
+    getBookingsFromDatabase().then((dbBookings) => {
+      if (dbBookings && dbBookings.length > 0) setBookings(dbBookings);
+    });
 
     const syncLocal = readSyncLocalBranding();
     if (syncLocal) {
@@ -126,6 +147,8 @@ export default function AdminPage() {
       onUpdateBranding={persistBranding}
       onRemoveLogo={handleRemoveLogo}
       onRestoreDefaultLogo={handleRestoreDefaultLogo}
+      allListings={listings}
+      bookings={bookings}
       standalone={true}
     />
   );

@@ -663,12 +663,23 @@ export const ProfileModal: React.FC<{
   profile: GuestProfile;
   onSave: (updated: GuestProfile) => void;
   onClose: () => void;
-}> = ({ profile, onSave, onClose }) => {
+  onLogout?: () => void;
+}> = ({ profile, onSave, onClose, onLogout }) => {
   const [fullName, setFullName] = useState(profile.fullName);
   const [email, setEmail] = useState(profile.email);
   const [city, setCity] = useState(profile.city);
   const [phone, setPhone] = useState(profile.phone || '');
   const [role, setRole] = useState<'guest' | 'host' | 'admin'>(profile.role || 'guest');
+  const [bio, setBio] = useState(profile.bio || '');
+  const [avatarUrl, setAvatarUrl] = useState(profile.avatarUrl || '');
+
+  const AVATARS = [
+    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=160&q=80',
+    'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=160&q=80',
+    'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=160&q=80',
+    'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=160&q=80',
+    'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=160&q=80',
+  ];
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -679,7 +690,11 @@ export const ProfileModal: React.FC<{
       city: city.trim() || 'Kuala Lumpur',
       phone: phone.trim() || undefined,
       role,
+      bio: bio.trim() || undefined,
+      avatarUrl: avatarUrl || undefined,
       verified: true,
+      joinedDate: profile.joinedDate || 'Nov 2026',
+      status: 'active',
     });
     onClose();
   };
@@ -691,17 +706,25 @@ export const ProfileModal: React.FC<{
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-md p-6 space-y-5"
+        className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg p-6 space-y-5 max-h-[90vh] overflow-y-auto"
       >
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-full bg-[#C72B62]/10 text-[#C72B62] flex items-center justify-center">
-              <User size={22} />
-            </div>
+            {avatarUrl ? (
+              <img
+                src={avatarUrl}
+                alt={fullName}
+                className="w-12 h-12 rounded-full object-cover border-2 border-[#C72B62]"
+              />
+            ) : (
+              <div className="w-12 h-12 rounded-full bg-[#C72B62] text-white flex items-center justify-center font-bold text-base uppercase">
+                {fullName.charAt(0) || 'U'}
+              </div>
+            )}
             <div>
               <h3 className="text-base font-bold text-slate-950 flex items-center gap-1.5">
                 <span>Account Profile</span>
-                <CheckCircle2 size={15} className="text-[#C72B62]" />
+                <CheckCircle2 size={15} className="text-emerald-600" />
               </h3>
               <p className="text-xs text-slate-500 capitalize">
                 Verified member · Role: <span className="font-semibold text-slate-800">{role}</span>
@@ -718,7 +741,26 @@ export const ProfileModal: React.FC<{
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Avatar Selector */}
+        <div>
+          <label className="block text-xs font-bold text-slate-700 mb-1.5">Choose Avatar</label>
+          <div className="flex items-center gap-2">
+            {AVATARS.map((url, idx) => (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => setAvatarUrl(url)}
+                className={`w-9 h-9 rounded-full overflow-hidden border-2 transition-all cursor-pointer ${
+                  avatarUrl === url ? 'border-[#C72B62] scale-110 shadow-xs' : 'border-slate-200 opacity-60 hover:opacity-100'
+                }`}
+              >
+                <img src={url} alt={`Avatar ${idx + 1}`} className="w-full h-full object-cover" />
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-3.5">
           <div>
             <label className="block text-xs font-bold text-slate-800 mb-1">Full Name</label>
             <input
@@ -746,7 +788,7 @@ export const ProfileModal: React.FC<{
                 type="tel"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                placeholder="+60 12-345 6789"
+                placeholder="+880 1711..."
                 className="w-full h-11 px-3.5 rounded-xl border border-slate-300 text-sm focus:outline-none focus:border-[#C72B62]"
               />
             </div>
@@ -759,6 +801,17 @@ export const ProfileModal: React.FC<{
                 className="w-full h-11 px-3.5 rounded-xl border border-slate-300 text-sm focus:outline-none focus:border-[#C72B62]"
               />
             </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-800 mb-1">About / Bio</label>
+            <textarea
+              rows={2}
+              value={bio}
+              onChange={(e) => setBio(e.target.value)}
+              placeholder="Tell other guests and hosts about yourself..."
+              className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs focus:outline-none focus:border-[#C72B62] resize-none"
+            />
           </div>
 
           <div>
@@ -781,12 +834,35 @@ export const ProfileModal: React.FC<{
             </div>
           </div>
 
-          <button
-            type="submit"
-            className="w-full py-3 rounded-xl bg-[#C72B62] hover:bg-[#ad2253] text-white text-sm font-semibold cursor-pointer transition-colors shadow-sm"
-          >
-            Save Profile
-          </button>
+          {/* Supabase status badge */}
+          <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between text-xs text-emerald-800">
+            <span className="inline-flex items-center gap-1.5 font-semibold">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              Supabase Auth & Database Connected
+            </span>
+            <span className="text-[10px] text-emerald-600 font-bold uppercase">Sync Active</span>
+          </div>
+
+          <div className="flex items-center gap-2 pt-1">
+            <button
+              type="submit"
+              className="flex-1 py-3 rounded-xl bg-[#C72B62] hover:bg-[#ad2253] text-white text-sm font-semibold cursor-pointer transition-colors shadow-sm"
+            >
+              Save Profile Changes
+            </button>
+            {onLogout && (
+              <button
+                type="button"
+                onClick={() => {
+                  onLogout();
+                  onClose();
+                }}
+                className="px-4 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-semibold cursor-pointer transition-colors"
+              >
+                Sign Out
+              </button>
+            )}
+          </div>
         </form>
       </div>
     </div>

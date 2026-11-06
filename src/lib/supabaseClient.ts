@@ -57,3 +57,81 @@ export function getSupabase(): SupabaseClient | null {
     return null;
   }
 }
+
+export interface SupabaseTestResult {
+  connected: boolean;
+  url: string;
+  keyPrefix: string;
+  latencyMs: number;
+  message: string;
+  details?: Record<string, any>;
+}
+
+export function saveSupabaseConfig(url: string, key: string): void {
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem('qaaga_supabase_url', url.trim());
+      localStorage.setItem('qaaga_supabase_key', key.trim());
+    } catch {
+      // ignore
+    }
+  }
+  // Clear cached client so next getSupabase() reinitializes
+  cachedClient = null;
+  lastUrl = '';
+  lastKey = '';
+}
+
+export async function testSupabaseConnection(): Promise<SupabaseTestResult> {
+  const { url, key } = getSupabaseConfig();
+  const startTime = Date.now();
+  const keyPrefix = key ? `${key.slice(0, 16)}...` : 'None';
+
+  if (!url || !key) {
+    return {
+      connected: false,
+      url: url || 'Not configured',
+      keyPrefix,
+      latencyMs: 0,
+      message: 'Supabase URL or Key is missing.',
+    };
+  }
+
+  try {
+    const client = getSupabase();
+    if (!client) {
+      throw new Error('Failed to initialize Supabase client');
+    }
+
+    const { data, error } = await client.auth.getSession();
+    const latencyMs = Date.now() - startTime;
+
+    if (error) {
+      return {
+        connected: false,
+        url,
+        keyPrefix,
+        latencyMs,
+        message: `Connection error: ${error.message}`,
+      };
+    }
+
+    return {
+      connected: true,
+      url,
+      keyPrefix,
+      latencyMs,
+      message: `Supabase connected successfully (${latencyMs}ms)`,
+      details: { hasSession: Boolean(data?.session) },
+    };
+  } catch (err: any) {
+    const latencyMs = Date.now() - startTime;
+    return {
+      connected: false,
+      url,
+      keyPrefix,
+      latencyMs,
+      message: `Notice: ${err?.message || 'Network/CORS unreachable'}`,
+    };
+  }
+}
