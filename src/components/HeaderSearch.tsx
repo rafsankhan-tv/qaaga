@@ -3,10 +3,13 @@
 import React, { useRef, useEffect, useState } from 'react';
 import {
   Bell,
+  CalendarCheck2,
   ChevronLeft,
   ChevronRight,
+  Heart,
   HelpCircle,
   MapPin,
+  MessageSquare,
   Minus,
   Plus,
   Search,
@@ -71,6 +74,7 @@ interface HeaderSearchProps {
   profile: GuestProfile;
   bookingsCount: number;
   threadsCount: number;
+  unreadThreadsCount?: number;
   wishlistCount: number;
   currency: CurrencyCode;
   onChangeCurrency: (c: CurrencyCode) => void;
@@ -121,6 +125,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
   profile,
   bookingsCount,
   threadsCount,
+  unreadThreadsCount = 0,
   wishlistCount,
   currency,
   onChangeCurrency,
@@ -211,6 +216,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
   };
 
   const unreadNotifCount = notifications.filter((n) => n.unread).length;
+  const totalAlertsCount = unreadNotifCount + unreadThreadsCount;
   const activeTabObj =
     CATEGORY_TABS.find((tab) => tab.id === activeCategory) || CATEGORY_TABS[0];
   const stayTab = CATEGORY_TABS.find((tab) => tab.id === 'stay');
@@ -389,7 +395,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
                 <span className="inline sm:hidden">Host</span>
               </button>
 
-              {/* Notification Bell Icon + #C72B62 Superscript Count matching screenshot */}
+              {/* Notification Bell Icon + #C72B62 Combined Total Count */}
               <button
                 type="button"
                 aria-label="Notifications"
@@ -400,9 +406,9 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
                   size={21}
                   className="fill-[#949494] text-[#767676] hover:fill-[#767676] transition-colors"
                 />
-                {notifications.length > 0 && (
+                {(totalAlertsCount > 0 || notifications.length > 0) && (
                   <span className="absolute top-0.5 right-0.5 text-[12px] sm:text-[14px] font-bold text-[#C72B62] leading-none tabular-nums">
-                    {unreadNotifCount > 0 ? unreadNotifCount : notifications.length}
+                    {totalAlertsCount > 0 ? totalAlertsCount : notifications.length}
                   </span>
                 )}
               </button>
@@ -441,14 +447,15 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
               </button>
             </div>
 
-            {/* Notifications Dropdown Popover */}
+            {/* Notifications Dropdown Popover with Messages, Bookings & Wishlist Access */}
             {isNotifOpen && (
-              <div className="absolute right-0 top-2 md:top-12 w-80 sm:w-96 bg-white rounded-2xl shadow-[0_14px_40px_rgba(15,23,42,0.16)] border border-slate-200 py-2.5 z-50 text-left">
+              <div className="absolute right-0 top-2 md:top-12 w-80 sm:w-96 bg-white rounded-2xl shadow-[0_14px_40px_rgba(15,23,42,0.18)] border border-slate-200 py-3 z-50 text-left animate-in fade-in zoom-in-95 duration-150">
+                {/* Header */}
                 <div className="px-4 pb-2.5 border-b border-slate-100 flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-bold text-slate-900">Notifications</p>
+                    <p className="text-sm font-bold text-slate-900">Notifications & Activity</p>
                     <p className="text-[11px] text-slate-500">
-                      {unreadNotifCount} unread updates
+                      {totalAlertsCount > 0 ? `${totalAlertsCount} new updates & alerts` : 'All caught up'}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -472,23 +479,144 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
                   </div>
                 </div>
 
-                <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
-                  {notifications.map((n) => (
+                {/* Quick Access: Messages, Bookings, Wishlist */}
+                <div className="p-2 border-b border-slate-100 bg-slate-50/70">
+                  <div className="flex items-center justify-between px-2 pb-1.5">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                      Direct Access
+                    </p>
+                    <span className="text-[10px] text-slate-400">Activity Hub</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {/* Messages */}
                     <button
-                      key={n.id}
                       type="button"
-                      onClick={() => onClickNotification(n)}
-                      className={`w-full px-4 py-3 text-left hover:bg-slate-50 transition-colors cursor-pointer ${
-                        n.unread ? 'bg-[#C72B62]/[0.04]' : ''
-                      }`}
+                      onClick={() => {
+                        onCloseMenus();
+                        onOpenMessages();
+                      }}
+                      className="group flex flex-col items-center justify-center p-2.5 rounded-xl bg-white border border-slate-200/90 hover:border-[#C72B62]/50 hover:bg-[#C72B62]/[0.04] transition-all cursor-pointer text-center relative shadow-2xs hover:shadow-xs"
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-xs font-bold text-slate-900 truncate">{n.title}</p>
-                        <span className="text-[11px] text-slate-400 shrink-0">{n.time}</span>
+                      <div className="relative mb-1">
+                        <MessageSquare size={17} className="text-[#C72B62]" />
+                        {unreadThreadsCount > 0 && (
+                          <span className="absolute -top-1 -right-2 w-2 h-2 bg-[#C72B62] rounded-full animate-pulse" />
+                        )}
                       </div>
-                      <p className="text-xs text-slate-600 mt-0.5 line-clamp-2">{n.body}</p>
+                      <span className="text-[11px] font-semibold text-slate-800 group-hover:text-[#C72B62] truncate w-full">
+                        Messages
+                      </span>
+                      <span className="text-[10px] font-medium text-slate-500">
+                        {unreadThreadsCount > 0 ? `${unreadThreadsCount} new` : `${threadsCount} chats`}
+                      </span>
                     </button>
-                  ))}
+
+                    {/* Bookings */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onCloseMenus();
+                        onOpenTrips();
+                      }}
+                      className="group flex flex-col items-center justify-center p-2.5 rounded-xl bg-white border border-slate-200/90 hover:border-[#C72B62]/50 hover:bg-[#C72B62]/[0.04] transition-all cursor-pointer text-center relative shadow-2xs hover:shadow-xs"
+                    >
+                      <div className="relative mb-1">
+                        <CalendarCheck2 size={17} className="text-[#C72B62]" />
+                      </div>
+                      <span className="text-[11px] font-semibold text-slate-800 group-hover:text-[#C72B62] truncate w-full">
+                        Bookings
+                      </span>
+                      <span className="text-[10px] font-medium text-slate-500">
+                        {bookingsCount} {bookingsCount === 1 ? 'trip' : 'trips'}
+                      </span>
+                    </button>
+
+                    {/* Wishlist */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onCloseMenus();
+                        onOpenWishlist();
+                      }}
+                      className="group flex flex-col items-center justify-center p-2.5 rounded-xl bg-white border border-slate-200/90 hover:border-[#C72B62]/50 hover:bg-[#C72B62]/[0.04] transition-all cursor-pointer text-center relative shadow-2xs hover:shadow-xs"
+                    >
+                      <div className="relative mb-1">
+                        <Heart size={17} className="text-[#C72B62]" />
+                      </div>
+                      <span className="text-[11px] font-semibold text-slate-800 group-hover:text-[#C72B62] truncate w-full">
+                        Wishlist
+                      </span>
+                      <span className="text-[10px] font-medium text-slate-500">
+                        {wishlistCount} saved
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Notifications & Responses Feed */}
+                <div className="px-3 pt-2.5 pb-1 flex items-center justify-between">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                    Recent Alerts & Responses
+                  </p>
+                  <span className="text-[10px] font-semibold bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-md">
+                    {notifications.length}
+                  </span>
+                </div>
+
+                <div className="max-h-72 overflow-y-auto divide-y divide-slate-100">
+                  {notifications.length === 0 ? (
+                    <div className="py-8 px-4 text-center">
+                      <p className="text-xs text-slate-500 font-medium">No recent alerts</p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Messages and booking updates will appear here
+                      </p>
+                    </div>
+                  ) : (
+                    notifications.map((n) => (
+                      <button
+                        key={n.id}
+                        type="button"
+                        onClick={() => onClickNotification(n)}
+                        className={`w-full px-4 py-3 text-left hover:bg-slate-50 transition-colors cursor-pointer flex items-start gap-3 ${
+                          n.unread ? 'bg-[#C72B62]/[0.04]' : ''
+                        }`}
+                      >
+                        <div
+                          className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
+                            n.actionType === 'messages'
+                              ? 'bg-pink-100 text-[#C72B62]'
+                              : n.actionType === 'trips'
+                              ? 'bg-emerald-100 text-emerald-700'
+                              : 'bg-rose-100 text-[#C72B62]'
+                          }`}
+                        >
+                          {n.actionType === 'messages' ? (
+                            <MessageSquare size={13} />
+                          ) : n.actionType === 'trips' ? (
+                            <CalendarCheck2 size={13} />
+                          ) : (
+                            <Heart size={13} />
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-xs font-bold text-slate-900 truncate">
+                              {n.title}
+                            </p>
+                            <span className="text-[10px] text-slate-400 shrink-0">
+                              {n.time}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-600 mt-0.5 line-clamp-2">
+                            {n.body}
+                          </p>
+                        </div>
+                        {n.unread && (
+                          <span className="w-2 h-2 rounded-full bg-[#C72B62] shrink-0 mt-2" />
+                        )}
+                      </button>
+                    ))
+                  )}
                 </div>
               </div>
             )}
@@ -789,16 +917,31 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
               </span>
             </button>
 
-            {/* Solid #C72B62 Search Circle Button */}
+            {/* Solid #C72B62 Search Button: Shows "Search" text when Where, When, or Who is clicked, icon only when resting */}
             <button
               type="button"
               aria-label="Search listings"
               onClick={handleExecuteSearch}
-              className={`rounded-full bg-[#C72B62] hover:bg-[#ad2253] active:scale-95 text-white flex items-center justify-center shrink-0 ml-1 sm:ml-2 shadow-[0_3px_10px_rgba(199,43,98,0.28)] transition-all cursor-pointer ${
-                shouldCollapse ? 'w-8 h-8 sm:w-9 sm:h-9' : 'w-10 h-10 sm:w-12 sm:h-12'
+              className={`rounded-full bg-[#C72B62] hover:bg-[#ad2253] active:scale-95 text-white flex items-center justify-center shrink-0 ml-1 sm:ml-2 shadow-[0_3px_12px_rgba(199,43,98,0.28)] transition-all duration-300 cursor-pointer ${
+                activePopover
+                  ? shouldCollapse
+                    ? 'h-8 sm:h-9 px-3 sm:px-3.5 gap-1.5'
+                    : 'h-10 sm:h-12 px-4 sm:px-5 gap-2'
+                  : shouldCollapse
+                  ? 'w-8 h-8 sm:w-9 sm:h-9'
+                  : 'w-10 h-10 sm:w-12 sm:h-12'
               }`}
             >
-              <Search size={shouldCollapse ? 15 : 18} strokeWidth={2.5} />
+              <Search
+                size={activePopover ? (shouldCollapse ? 14 : 16) : shouldCollapse ? 15 : 18}
+                strokeWidth={2.6}
+                className="shrink-0"
+              />
+              {activePopover && (
+                <span className="text-xs sm:text-sm md:text-[15px] font-bold text-white tracking-tight whitespace-nowrap animate-in fade-in zoom-in-95 duration-200 select-none">
+                  Search
+                </span>
+              )}
             </button>
           </div>
 

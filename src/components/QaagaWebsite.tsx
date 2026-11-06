@@ -757,6 +757,11 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
     sortListings,
   ]);
 
+  const unreadThreadsCount = useMemo(
+    () => threads.filter((t) => t.unread).length,
+    [threads]
+  );
+
   /* ======================================================================= */
   /* INTERACTION HANDLERS                                                    */
   /* ======================================================================= */
@@ -902,6 +907,17 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
       });
     } else {
       setWishlistIds((prev) => [item.id, ...prev.filter((id) => id !== item.id)]);
+      setNotifications((prev) => [
+        {
+          id: `notif-${Date.now()}`,
+          title: `Added to Wishlist · ${item.title}`,
+          body: `Saved ${item.subType} in ${item.area} to your favorites wishlist.`,
+          time: 'Just now',
+          unread: true,
+          actionType: 'wishlist',
+        },
+        ...prev,
+      ]);
       showToast({
         message: `Saved "${item.title}" to Wishlist`,
         undoLabel: 'Undo',
@@ -1010,6 +1026,22 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
       text,
       time: 'Just now',
     }).catch((err) => console.warn('Message sync notice:', err));
+
+    const activeThread = threads.find((t) => t.id === targetId);
+    const hostName = activeThread?.hostName || 'Host';
+    const listingTitle = activeThread?.listingTitle || 'your stay';
+
+    setNotifications((prev) => [
+      {
+        id: `notif-${Date.now()}`,
+        title: `Host reply from ${hostName}`,
+        body: `"${listingTitle}": Dates are available and smart-lock self check-in is ready whenever you arrive.`,
+        time: 'Just now',
+        unread: true,
+        actionType: 'messages',
+      },
+      ...prev,
+    ]);
 
     setThreads((prev) =>
       prev.map((t) =>
@@ -1133,10 +1165,13 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
     setIsNotifOpen(false);
     if (notif.actionType === 'trips') {
       setIsTripsOpen(true);
+      navigateTo('/my-bookings');
     } else if (notif.actionType === 'messages') {
       setIsMessagesOpen(true);
+      navigateTo('/messages');
     } else {
       setExplorerCollection({ mode: 'wishlist', title: 'Wishlist' });
+      navigateTo('/wishlist');
     }
   };
 
@@ -1197,6 +1232,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
         profile={profile}
         bookingsCount={bookings.length}
         threadsCount={threads.length}
+        unreadThreadsCount={unreadThreadsCount}
         wishlistCount={wishlistIds.length}
         currency={currency}
         onChangeCurrency={(c) => {
