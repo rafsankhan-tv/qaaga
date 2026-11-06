@@ -413,13 +413,14 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
                 )}
               </button>
 
-              {/* User Profile Avatar Button (no 3-line menu next to profile) */}
+              {/* User Profile Avatar Button (opens profile interface with qaaga.com logo & left functions) */}
               <button
                 type="button"
-                aria-label={profile.verified ? `${profile.fullName}'s profile menu` : 'Log in or sign up'}
+                aria-label={profile.verified ? `${profile.fullName}'s profile` : 'Log in or sign up'}
                 onClick={() => {
+                  onCloseMenus();
                   if (profile.verified) {
-                    onToggleAccount();
+                    onOpenProfileModal();
                   } else {
                     onOpenAuthModal();
                   }

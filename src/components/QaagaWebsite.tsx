@@ -58,6 +58,7 @@ import {
   TripsModal,
 } from './PlatformModals';
 import { AuthModal } from './AuthModal';
+import { UserProfileModal } from './UserProfileModal';
 import {
   cancelBookingInDatabase,
   deleteListingFromDatabase,
@@ -2136,8 +2137,20 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
       )}
 
       {isProfileOpen && (
-        <ProfileModal
+        <UserProfileModal
+          branding={branding}
           profile={profile}
+          customListings={customListings}
+          currency={currency}
+          onChangeCurrency={(c) => {
+            setCurrency(c);
+            showToast({ message: `Switched currency to ${CURRENCY_CONFIG[c].label}` });
+          }}
+          onOpenHostModal={() => {
+            setIsProfileOpen(false);
+            setIsHostModalOpen(true);
+            navigateTo('/host');
+          }}
           onSave={async (updated) => {
             setProfile(updated);
             try {
