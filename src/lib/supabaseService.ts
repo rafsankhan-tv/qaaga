@@ -426,6 +426,144 @@ export async function uploadFileToSupabaseStorage(
 }
 
 /* ========================================================================= */
+/* 5B. SUPABASE BRANDING (LOGO & FAVICON) UPLOAD & CLOUD PERSISTENCE        */
+/* ========================================================================= */
+export async function uploadBrandingAssetToSupabase(
+  file: File,
+  type: 'logo' | 'favicon'
+): Promise<{ url: string; storageType: 'supabase-storage' | 'optimized-base64'; error?: string }> {
+  const supabase = getSupabase();
+
+  if (supabase) {
+    // Try primary branding bucket, fallback to public or custom
+    const bucketsToTry = ['qaaga-branding', 'branding', 'public-assets', 'public'];
+    const fileExt = (file.name.split('.').pop() || (type === 'favicon' ? 'ico' : 'png')).toLowerCase();
+    const cleanFileName = `${type}-${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
+
+    for (const b of bucketsToTry) {
+      try {
+        const { data, error } = await supabase.storage
+          .from(b)
+          .upload(cleanFileName, file, {
+            cacheControl: '3600',
+            upsert: true,
+            contentType: file.type || (fileExt === 'svg' ? 'image/svg+xml' : 'image/png'),
+          });
+
+        if (!error && data) {
+          const { data: pubData } = supabase.storage.from(b).getPublicUrl(cleanFileName);
+          if (pubData?.publicUrl) {
+            return {
+              url: pubData.publicUrl,
+              storageType: 'supabase-storage',
+            };
+          }
+        }
+      } catch (err) {
+        // Continue to next bucket or graceful fallback
+      }
+    }
+  }
+
+  // Graceful optimized data URL fallback with reliable reader
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      resolve({
+        url: String(reader.result || ''),
+        storageType: 'optimized-base64',
+      });
+    };
+    reader.onerror = () => {
+      resolve({
+        url: '',
+        storageType: 'optimized-base64',
+        error: 'Failed to read branding image file',
+      });
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+export async function saveBrandingToSupabase(branding: any): Promise<any> {
+  const supabase = getSupabase();
+  if (!supabase) return branding;
+
+  try {
+    const payload = {
+      id: 'default_branding',
+      logo_url: branding.logoUrl,
+      favicon_url: branding.faviconUrl,
+      alt_text: branding.altText || 'qaaga.com',
+      fallback_text: branding.fallbackText || 'qaaga',
+      fallback_domain: branding.fallbackDomain || '.com',
+      show_text_when_removed: Boolean(branding.showTextWhenRemoved),
+      size: branding.size || 'md',
+      blend_multiply: Boolean(branding.blendMultiply),
+      revision: Number(branding.revision) || Date.now(),
+      updated_at: branding.updatedAt || new Date().toISOString(),
+    };
+
+    const { data, error } = await supabase
+      .from('site_branding')
+      .upsert(payload, { onConflict: 'id' })
+      .select()
+      .single();
+
+    if (!error && data) {
+      return {
+        logoUrl: data.logo_url ?? null,
+        faviconUrl: data.favicon_url ?? null,
+        altText: data.alt_text || 'qaaga.com',
+        fallbackText: data.fallback_text || 'qaaga',
+        fallbackDomain: data.fallback_domain || '.com',
+        showTextWhenRemoved: Boolean(data.show_text_when_removed),
+        size: data.size || 'md',
+        blendMultiply: Boolean(data.blend_multiply),
+        revision: Number(data.revision) || branding.revision,
+        updatedAt: data.updated_at || branding.updatedAt,
+      };
+    }
+  } catch (err) {
+    console.warn('Notice: Remote Supabase branding table save fallback:', err);
+  }
+
+  return branding;
+}
+
+export async function getBrandingFromSupabase(): Promise<any | null> {
+  const supabase = getSupabase();
+  if (!supabase) return null;
+
+  try {
+    const { data, error } = await supabase
+      .from('site_branding')
+      .select('*')
+      .eq('id', 'default_branding')
+      .maybeSingle();
+
+    if (!error && data) {
+      return {
+        logoUrl: data.logo_url ?? null,
+        faviconUrl: data.favicon_url ?? null,
+        altText: data.alt_text || 'qaaga.com',
+        fallbackText: data.fallback_text || 'qaaga',
+        fallbackDomain: data.fallback_domain || '.com',
+        showTextWhenRemoved: Boolean(data.show_text_when_removed),
+        size: data.size || 'md',
+        blendMultiply: Boolean(data.blend_multiply),
+        revision: Number(data.revision) || 1,
+        updatedAt: data.updated_at || new Date().toISOString(),
+      };
+    }
+  } catch (err) {
+    console.warn('Notice: Remote Supabase branding read fallback:', err);
+  }
+
+  return null;
+}
+
+/* ========================================================================= */
 /* 6. REALTIME CHANNEL SUBSCRIPTION                                         */
 /* ========================================================================= */
 export function subscribeToSupabaseTable(

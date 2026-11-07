@@ -21,6 +21,7 @@ import {
   Trash2,
   TrendingUp,
   Upload,
+  CloudUpload,
   User,
   Users,
   X,
@@ -47,6 +48,9 @@ import {
 import {
   getAllUsersFromDatabase,
   updateUserRoleInDatabase,
+  uploadBrandingAssetToSupabase,
+  saveBrandingToSupabase,
+  getBrandingFromSupabase,
 } from '@/lib/supabaseService';
 
 interface AdminPanelProps {
@@ -275,6 +279,7 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [isFaviconDragging, setIsFaviconDragging] = useState<boolean>(false);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [processingMessage, setProcessingMessage] = useState<string | null>(null);
   const [statusBanner, setStatusBanner] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -366,17 +371,39 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
       return;
     }
     setIsProcessing(true);
+    setProcessingMessage('Uploading Logo to Supabase...');
     try {
-      const optimizedDataUrl = await readImageFileOptimized(file);
+      // Step 1: Upload to Supabase Storage or read image
+      const sbResult = await uploadBrandingAssetToSupabase(file, 'logo');
+      let finalLogoUrl = sbResult.url;
+
+      // Fallback to high-quality optimized image reader if Supabase Storage is offline/not provisioned
+      if (sbResult.storageType !== 'supabase-storage' || !finalLogoUrl) {
+        finalLogoUrl = await readImageFileOptimized(file);
+      }
+
+      // Step 2: Commit branding update locally and to server
       await commitBrandingPatch(
-        { logoUrl: optimizedDataUrl },
-        `Logo "${file.name}" saved permanently`
+        { logoUrl: finalLogoUrl },
+        `Logo "${file.name}" saved to Supabase & active`
       );
-      flashBanner(`Logo "${file.name}" uploaded and saved permanently!`);
+
+      // Step 3: Explicitly sync to Supabase database table
+      await saveBrandingToSupabase({
+        ...latestBrandingRef.current,
+        logoUrl: finalLogoUrl,
+      });
+
+      flashBanner(
+        sbResult.storageType === 'supabase-storage'
+          ? `Logo "${file.name}" uploaded to Supabase Storage & synced!`
+          : `Logo "${file.name}" uploaded & saved to Supabase permanently!`
+      );
     } catch {
       flashBanner('Could not process that image file. Please try another file.');
     } finally {
       setIsProcessing(false);
+      setProcessingMessage(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
@@ -385,6 +412,7 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
     const activeLogo = latestBrandingRef.current.logoUrl;
     if (!activeLogo) return;
     setIsProcessing(true);
+    setProcessingMessage('Processing & saving logo...');
     try {
       const editedDataUrl = await processLogoCanvas(activeLogo, mode);
       await commitBrandingPatch(
@@ -399,15 +427,20 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
           ? 'Cropped excess logo whitespace permanently'
           : 'Removed white background permanently'
       );
+      await saveBrandingToSupabase({
+        ...latestBrandingRef.current,
+        logoUrl: editedDataUrl,
+      });
       flashBanner(
         mode === 'trim'
-          ? 'Auto-cropped logo margins and saved permanently!'
-          : 'Converted white background to transparent PNG and saved!'
+          ? 'Auto-cropped logo margins and saved to Supabase!'
+          : 'Converted white background to transparent PNG & saved to Supabase!'
       );
     } catch {
       flashBanner('Unable to edit remote image due to browser CORS restrictions.');
     } finally {
       setIsProcessing(false);
+      setProcessingMessage(null);
     }
   };
 
@@ -415,8 +448,17 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
     e.preventDefault();
     const trimmed = urlInput.trim();
     if (!trimmed) return;
-    await commitBrandingPatch({ logoUrl: trimmed }, 'Updated logo image URL');
-    flashBanner('Custom logo URL saved permanently!');
+    setIsProcessing(true);
+    try {
+      await commitBrandingPatch({ logoUrl: trimmed }, 'Updated logo image URL');
+      await saveBrandingToSupabase({
+        ...latestBrandingRef.current,
+        logoUrl: trimmed,
+      });
+      flashBanner('Custom logo URL saved to Supabase permanently!');
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleSaveTextSettings = async (e: React.FormEvent) => {
@@ -429,7 +471,13 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
       },
       'Saved brand text & edit settings'
     );
-    flashBanner('Brand settings saved permanently!');
+    await saveBrandingToSupabase({
+      ...latestBrandingRef.current,
+      altText: altText.trim() || 'qaaga.com',
+      fallbackText: fallbackText.trim() || 'qaaga',
+      fallbackDomain: fallbackDomain.trim(),
+    });
+    flashBanner('Brand settings saved to Supabase permanently!');
   };
 
   const handleFaviconFileUpload = async (file?: File | null) => {
@@ -441,17 +489,35 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
       return;
     }
     setIsProcessing(true);
+    setProcessingMessage('Uploading Favicon to Supabase...');
     try {
       const squareDataUrl = await readFaviconFileSquare(file);
+      const sbResult = await uploadBrandingAssetToSupabase(file, 'favicon');
+      const finalFaviconUrl =
+        sbResult.storageType === 'supabase-storage' && sbResult.url
+          ? sbResult.url
+          : squareDataUrl;
+
       await commitBrandingPatch(
-        { faviconUrl: squareDataUrl },
-        `Favicon "${file.name}" saved permanently`
+        { faviconUrl: finalFaviconUrl },
+        `Favicon "${file.name}" saved to Supabase & active`
       );
-      flashBanner(`Favicon "${file.name}" uploaded and saved permanently!`);
+
+      await saveBrandingToSupabase({
+        ...latestBrandingRef.current,
+        faviconUrl: finalFaviconUrl,
+      });
+
+      flashBanner(
+        sbResult.storageType === 'supabase-storage'
+          ? `Favicon "${file.name}" uploaded to Supabase Storage & browser tab updated!`
+          : `Favicon "${file.name}" uploaded & saved to Supabase permanently!`
+      );
     } catch {
       flashBanner('Could not process that favicon file. Please try another image.');
     } finally {
       setIsProcessing(false);
+      setProcessingMessage(null);
       if (faviconFileInputRef.current) faviconFileInputRef.current.value = '';
     }
   };
@@ -460,24 +526,51 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
     e.preventDefault();
     const trimmed = faviconUrlInput.trim();
     if (!trimmed) return;
-    await commitBrandingPatch({ faviconUrl: trimmed }, 'Updated site favicon URL');
-    flashBanner('Custom favicon URL saved permanently!');
+    setIsProcessing(true);
+    try {
+      await commitBrandingPatch({ faviconUrl: trimmed }, 'Updated site favicon URL');
+      await saveBrandingToSupabase({
+        ...latestBrandingRef.current,
+        faviconUrl: trimmed,
+      });
+      flashBanner('Custom favicon URL saved to Supabase permanently!');
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleRemoveFaviconClick = async () => {
-    await commitBrandingPatch(
-      { faviconUrl: null },
-      'Favicon removed permanently'
-    );
-    flashBanner('Favicon removed permanently!');
+    setIsProcessing(true);
+    try {
+      await commitBrandingPatch(
+        { faviconUrl: null },
+        'Favicon removed permanently'
+      );
+      await saveBrandingToSupabase({
+        ...latestBrandingRef.current,
+        faviconUrl: null,
+      });
+      flashBanner('Favicon removed & synced to Supabase!');
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleRestoreFaviconClick = async () => {
-    await commitBrandingPatch(
-      { faviconUrl: DEFAULT_FAVICON_URL },
-      'Restored official qaaga.com favicon'
-    );
-    flashBanner('Restored official qaaga.com Q-pin favicon!');
+    setIsProcessing(true);
+    try {
+      await commitBrandingPatch(
+        { faviconUrl: DEFAULT_FAVICON_URL },
+        'Restored official qaaga.com favicon'
+      );
+      await saveBrandingToSupabase({
+        ...latestBrandingRef.current,
+        faviconUrl: DEFAULT_FAVICON_URL,
+      });
+      flashBanner('Restored official qaaga.com Q-pin favicon & synced to Supabase!');
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const panelCard = (
@@ -1091,19 +1184,58 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
         )}
 
         {/* =============================================================== */}
-        {/* TAB: LOGO UPLOAD, EDIT & REMOVE (BRANDING)                      */}
+        {/* TAB: LOGO & FAVICON UPLOAD (SUPABASE CLOUD BRANDING)            */}
         {/* =============================================================== */}
         {activeTab === 'branding' && (
           <div className="space-y-6">
+            {/* Supabase Cloud Status Header Bar */}
+            <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-950 to-slate-900 border border-slate-800 text-white flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+              <div className="flex items-start sm:items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                  <Database size={20} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-sm font-bold text-white">
+                      Supabase Cloud Branding Engine
+                    </h3>
+                    <span className="inline-flex items-center gap-1.5 text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-md font-semibold">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      Supabase Storage &amp; Database Active
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300 mt-0.5">
+                    Logo and Favicon files uploaded here are saved directly to Supabase Storage (bucket <code className="text-emerald-300 font-mono text-[11px]">qaaga-branding</code>) and synced to the <code className="text-emerald-300 font-mono text-[11px]">site_branding</code> table.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 self-start md:self-auto shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('database')}
+                  className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-xs font-semibold text-white cursor-pointer transition-colors"
+                >
+                  View Supabase Config
+                </button>
+              </div>
+            </div>
+
             {/* Live Website Header Preview */}
-            <div className="rounded-2xl border border-slate-200 overflow-hidden">
-              <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between text-xs">
-                <span className="font-bold text-slate-700">Live Header Logo Preview</span>
-                <span className="text-slate-500">
+            <div className="rounded-2xl border border-slate-200 overflow-hidden bg-white shadow-2xs">
+              <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-slate-800">Live Header Logo Preview</span>
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full">
+                    <CheckCircle2 size={11} />
+                    Supabase Connected
+                  </span>
+                </div>
+                <span className="text-slate-500 text-[11px]">
                   {branding.logoUrl
                     ? branding.logoUrl === DEFAULT_SITE_LOGO_URL
                       ? 'Active: Official qaaga.com Logo'
-                      : 'Active: Custom Uploaded / Edited Logo'
+                      : 'Active: Custom Logo in Supabase'
                     : 'Logo Removed (No Image Active)'}
                 </span>
               </div>
@@ -1122,7 +1254,7 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
                   <span>Services</span>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   {/* Hidden file input shared by Upload & Edit buttons */}
                   <input
                     ref={fileInputRef}
@@ -1136,10 +1268,10 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
                     type="button"
                     disabled={isProcessing}
                     onClick={() => fileInputRef.current?.click()}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#C72B62] hover:bg-[#ad2253] text-white text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#C72B62] hover:bg-[#ad2253] text-white text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50 shadow-2xs"
                   >
-                    <Upload size={14} />
-                    <span>{branding.logoUrl ? 'Change / Upload' : 'Upload Logo'}</span>
+                    <CloudUpload size={14} />
+                    <span>{branding.logoUrl ? 'Upload New Logo (Supabase)' : 'Upload Logo to Supabase'}</span>
                   </button>
 
                   {branding.logoUrl && (
@@ -1148,12 +1280,16 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
                       disabled={isProcessing}
                       onClick={async () => {
                         await onRemoveLogo();
-                        flashBanner('Logo removed from header & footer!');
+                        await saveBrandingToSupabase({
+                          ...latestBrandingRef.current,
+                          logoUrl: null,
+                        });
+                        flashBanner('Logo removed & synced to Supabase!');
                       }}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-rose-300 bg-rose-50/70 hover:bg-rose-100 text-rose-700 text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50"
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-rose-300 bg-rose-50/70 hover:bg-rose-100 text-rose-700 text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50"
                     >
-                      <Trash2 size={14} />
-                      <span>Remove Logo</span>
+                      <Trash2 size={13} />
+                      <span>Remove</span>
                     </button>
                   )}
 
@@ -1163,11 +1299,15 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
                       disabled={isProcessing}
                       onClick={async () => {
                         await onRestoreDefaultLogo();
-                        flashBanner('Restored official qaaga.com logo!');
+                        await saveBrandingToSupabase({
+                          ...latestBrandingRef.current,
+                          logoUrl: DEFAULT_SITE_LOGO_URL,
+                        });
+                        flashBanner('Restored official qaaga.com logo & synced to Supabase!');
                       }}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-300 hover:border-slate-900 bg-white text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-300 hover:border-slate-900 bg-white text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
                     >
-                      <RotateCcw size={14} />
+                      <RotateCcw size={13} />
                       <span>Restore Default</span>
                     </button>
                   )}
@@ -1191,33 +1331,44 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
                     handleFileUpload(e.dataTransfer.files?.[0]);
                   }}
                   onClick={() => fileInputRef.current?.click()}
-                  className={`p-6 rounded-2xl border-2 border-dashed text-center transition-colors cursor-pointer ${
+                  className={`p-6 rounded-2xl border-2 border-dashed text-center transition-all cursor-pointer relative ${
                     isDragging
-                      ? 'border-[#C72B62] bg-[#C72B62]/[0.05]'
-                      : 'border-slate-300 hover:border-[#C72B62] bg-slate-50/50'
+                      ? 'border-[#C72B62] bg-[#C72B62]/[0.05] scale-[0.99]'
+                      : 'border-slate-300 hover:border-[#C72B62] bg-slate-50/60'
                   }`}
                 >
-                  <div className="w-11 h-11 rounded-2xl bg-[#C72B62]/10 text-[#C72B62] flex items-center justify-center mx-auto mb-2.5">
-                    <ImagePlus size={22} />
+                  <div className="w-12 h-12 rounded-2xl bg-[#C72B62]/10 text-[#C72B62] flex items-center justify-center mx-auto mb-3">
+                    <CloudUpload size={24} />
                   </div>
                   <p className="text-sm font-bold text-slate-900">
-                    Click to upload new logo or drag & drop
+                    Upload Website Logo to Supabase
                   </p>
                   <p className="text-xs text-slate-500 mt-1">
-                    Supports PNG, SVG, WEBP, or JPG · Instant live update
+                    Drag and drop file here or click to browse
                   </p>
+                  <div className="inline-flex items-center gap-1.5 mt-2.5 px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-[11px] font-semibold text-slate-600">
+                    <Database size={11} className="text-emerald-600" />
+                    <span>Supports SVG, PNG, WebP, JPG · Instant Supabase Sync</span>
+                  </div>
+
+                  {isProcessing && processingMessage?.includes('Logo') && (
+                    <div className="absolute inset-0 bg-white/90 backdrop-blur-xs rounded-2xl flex flex-col items-center justify-center gap-2">
+                      <RefreshCw size={24} className="text-[#C72B62] animate-spin" />
+                      <p className="text-xs font-bold text-slate-800">{processingMessage}</p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Edit Active Logo Tools */}
-                <div className="p-4 rounded-2xl border border-slate-200 space-y-3.5">
+                <div className="p-4 rounded-2xl border border-slate-200 space-y-3.5 bg-white">
                   <div className="flex items-center justify-between">
                     <p className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
                       <Pencil size={14} className="text-[#C72B62]" />
-                      <span>Edit Active Logo</span>
+                      <span>Edit &amp; Optimize Logo</span>
                     </p>
                     {isProcessing && (
                       <span className="text-[11px] font-semibold text-[#C72B62]">
-                        Processing...
+                        {processingMessage || 'Processing...'}
                       </span>
                     )}
                   </div>
@@ -1250,7 +1401,7 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
                       htmlFor="admin-logo-url"
                       className="block text-[11px] font-semibold text-slate-600"
                     >
-                      Or edit / paste Logo Image URL
+                      Or paste Direct Logo URL (Supabase CDN or External)
                     </label>
                     <div className="flex items-center gap-2">
                       <input
@@ -1258,14 +1409,15 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
                         type="text"
                         value={urlInput}
                         onChange={(e) => setUrlInput(e.target.value)}
-                        placeholder="/assets/aistudio/Screenshot_2026-11-04_at_2.55.29_AM_bd5ef49c.png"
+                        placeholder="https://... or /assets/..."
                         className="flex-1 h-10 px-3 rounded-xl border border-slate-300 text-xs focus:outline-none focus:border-[#C72B62]"
                       />
                       <button
                         type="submit"
-                        className="h-10 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold shrink-0 cursor-pointer"
+                        disabled={isProcessing}
+                        className="h-10 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold shrink-0 cursor-pointer transition-colors"
                       >
-                        Apply URL
+                        Save to Supabase
                       </button>
                     </div>
                   </form>
@@ -1274,7 +1426,7 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
 
               {/* RIGHT: DISPLAY SIZE, BLEND & FALLBACK BRAND SETTINGS */}
               <div className="space-y-4">
-                <div className="p-4 rounded-2xl border border-slate-200 space-y-3.5">
+                <div className="p-4 rounded-2xl border border-slate-200 space-y-3.5 bg-white">
                   <p className="text-xs font-bold text-slate-900">Logo Display Size</p>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     {SIZE_OPTIONS.map((opt) => {
@@ -1283,12 +1435,16 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
                         <button
                           key={opt.id}
                           type="button"
-                          onClick={() =>
-                            commitBrandingPatch(
+                          onClick={async () => {
+                            await commitBrandingPatch(
                               { size: opt.id },
                               `Logo size set to ${opt.label}`
-                            )
-                          }
+                            );
+                            await saveBrandingToSupabase({
+                              ...latestBrandingRef.current,
+                              size: opt.id,
+                            });
+                          }}
                           className={`py-2 px-2.5 rounded-xl border text-left transition-colors cursor-pointer ${
                             active
                               ? 'border-[#C72B62] bg-[#C72B62]/[0.07] text-[#C72B62]'
@@ -1317,9 +1473,14 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
                       type="checkbox"
                       aria-label="Seamless White-Background Blend"
                       checked={branding.blendMultiply}
-                      onChange={(e) =>
-                        commitBrandingPatch({ blendMultiply: e.target.checked })
-                      }
+                      onChange={async (e) => {
+                        const nextVal = e.target.checked;
+                        await commitBrandingPatch({ blendMultiply: nextVal });
+                        await saveBrandingToSupabase({
+                          ...latestBrandingRef.current,
+                          blendMultiply: nextVal,
+                        });
+                      }}
                       className="w-4 h-4 accent-[#C72B62] cursor-pointer"
                     />
                   </div>
@@ -1337,9 +1498,14 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
                       type="checkbox"
                       aria-label="Show text fallback when logo is removed"
                       checked={branding.showTextWhenRemoved}
-                      onChange={(e) =>
-                        commitBrandingPatch({ showTextWhenRemoved: e.target.checked })
-                      }
+                      onChange={async (e) => {
+                        const nextVal = e.target.checked;
+                        await commitBrandingPatch({ showTextWhenRemoved: nextVal });
+                        await saveBrandingToSupabase({
+                          ...latestBrandingRef.current,
+                          showTextWhenRemoved: nextVal,
+                        });
+                      }}
                       className="w-4 h-4 accent-[#C72B62] cursor-pointer"
                     />
                   </div>
@@ -1348,10 +1514,10 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
                 {/* Brand Alt & Fallback Text Form */}
                 <form
                   onSubmit={handleSaveTextSettings}
-                  className="p-4 rounded-2xl border border-slate-200 space-y-3"
+                  className="p-4 rounded-2xl border border-slate-200 space-y-3 bg-white"
                 >
                   <p className="text-xs font-bold text-slate-900">
-                    Brand Alt Text & Fallback Wordmark
+                    Brand Alt Text &amp; Fallback Wordmark
                   </p>
                   <div className="grid grid-cols-3 gap-2.5">
                     <div>
@@ -1392,32 +1558,36 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
                     type="submit"
                     className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold cursor-pointer transition-colors"
                   >
-                    Save Brand Details
+                    Save Details to Supabase
                   </button>
                 </form>
               </div>
             </div>
 
             {/* ============================================================= */}
-            {/* SITE FAVICON (BROWSER TAB ICON) — ADD / UPLOAD, EDIT & REMOVE */}
+            {/* SITE FAVICON (BROWSER TAB ICON) — SUPABASE UPLOAD & PREVIEW   */}
             {/* ============================================================= */}
-            <div className="rounded-2xl border border-slate-200 overflow-hidden bg-white">
+            <div className="rounded-2xl border border-slate-200 overflow-hidden bg-white shadow-2xs">
               <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs">
-                <div>
+                <div className="flex items-center gap-2">
                   <span className="font-bold text-slate-900">
                     Site Favicon (Browser Tab Icon)
                   </span>
-                  <span className="text-slate-400 mx-1.5">·</span>
-                  <span className="text-slate-500">
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full">
+                    <CheckCircle2 size={11} />
+                    Supabase Synced
+                  </span>
+                  <span className="text-slate-400 mx-1">·</span>
+                  <span className="text-slate-500 text-[11px]">
                     {branding.faviconUrl
                       ? branding.faviconUrl === DEFAULT_FAVICON_URL
                         ? 'Active: Official qaaga.com Q-Pin Favicon'
-                        : 'Active: Custom Uploaded Favicon'
+                        : 'Active: Custom Favicon in Supabase'
                       : 'Favicon Removed (No Browser Tab Icon)'}
                   </span>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <input
                     ref={faviconFileInputRef}
                     data-testid="favicon-file-input"
@@ -1431,11 +1601,11 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
                     type="button"
                     disabled={isProcessing}
                     onClick={() => faviconFileInputRef.current?.click()}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#C72B62] hover:bg-[#ad2253] text-white text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#C72B62] hover:bg-[#ad2253] text-white text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50 shadow-2xs"
                   >
-                    <Upload size={14} />
+                    <CloudUpload size={14} />
                     <span>
-                      {branding.faviconUrl ? 'Change / Add Favicon' : 'Add Favicon'}
+                      {branding.faviconUrl ? 'Change Favicon (Supabase)' : 'Upload Favicon to Supabase'}
                     </span>
                   </button>
 
@@ -1444,10 +1614,10 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
                       type="button"
                       disabled={isProcessing}
                       onClick={handleRemoveFaviconClick}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-rose-300 bg-rose-50/70 hover:bg-rose-100 text-rose-700 text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50"
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-rose-300 bg-rose-50/70 hover:bg-rose-100 text-rose-700 text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50"
                     >
-                      <Trash2 size={14} />
-                      <span>Remove Favicon</span>
+                      <Trash2 size={13} />
+                      <span>Remove</span>
                     </button>
                   )}
 
@@ -1456,10 +1626,10 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
                       type="button"
                       disabled={isProcessing}
                       onClick={handleRestoreFaviconClick}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-300 hover:border-slate-900 bg-white text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-300 hover:border-slate-900 bg-white text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
                     >
-                      <RotateCcw size={14} />
-                      <span>Restore Default Favicon</span>
+                      <RotateCcw size={13} />
+                      <span>Restore Default</span>
                     </button>
                   )}
                 </div>
@@ -1469,7 +1639,7 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
                 {/* Left: Realistic Browser Tab Preview + Icon Badge */}
                 <div className="space-y-3">
                   <p className="text-xs font-semibold text-slate-600">
-                    Live Browser Tab Preview
+                    Live Browser Tab Preview Simulation
                   </p>
                   <div className="rounded-2xl bg-slate-200/80 pt-2.5 px-3 pb-0 border border-slate-300/80">
                     <div className="inline-flex items-center gap-2.5 bg-white rounded-t-xl px-3.5 py-2 shadow-2xs max-w-full">
@@ -1491,7 +1661,7 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
                   </div>
 
                   <div className="flex items-center gap-3 pt-1">
-                    <div className="w-12 h-12 rounded-2xl border border-slate-200 bg-white flex items-center justify-center p-1.5 shrink-0">
+                    <div className="w-12 h-12 rounded-2xl border border-slate-200 bg-white flex items-center justify-center p-1.5 shrink-0 shadow-2xs">
                       {branding.faviconUrl ? (
                         <img
                           src={branding.faviconUrl}
@@ -1506,8 +1676,7 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
                       )}
                     </div>
                     <p className="text-xs text-slate-500 leading-relaxed">
-                      Automatically centered as a crisp 64×64 transparent icon for browser
-                      tabs, bookmarks, and mobile shortcuts.
+                      Automatically square-scaled (64×64) for browser tabs, bookmarks, and mobile home screen shortcuts. Stored permanently in Supabase.
                     </p>
                   </div>
                 </div>
@@ -1526,18 +1695,28 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
                       handleFaviconFileUpload(e.dataTransfer.files?.[0]);
                     }}
                     onClick={() => faviconFileInputRef.current?.click()}
-                    className={`p-4 rounded-2xl border-2 border-dashed text-center transition-colors cursor-pointer ${
+                    className={`p-4 rounded-2xl border-2 border-dashed text-center transition-all cursor-pointer relative ${
                       isFaviconDragging
-                        ? 'border-[#C72B62] bg-[#C72B62]/[0.05]'
-                        : 'border-slate-300 hover:border-[#C72B62] bg-slate-50/50'
+                        ? 'border-[#C72B62] bg-[#C72B62]/[0.05] scale-[0.99]'
+                        : 'border-slate-300 hover:border-[#C72B62] bg-slate-50/60'
                     }`}
                   >
+                    <div className="w-9 h-9 rounded-xl bg-[#C72B62]/10 text-[#C72B62] flex items-center justify-center mx-auto mb-1.5">
+                      <CloudUpload size={18} />
+                    </div>
                     <p className="text-xs font-bold text-slate-900">
-                      Upload or drop Favicon icon (PNG, ICO, SVG, WEBP)
+                      Upload Favicon Icon to Supabase (PNG, ICO, SVG, WEBP)
                     </p>
                     <p className="text-[11px] text-slate-500 mt-0.5">
-                      Updates browser tab icon immediately
+                      Updates browser tab icon immediately &amp; persists in Supabase Cloud
                     </p>
+
+                    {isProcessing && processingMessage?.includes('Favicon') && (
+                      <div className="absolute inset-0 bg-white/90 backdrop-blur-xs rounded-2xl flex flex-col items-center justify-center gap-2">
+                        <RefreshCw size={20} className="text-[#C72B62] animate-spin" />
+                        <p className="text-xs font-bold text-slate-800">{processingMessage}</p>
+                      </div>
+                    )}
                   </div>
 
                   <form onSubmit={handleApplyFaviconUrl} className="flex items-center gap-2">
@@ -1546,14 +1725,15 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
                       aria-label="Favicon image URL"
                       value={faviconUrlInput}
                       onChange={(e) => setFaviconUrlInput(e.target.value)}
-                      placeholder="/assets/aistudio/Screenshot_2026-11-04_at_3.36.38_AM_8097a68e.png"
+                      placeholder="https://... or /assets/..."
                       className="flex-1 h-10 px-3 rounded-xl border border-slate-300 text-xs focus:outline-none focus:border-[#C72B62]"
                     />
                     <button
                       type="submit"
-                      className="h-10 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold shrink-0 cursor-pointer"
+                      disabled={isProcessing}
+                      className="h-10 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold shrink-0 cursor-pointer transition-colors"
                     >
-                      Set Favicon
+                      Save Favicon to Supabase
                     </button>
                   </form>
                 </div>

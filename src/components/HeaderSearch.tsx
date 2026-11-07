@@ -164,7 +164,16 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
     return () => document.removeEventListener('mousedown', handleOutside);
   }, [onSetActivePopover, onCloseMenus]);
 
+  const isScrolledRef = useRef(false);
   useEffect(() => {
+    isScrolledRef.current = isScrolled;
+  }, [isScrolled]);
+
+  useEffect(() => {
+    let touchStartY = 0;
+    let isTouching = false;
+    let lastToggleTime = 0;
+
     const getScrollY = () => {
       if (typeof window === 'undefined') return 0;
       return (
@@ -176,28 +185,115 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
       );
     };
 
-    const handleScroll = () => {
-      const currentY = getScrollY();
-      const scrolled = currentY > 20;
-      setIsScrolled((prev) => {
-        if (prev !== scrolled) {
-          if (!scrolled) {
-            setIsManualExpand(false);
-          }
-          return scrolled;
-        }
-        return prev;
-      });
+    // 1. Mobile & Touch Screen: Touch gesture tracking
+    // Responds to the slightest touch ("just ektu touch e buje nibe")
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches && e.touches.length > 0) {
+        touchStartY = e.touches[0].clientY;
+        isTouching = true;
+      }
     };
 
-    handleScroll();
-    window.addEventListener('scroll', handleScroll, { passive: true, capture: true });
-    document.addEventListener('scroll', handleScroll, { passive: true, capture: true });
-    window.addEventListener('touchmove', handleScroll, { passive: true });
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!isTouching || !e.touches || e.touches.length === 0) return;
+      const currentTouchY = e.touches[0].clientY;
+      const diff = currentTouchY - touchStartY;
+      const scrollY = getScrollY();
+      const now = performance.now();
+
+      // At the absolute top, keep expanded
+      if (scrollY <= 2 && diff > 0) {
+        if (isScrolledRef.current) {
+          setIsScrolled(false);
+          setIsManualExpand(false);
+        }
+        return;
+      }
+
+      // Swiping UP ("top er dik" swipe gesture): content moves up, user reading page -> shrink (soto hobe)
+      if (diff < -8) {
+        if (!isScrolledRef.current) {
+          setIsScrolled(true);
+          lastToggleTime = now;
+        }
+        touchStartY = currentTouchY;
+      }
+      // Swiping DOWN ("niser dik" swipe gesture): user pulling down towards top -> expand (boro hobe)
+      else if (diff > 8) {
+        if (isScrolledRef.current) {
+          setIsScrolled(false);
+          setIsManualExpand(false);
+          lastToggleTime = now;
+        }
+        touchStartY = currentTouchY;
+      }
+    };
+
+    const handleTouchEnd = () => {
+      isTouching = false;
+    };
+
+    // 2. Desktop Mouse Wheel / Trackpad
+    const handleWheel = (e: WheelEvent) => {
+      const scrollY = getScrollY();
+      const now = performance.now();
+
+      if (scrollY <= 2 && e.deltaY <= 0) {
+        if (isScrolledRef.current) {
+          setIsScrolled(false);
+          setIsManualExpand(false);
+        }
+        return;
+      }
+
+      // Scrolling down (deltaY > 5) -> shrink (soto hobe)
+      if (e.deltaY > 5) {
+        if (!isScrolledRef.current) {
+          setIsScrolled(true);
+          lastToggleTime = now;
+        }
+      }
+      // Scrolling up (deltaY < -5) -> expand (boro hobe)
+      else if (e.deltaY < -5) {
+        if (isScrolledRef.current) {
+          setIsScrolled(false);
+          setIsManualExpand(false);
+          lastToggleTime = now;
+        }
+      }
+    };
+
+    // 3. Fallback for fast scrollbar dragging
+    const handleScroll = () => {
+      const scrollY = getScrollY();
+      const now = performance.now();
+
+      if (scrollY <= 3) {
+        if (isScrolledRef.current) {
+          setIsScrolled(false);
+          setIsManualExpand(false);
+        }
+        return;
+      }
+
+      // If user jumped far down (> 80px), ensure collapsed
+      if (scrollY > 80 && !isScrolledRef.current && now - lastToggleTime > 300) {
+        setIsScrolled(true);
+      }
+    };
+
+    window.addEventListener('touchstart', handleTouchStart, { passive: true });
+    window.addEventListener('touchmove', handleTouchMove, { passive: true });
+    window.addEventListener('touchend', handleTouchEnd, { passive: true });
+    window.addEventListener('wheel', handleWheel, { passive: true });
+    window.addEventListener('scroll', handleScroll, { passive: true });
+
     return () => {
-      window.removeEventListener('scroll', handleScroll, true);
-      document.removeEventListener('scroll', handleScroll, true);
-      window.removeEventListener('touchmove', handleScroll);
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
+      window.removeEventListener('wheel', handleWheel);
+      window.removeEventListener('scroll', handleScroll);
     };
   }, []);
 
@@ -362,9 +458,16 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
                   {displayWho}
                 </span>
 
-                {/* Solid #C72B62 Search Circle Button */}
-                <span className="w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8 rounded-full bg-[#C72B62] group-hover:bg-[#ad2253] text-white flex items-center justify-center shrink-0 ml-0.5 sm:ml-1 shadow-[0_2px_8px_rgba(199,43,98,0.28)] transition-transform group-hover:scale-105">
-                  <Search size={13} strokeWidth={2.6} />
+                {/* Gradient Search Circle Button matching linear-gradient(90deg, #E91D58, #D90065) */}
+                <span
+                  style={{
+                    background: 'linear-gradient(90deg, #E91D58, #D90065)',
+                    color: '#FFFFFF',
+                    borderRadius: '100px',
+                  }}
+                  className="w-7 h-7 sm:w-8 sm:h-8 text-white flex items-center justify-center shrink-0 ml-0.5 sm:ml-1 shadow-[0_2px_8px_rgba(233,29,88,0.32)] transition-all duration-200 ease-out group-hover:scale-105 group-hover:brightness-90"
+                >
+                  <Search size={14} className="text-white" strokeWidth={2.5} />
                 </span>
               </button>
 
@@ -788,7 +891,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
             className={`w-full rounded-full bg-white border border-slate-300/90 shadow-[0_3px_14px_rgba(15,23,42,0.05)] flex items-center transition-all duration-300 ${
               shouldCollapse
                 ? 'max-w-[680px] sm:max-w-[720px] min-h-[46px] sm:min-h-[50px] pl-3.5 sm:pl-5 pr-1 sm:pr-1.5 py-0.5 sm:py-1'
-                : 'max-w-[780px] min-h-[56px] sm:min-h-[64px] pl-4 sm:pl-7 pr-1.5 sm:pr-2 py-1 sm:py-1.5'
+                : 'max-w-[850px] min-h-[58px] sm:min-h-[66px] pl-4 sm:pl-7 pr-1.5 sm:pr-2.5 py-1.5'
             }`}
           >
             {/* Segment 1: Where */}
@@ -918,28 +1021,33 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
               </span>
             </button>
 
-            {/* Solid #C72B62 Search Button: Shows "Search" text when Where, When, or Who is clicked, icon only when resting */}
+            {/* Custom Linear Gradient Search Button:
+                background: linear-gradient(90deg, #E91D58, #D90065)
+                Normal/resting: shows search icon only
+                When Where, When, or Who is clicked: expands to show "Search" text */}
             <button
               type="button"
-              aria-label="Search listings"
+              aria-label="Search"
               onClick={handleExecuteSearch}
-              className={`rounded-full bg-[#C72B62] hover:bg-[#ad2253] active:scale-95 text-white flex items-center justify-center shrink-0 ml-1 sm:ml-2 shadow-[0_3px_12px_rgba(199,43,98,0.28)] transition-all duration-300 cursor-pointer ${
+              style={{
+                background: 'linear-gradient(90deg, #E91D58, #D90065)',
+                color: '#FFFFFF',
+                borderRadius: '100px',
+              }}
+              className={`inline-flex items-center justify-center border-0 border-none text-white font-[600] tracking-normal cursor-pointer select-none shrink-0 shadow-[0_4px_16px_rgba(233,29,88,0.32)] transition-all duration-300 ease-out hover:brightness-90 hover:scale-[1.02] hover:shadow-[0_6px_22px_rgba(233,29,88,0.42)] active:scale-[0.98] ml-1 sm:ml-2 ${
                 activePopover
-                  ? shouldCollapse
-                    ? 'h-8 sm:h-9 px-3 sm:px-3.5 gap-1.5'
-                    : 'h-10 sm:h-12 px-4 sm:px-5 gap-2'
-                  : shouldCollapse
-                  ? 'w-8 h-8 sm:w-9 sm:h-9'
-                  : 'w-10 h-10 sm:w-12 sm:h-12'
+                  ? 'py-[10px] sm:py-[14px] px-[16px] sm:px-[24px] gap-[8px]'
+                  : 'w-11 h-11 sm:w-12 sm:h-12 p-0'
               }`}
             >
               <Search
-                size={activePopover ? (shouldCollapse ? 14 : 16) : shouldCollapse ? 15 : 18}
-                strokeWidth={2.6}
-                className="shrink-0"
+                size={activePopover ? 20 : 18}
+                className="text-white shrink-0"
+                strokeWidth={2.5}
+                aria-hidden="true"
               />
               {activePopover && (
-                <span className="text-xs sm:text-sm md:text-[15px] font-bold text-white tracking-tight whitespace-nowrap animate-in fade-in zoom-in-95 duration-200 select-none">
+                <span className="leading-none text-white font-[600] text-[15px] sm:text-[16px] whitespace-nowrap animate-in fade-in zoom-in-95 duration-200">
                   Search
                 </span>
               )}
@@ -1198,7 +1306,12 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
                 <button
                   type="button"
                   onClick={handleExecuteSearch}
-                  className="px-5 py-2 rounded-full bg-[#C72B62] hover:bg-[#ad2253] text-white text-xs font-semibold cursor-pointer"
+                  style={{
+                    background: 'linear-gradient(90deg, #E91D58, #D90065)',
+                    color: '#FFFFFF',
+                    borderRadius: '100px',
+                  }}
+                  className="px-5 py-2.5 text-white text-xs font-semibold shadow-md transition-all duration-200 ease-out hover:brightness-90 hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
                 >
                   Apply ({matchingCount} matches)
                 </button>

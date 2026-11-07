@@ -5,6 +5,10 @@ import {
   SiteBranding,
   STORAGE_KEYS,
 } from '@/data/listings';
+import {
+  saveBrandingToSupabase,
+  getBrandingFromSupabase,
+} from './supabaseService';
 
 const IDB_NAME = 'qaaga_permanent_branding_db';
 const IDB_STORE = 'site_branding';
@@ -161,6 +165,9 @@ export async function persistBrandingEverywhere(
     );
   }
 
+  // Also push to Supabase site_branding table
+  saveBrandingToSupabase(stamped).catch(() => {});
+
   try {
     const body = JSON.stringify(stamped);
     const res = await fetch('/api/branding', {
@@ -178,6 +185,7 @@ export async function persistBrandingEverywhere(
       if (data?.branding) {
         writeSyncLocalBranding(data.branding);
         await writeIdbBranding(data.branding);
+        saveBrandingToSupabase(data.branding).catch(() => {});
         return data.branding as SiteBranding;
       }
     }
@@ -208,6 +216,39 @@ export async function reconcileBrandingOnLoad(
       }
     }
   } catch {}
+
+  // Check Supabase site_branding table for cloud source of truth
+  let supabaseLatest: SiteBranding | null = null;
+  try {
+    const sbData = await getBrandingFromSupabase();
+    if (sbData) {
+      supabaseLatest = normalizeClientBranding(sbData);
+    }
+  } catch {}
+
+  // Reconcile highest revision among client, server, and Supabase
+  const candidates = [clientBest, serverLatest, supabaseLatest].filter(
+    (c): c is SiteBranding => c !== null && c !== undefined
+  );
+
+  if (candidates.length > 0) {
+    const winner = candidates.reduce((best, curr) =>
+      curr.revision > best.revision ? curr : best
+    );
+
+    if (winner.revision > 0) {
+      writeSyncLocalBranding(winner);
+      await writeIdbBranding(winner);
+      // Ensure server has latest
+      fetch('/api/branding', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify(winner),
+      }).catch(() => {});
+    }
+    return winner;
+  }
 
   // Case 1: Both client and server exist — pick higher revision, never let default (rev 0) clobber custom (rev > 0)!
   if (clientBest && serverLatest) {
