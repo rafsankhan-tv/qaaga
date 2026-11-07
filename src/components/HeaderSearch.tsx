@@ -165,14 +165,22 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
   }, [onSetActivePopover, onCloseMenus]);
 
   const isScrolledRef = useRef(false);
+  const isManualExpandRef = useRef(false);
+  const lockScrollFeedbackUntilRef = useRef(0);
+  const lastUserIntentRef = useRef<'down' | 'up' | null>(null);
+  const lastScrollYRef = useRef(0);
+
   useEffect(() => {
     isScrolledRef.current = isScrolled;
   }, [isScrolled]);
 
   useEffect(() => {
-    let touchStartY = 0;
+    isManualExpandRef.current = isManualExpand;
+  }, [isManualExpand]);
+
+  useEffect(() => {
+    let lastTouchY = 0;
     let isTouching = false;
-    let lastToggleTime = 0;
 
     const getScrollY = () => {
       if (typeof window === 'undefined') return 0;
@@ -185,11 +193,30 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
       );
     };
 
-    // 1. Mobile & Touch Screen: Touch gesture tracking
-    // Responds to the slightest touch ("just ektu touch e buje nibe")
+    lastScrollYRef.current = getScrollY();
+
+    const setCollapseState = (nextCollapsed: boolean, isUserIntent: boolean = true) => {
+      const now = performance.now();
+      if (isUserIntent) {
+        lastUserIntentRef.current = nextCollapsed ? 'down' : 'up';
+        // Lock synthetic scroll events caused by header height transition from reversing state
+        lockScrollFeedbackUntilRef.current = now + 400;
+      }
+
+      if (isScrolledRef.current !== nextCollapsed) {
+        isScrolledRef.current = nextCollapsed;
+        setIsScrolled(nextCollapsed);
+      }
+
+      if (!nextCollapsed && isManualExpandRef.current) {
+        setIsManualExpand(false);
+      }
+    };
+
+    // 1. Mobile & Touch Screen: Immediate response on first touch movement
     const handleTouchStart = (e: TouchEvent) => {
       if (e.touches && e.touches.length > 0) {
-        touchStartY = e.touches[0].clientY;
+        lastTouchY = e.touches[0].clientY;
         isTouching = true;
       }
     };
@@ -197,35 +224,16 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
     const handleTouchMove = (e: TouchEvent) => {
       if (!isTouching || !e.touches || e.touches.length === 0) return;
       const currentTouchY = e.touches[0].clientY;
-      const diff = currentTouchY - touchStartY;
-      const scrollY = getScrollY();
-      const now = performance.now();
+      const diffY = lastTouchY - currentTouchY; // positive = moving finger UP (scrolling DOWN into page)
+      lastTouchY = currentTouchY;
 
-      // At the absolute top, keep expanded
-      if (scrollY <= 2 && diff > 0) {
-        if (isScrolledRef.current) {
-          setIsScrolled(false);
-          setIsManualExpand(false);
-        }
-        return;
-      }
-
-      // Swiping UP ("top er dik" swipe gesture): content moves up, user reading page -> shrink (soto hobe)
-      if (diff < -8) {
-        if (!isScrolledRef.current) {
-          setIsScrolled(true);
-          lastToggleTime = now;
-        }
-        touchStartY = currentTouchY;
-      }
-      // Swiping DOWN ("niser dik" swipe gesture): user pulling down towards top -> expand (boro hobe)
-      else if (diff > 8) {
-        if (isScrolledRef.current) {
-          setIsScrolled(false);
-          setIsManualExpand(false);
-          lastToggleTime = now;
-        }
-        touchStartY = currentTouchY;
+      // Sensitive 2px threshold: as soon as scroll starts, immediately collapse / expand
+      if (diffY > 2) {
+        // Scrolling DOWN into page: immediately shrink (soto hobe)
+        setCollapseState(true, true);
+      } else if (diffY < -2) {
+        // Scrolling UP towards top: immediately expand (boro hobe)
+        setCollapseState(false, true);
       }
     };
 
@@ -236,49 +244,49 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
     // 2. Desktop Mouse Wheel / Trackpad
     const handleWheel = (e: WheelEvent) => {
       const scrollY = getScrollY();
-      const now = performance.now();
 
-      if (scrollY <= 2 && e.deltaY <= 0) {
-        if (isScrolledRef.current) {
-          setIsScrolled(false);
-          setIsManualExpand(false);
-        }
-        return;
+      // DeltaY > 1: User scrolling DOWN -> immediately shrink (soto hobe)
+      if (e.deltaY > 1) {
+        setCollapseState(true, true);
       }
-
-      // Scrolling down (deltaY > 5) -> shrink (soto hobe)
-      if (e.deltaY > 5) {
-        if (!isScrolledRef.current) {
-          setIsScrolled(true);
-          lastToggleTime = now;
-        }
+      // DeltaY < -1: User scrolling UP -> immediately expand (boro hobe)
+      else if (e.deltaY < -1) {
+        setCollapseState(false, true);
       }
-      // Scrolling up (deltaY < -5) -> expand (boro hobe)
-      else if (e.deltaY < -5) {
-        if (isScrolledRef.current) {
-          setIsScrolled(false);
-          setIsManualExpand(false);
-          lastToggleTime = now;
-        }
+      // At the absolute top of the page without scrolling down: always expand
+      else if (scrollY <= 2 && e.deltaY <= 0) {
+        setCollapseState(false, true);
       }
     };
 
-    // 3. Fallback for fast scrollbar dragging
+    // 3. Fallback for scrollbar dragging, arrow keys, and reaching top
     const handleScroll = () => {
       const scrollY = getScrollY();
       const now = performance.now();
+      const lastY = lastScrollYRef.current;
+      const deltaY = scrollY - lastY;
+      lastScrollYRef.current = scrollY;
 
-      if (scrollY <= 3) {
-        if (isScrolledRef.current) {
-          setIsScrolled(false);
-          setIsManualExpand(false);
+      // Always expand when user reaches the absolute top (scrollY <= 2) unless they just started scrolling down
+      if (scrollY <= 2) {
+        if (now >= lockScrollFeedbackUntilRef.current || lastUserIntentRef.current !== 'down') {
+          if (isScrolledRef.current) {
+            setCollapseState(false, false);
+          }
         }
         return;
       }
 
-      // If user jumped far down (> 80px), ensure collapsed
-      if (scrollY > 80 && !isScrolledRef.current && now - lastToggleTime > 300) {
-        setIsScrolled(true);
+      // During the height transition lock, suppress synthetic scroll jitter caused by layout reflow
+      if (now < lockScrollFeedbackUntilRef.current) {
+        return;
+      }
+
+      // Normal scroll detection:
+      if (deltaY > 3) {
+        setCollapseState(true, true);
+      } else if (deltaY < -3) {
+        setCollapseState(false, true);
       }
     };
 
