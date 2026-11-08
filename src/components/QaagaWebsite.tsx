@@ -2235,6 +2235,10 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
             // ignore
           }
         }}
+        onOpenAdminModal={() => {
+          setIsAdminOpen(true);
+          navigateTo('/admin');
+        }}
         onShowToast={showToast}
       />
     </div>

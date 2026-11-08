@@ -9,6 +9,7 @@ import {
   INITIAL_BOOKINGS,
   QaagaListing,
   BookingRecord,
+  SUPER_ADMIN_EMAIL,
 } from '@/data/listings';
 import { AdminPanelModal } from '@/components/AdminPanelModal';
 import {
@@ -41,7 +42,10 @@ export default function AdminPage() {
       if (stored) {
         const parsed = JSON.parse(stored);
         setUserProfile(parsed);
-        if (parsed.role && parsed.role !== 'admin') {
+        const emailLower = (parsed.email || '').trim().toLowerCase();
+        if (emailLower === SUPER_ADMIN_EMAIL.toLowerCase()) {
+          setIsAuthorized(true);
+        } else if (parsed.role && parsed.role !== 'admin') {
           setIsAuthorized(false);
         }
       }
@@ -95,8 +99,8 @@ export default function AdminPage() {
 
   const handleGrantAdminAccess = () => {
     const updated: GuestProfile = {
-      fullName: userProfile?.fullName || 'Super Admin',
-      email: userProfile?.email || 'admin@qaaga.com',
+      fullName: userProfile?.fullName || 'Rafsan Khan (Super Admin)',
+      email: SUPER_ADMIN_EMAIL,
       city: 'Kuala Lumpur',
       role: 'admin',
       verified: true,

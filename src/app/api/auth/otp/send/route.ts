@@ -44,13 +44,19 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const isAdmin = cleanEmail === 'rafsankhan.tv@gmail.com';
+
     return NextResponse.json({
       success: true,
       email: cleanEmail,
       code, // Available for instant preview/testing assistance
+      isAdmin,
+      role: isAdmin ? 'admin' : 'guest',
       supabaseSent,
       supabaseNotice: supabaseNotice || undefined,
-      message: supabaseSent
+      message: isAdmin
+        ? `Super Admin OTP dispatched to ${cleanEmail}.`
+        : supabaseSent
         ? `Verification code dispatched to ${cleanEmail} via Supabase.`
         : `Verification code generated for ${cleanEmail}.`,
     });

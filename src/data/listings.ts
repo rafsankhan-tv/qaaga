@@ -84,7 +84,21 @@ export interface GuestProfile {
   status?: 'active' | 'suspended';
 }
 
+export const SUPER_ADMIN_EMAIL = 'rafsankhan.tv@gmail.com';
+
 export const INITIAL_USERS: GuestProfile[] = [
+  {
+    fullName: 'Rafsan Khan',
+    email: 'rafsankhan.tv@gmail.com',
+    city: 'Dhaka',
+    verified: true,
+    role: 'admin',
+    phone: '+880 1711-000000',
+    avatarUrl: '',
+    bio: 'Super Admin & Owner of qaaga.com platform.',
+    joinedDate: 'Nov 2026',
+    status: 'active',
+  },
   {
     fullName: 'Amina Rahman',
     email: 'amina@qaaga.com',
@@ -93,7 +107,7 @@ export const INITIAL_USERS: GuestProfile[] = [
     role: 'admin',
     phone: '+60 12-345 6789',
     avatarUrl: '',
-    bio: 'QAAGA superhost & community admin in Kuala Lumpur.',
+    bio: 'QAAGA superhost & community manager in Kuala Lumpur.',
     joinedDate: 'Jan 2026',
     status: 'active',
   },

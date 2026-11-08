@@ -53,12 +53,18 @@ export async function POST(req: NextRequest) {
     // Clear used OTP
     otpStore.delete(cleanEmail);
 
+    const isAdmin = cleanEmail === 'rafsankhan.tv@gmail.com';
+
     return NextResponse.json({
       success: true,
       email: cleanEmail,
       verified: true,
+      isAdmin,
+      role: isAdmin ? 'admin' : 'guest',
       user: authUser,
-      message: 'Email verified successfully',
+      message: isAdmin
+        ? 'Super Admin verified successfully. Admin dashboard access granted.'
+        : 'Email verified successfully',
     });
   } catch (err: any) {
     return NextResponse.json({ error: err?.message || 'Verification error' }, { status: 500 });

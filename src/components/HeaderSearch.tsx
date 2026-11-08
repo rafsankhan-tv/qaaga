@@ -479,14 +479,19 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
                 </span>
               </button>
 
-              {/* Plus Button beside Search Button (desktop/tablet only, hidden on mobile view top) */}
+              {/* Plus Button beside Search Button: linear-gradient(90deg, #E91D58, #D90065), white plus icon */}
               <button
                 type="button"
                 aria-label="Create new listing"
                 onClick={onOpenHostModal}
-                className="hidden md:flex w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8 rounded-full bg-white border border-slate-300 hover:border-[#C72B62]/60 items-center justify-center text-[#C72B62] active:scale-95 transition-all shrink-0 cursor-pointer shadow-xs hover:shadow-sm"
+                style={{
+                  background: 'linear-gradient(90deg, #E91D58, #D90065)',
+                  color: '#FFFFFF',
+                  borderRadius: '100px',
+                }}
+                className="hidden md:flex w-7 h-7 sm:w-8 sm:h-8 border-0 border-none items-center justify-center text-white active:scale-95 transition-all shrink-0 cursor-pointer shadow-[0_2px_8px_rgba(233,29,88,0.32)] hover:brightness-90 hover:scale-105"
               >
-                <Plus size={15} strokeWidth={2.4} />
+                <Plus size={16} strokeWidth={2.6} className="text-white" />
               </button>
             </div>
           </div>
@@ -1062,16 +1067,22 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
             </button>
           </div>
 
-          {/* Adjacent '+' Circle Button with #C72B62 Plus matching screenshot (hidden on mobile view) */}
+          {/* Adjacent '+' Circle Button beside Search Button:
+              background: linear-gradient(90deg, #E91D58, #D90065), border-radius: 100px, white plus icon */}
           <button
             type="button"
             aria-label="Create new listing"
             onClick={onOpenHostModal}
-            className={`hidden md:flex rounded-full bg-white border border-slate-300 hover:border-[#C72B62]/60 items-center justify-center text-[#C72B62] active:scale-95 transition-all shrink-0 cursor-pointer ${
-              shouldCollapse ? 'w-9 h-9 sm:w-10 sm:h-10' : 'w-11 h-11 sm:w-[50px] sm:h-[50px]'
+            style={{
+              background: 'linear-gradient(90deg, #E91D58, #D90065)',
+              color: '#FFFFFF',
+              borderRadius: '100px',
+            }}
+            className={`hidden md:flex border-0 border-none text-white items-center justify-center active:scale-95 transition-all shrink-0 cursor-pointer shadow-[0_4px_16px_rgba(233,29,88,0.32)] hover:brightness-90 hover:scale-105 hover:shadow-[0_6px_22px_rgba(233,29,88,0.42)] ${
+              shouldCollapse ? 'w-9 h-9 sm:w-10 sm:h-10' : 'w-11 h-11 sm:w-12 sm:h-12'
             }`}
           >
-            <Plus size={shouldCollapse ? 20 : 25} strokeWidth={2.4} />
+            <Plus size={shouldCollapse ? 20 : 24} strokeWidth={2.6} className="text-white" />
           </button>
 
           {/* POPOVER 1: WHERE */}

@@ -34,6 +34,7 @@ interface AuthModalProps {
   profile: GuestProfile;
   onUpdateProfile: (updated: GuestProfile) => void;
   onShowToast: (toast: { message: string }) => void;
+  onOpenAdminModal?: () => void;
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({
@@ -43,6 +44,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   profile,
   onUpdateProfile,
   onShowToast,
+  onOpenAdminModal,
 }) => {
   const [emailOrPhone, setEmailOrPhone] = useState('');
   const [step, setStep] = useState<'input' | 'otp' | 'complete_profile' | 'success'>('input');
@@ -271,7 +273,48 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     if (isVerified) {
       setLoading(false);
-      // "otp submit korle complate profile hobe" -> Transition to Complete Profile step!
+
+      const isAdminEmail = cleanTarget.toLowerCase() === 'rafsankhan.tv@gmail.com';
+      if (isAdminEmail) {
+        // Super Admin account detected: immediately configure and launch Admin Dashboard
+        const adminProfile: GuestProfile = {
+          fullName: 'Rafsan Khan',
+          email: 'rafsankhan.tv@gmail.com',
+          city: 'Dhaka',
+          phone: '+880 1711-000000',
+          role: 'admin',
+          bio: 'Super Admin & Owner of qaaga.com platform.',
+          avatarUrl: AVATAR_OPTIONS[0],
+          verified: true,
+          joinedDate: 'Nov 2026',
+          status: 'active',
+        };
+
+        try {
+          await saveUserProfileToDatabase(adminProfile);
+          await fetch('/api/auth/profile', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(adminProfile),
+          });
+        } catch {
+          // graceful fallback
+        }
+
+        onUpdateProfile(adminProfile);
+        setStep('success');
+        onShowToast({
+          message: '👑 Super Admin verification successful! Opening Admin Dashboard...',
+        });
+
+        setTimeout(() => {
+          onClose();
+          onOpenAdminModal?.();
+        }, 1100);
+        return;
+      }
+
+      // Standard user flow: transition to Complete Profile step!
       setStep('complete_profile');
       onShowToast({
         message: 'OTP verified! Now complete your profile details.',
@@ -563,7 +606,23 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
         {/* STEP 2: OTP Verification Screen */}
         {step === 'otp' && (
-          <div className="space-y-5 pt-2 text-center">
+          <div className="space-y-4 pt-2 text-center">
+            {emailOrPhone.trim().toLowerCase() === 'rafsankhan.tv@gmail.com' && (
+              <div className="p-3.5 rounded-2xl bg-gradient-to-r from-amber-50 via-rose-50 to-pink-50 border border-amber-300 text-xs text-left flex items-start gap-3 shadow-2xs">
+                <span className="w-8 h-8 rounded-xl bg-[#C72B62] text-white flex items-center justify-center font-bold text-sm shrink-0 shadow-xs">
+                  👑
+                </span>
+                <div>
+                  <p className="font-bold text-slate-900 text-xs">
+                    Super Admin Account: rafsankhan.tv@gmail.com
+                  </p>
+                  <p className="text-[11px] text-slate-600 mt-0.5 leading-relaxed">
+                    OTP ভেরিফাই হওয়ার সাথে সাথে <strong>Admin Dashboard</strong> সরাসরি খুলে যাবে। অ্যাডমিন প্যানেল থেকে লিস্টিং, ব্র্যান্ডিং, ইউজার এবং সমস্ত ফাংশন Add, Edit ও Remove করতে পারবেন।
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* OTP Hint Card */}
             <button
               type="button"
