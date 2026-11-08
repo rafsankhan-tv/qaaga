@@ -199,8 +199,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
       const now = performance.now();
       if (isUserIntent) {
         lastUserIntentRef.current = nextCollapsed ? 'down' : 'up';
-        // Lock synthetic scroll events caused by header height transition from reversing state
-        lockScrollFeedbackUntilRef.current = now + 400;
+        lockScrollFeedbackUntilRef.current = now + 350;
       }
 
       if (isScrolledRef.current !== nextCollapsed) {
@@ -213,7 +212,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
       }
     };
 
-    // 1. Mobile & Touch Screen: Immediate response on first touch movement
+    // 1. Mobile & Touch: Collapse as soon as downward swipe starts; only expand when reaching top
     const handleTouchStart = (e: TouchEvent) => {
       if (e.touches && e.touches.length > 0) {
         lastTouchY = e.touches[0].clientY;
@@ -224,16 +223,19 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
     const handleTouchMove = (e: TouchEvent) => {
       if (!isTouching || !e.touches || e.touches.length === 0) return;
       const currentTouchY = e.touches[0].clientY;
-      const diffY = lastTouchY - currentTouchY; // positive = moving finger UP (scrolling DOWN into page)
+      const diffY = lastTouchY - currentTouchY; // positive = finger moved UP -> scrolling DOWN into page
       lastTouchY = currentTouchY;
 
-      // Sensitive 2px threshold: as soon as scroll starts, immediately collapse / expand
+      const scrollY = getScrollY();
+
       if (diffY > 2) {
-        // Scrolling DOWN into page: immediately shrink (soto hobe)
+        // Scrolling DOWN into page: immediately shrink
         setCollapseState(true, true);
       } else if (diffY < -2) {
-        // Scrolling UP towards top: immediately expand (boro hobe)
-        setCollapseState(false, true);
+        // Scrolling UP: ONLY expand when reaching the very top where nothing is scrolled
+        if (scrollY <= 5) {
+          setCollapseState(false, true);
+        }
       }
     };
 
@@ -241,52 +243,43 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
       isTouching = false;
     };
 
-    // 2. Desktop Mouse Wheel / Trackpad
+    // 2. Desktop Mouse Wheel / Trackpad:
+    // Shrink immediately on scroll down; only expand when reaching the very top
     const handleWheel = (e: WheelEvent) => {
       const scrollY = getScrollY();
 
-      // DeltaY > 1: User scrolling DOWN -> immediately shrink (soto hobe)
       if (e.deltaY > 1) {
+        // Scrolling DOWN: immediately shrink
         setCollapseState(true, true);
-      }
-      // DeltaY < -1: User scrolling UP -> immediately expand (boro hobe)
-      else if (e.deltaY < -1) {
-        setCollapseState(false, true);
-      }
-      // At the absolute top of the page without scrolling down: always expand
-      else if (scrollY <= 2 && e.deltaY <= 0) {
+      } else if (e.deltaY < -1) {
+        // Scrolling UP: ONLY expand when reaching the very top
+        if (scrollY <= 5) {
+          setCollapseState(false, true);
+        }
+      } else if (scrollY <= 5 && e.deltaY <= 0) {
         setCollapseState(false, true);
       }
     };
 
-    // 3. Fallback for scrollbar dragging, arrow keys, and reaching top
+    // 3. Fallback for native scroll events (scrollbar dragging, momentum scroll, anchor jumps)
     const handleScroll = () => {
       const scrollY = getScrollY();
       const now = performance.now();
-      const lastY = lastScrollYRef.current;
-      const deltaY = scrollY - lastY;
       lastScrollYRef.current = scrollY;
 
-      // Always expand when user reaches the absolute top (scrollY <= 2) unless they just started scrolling down
-      if (scrollY <= 2) {
-        if (now >= lockScrollFeedbackUntilRef.current || lastUserIntentRef.current !== 'down') {
-          if (isScrolledRef.current) {
-            setCollapseState(false, false);
+      // When reaching the very top (scrollY <= 5) and nothing is scrolled: expand smoothly
+      if (scrollY <= 5) {
+        setCollapseState(false, false);
+        return;
+      }
+
+      // If user has scrolled down into the page (> 12px): collapse smoothly
+      if (scrollY > 12) {
+        if (now >= lockScrollFeedbackUntilRef.current) {
+          if (!isScrolledRef.current && !isManualExpandRef.current) {
+            setCollapseState(true, false);
           }
         }
-        return;
-      }
-
-      // During the height transition lock, suppress synthetic scroll jitter caused by layout reflow
-      if (now < lockScrollFeedbackUntilRef.current) {
-        return;
-      }
-
-      // Normal scroll detection:
-      if (deltaY > 3) {
-        setCollapseState(true, true);
-      } else if (deltaY < -3) {
-        setCollapseState(false, true);
       }
     };
 
@@ -334,14 +327,14 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
 
   return (
     <div
-      className={`sticky top-0 z-50 bg-white/98 backdrop-blur-md w-full transition-all duration-300 ${
+      className={`sticky top-0 z-50 bg-white/98 backdrop-blur-md w-full transition-all duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] ${
         shouldCollapse
           ? 'border-b border-slate-200/90 shadow-[0_4px_20px_rgba(15,23,42,0.06)]'
           : 'border-b border-slate-200/90'
       }`}
     >
       <div
-        className={`w-full px-3 sm:px-6 lg:px-10 xl:px-12 2xl:px-16 transition-all duration-300 ease-in-out ${
+        className={`w-full px-3 sm:px-6 lg:px-10 xl:px-12 2xl:px-16 transition-all duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] ${
           shouldCollapse
             ? 'py-2 sm:py-2.5 space-y-0'
             : 'pt-3 sm:pt-5 pb-3 sm:pb-6 space-y-3 sm:space-y-5'
@@ -351,7 +344,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
         {/* ROW 1: qaaga.com — Centered Tabs / Compact Pill — Host, Bell, User */}
         {/* ================================================================= */}
         <header
-          className={`w-full transition-all duration-300 ${
+          className={`w-full transition-all duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] ${
             shouldCollapse
               ? 'flex items-center justify-between gap-1.5 sm:gap-3 md:gap-4'
               : 'flex flex-col md:grid md:grid-cols-[1fr_auto_1fr] md:items-center gap-2.5 md:gap-4'
@@ -363,7 +356,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
               type="button"
               aria-label="qaaga.com home"
               onClick={onResetHome}
-              className={`inline-flex items-center leading-none cursor-pointer shrink-0 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C72B62] rounded-xl transition-transform duration-300 origin-left ${
+              className={`inline-flex items-center leading-none cursor-pointer shrink-0 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C72B62] rounded-xl transition-transform duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] origin-left ${
                 shouldCollapse ? 'scale-[0.82] sm:scale-[0.92]' : 'scale-100'
               }`}
             >
@@ -383,7 +376,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
             {/* Category Tabs: Shown at top */}
             <nav
               aria-label="Listing categories"
-              className={`flex items-center justify-between min-[410px]:justify-center gap-2 min-[410px]:gap-4 sm:gap-7 lg:gap-10 overflow-x-auto scrollbar-none px-0.5 transition-all duration-300 ease-in-out ${
+              className={`flex items-center justify-between min-[410px]:justify-center gap-2 min-[410px]:gap-4 sm:gap-7 lg:gap-10 overflow-x-auto scrollbar-none px-0.5 transition-all duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] ${
                 shouldCollapse
                   ? 'opacity-0 scale-95 pointer-events-none -translate-y-2 absolute invisible'
                   : 'opacity-100 scale-100 pointer-events-auto translate-y-0 visible'
@@ -425,7 +418,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
 
             {/* Compact Search Pill + Adjacent '+' Button: Shown on scroll */}
             <div
-              className={`flex items-center gap-1.5 sm:gap-2.5 transition-all duration-300 ease-in-out max-w-full ${
+              className={`flex items-center gap-1.5 sm:gap-2.5 transition-all duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] max-w-full ${
                 shouldCollapse
                   ? 'opacity-100 scale-100 pointer-events-auto translate-y-0 visible'
                   : 'opacity-0 scale-95 pointer-events-none translate-y-2 absolute invisible'
@@ -890,14 +883,14 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
         {/* ================================================================= */}
         <div
           ref={searchRef}
-          className={`relative flex items-center justify-center gap-2 sm:gap-3.5 transition-all duration-300 ease-in-out ${
+          className={`relative flex items-center justify-center gap-2 sm:gap-3.5 transition-all duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] ${
             shouldCollapse
               ? 'max-h-0 opacity-0 -translate-y-4 scale-95 pointer-events-none overflow-hidden my-0 py-0'
               : 'max-h-[160px] opacity-100 translate-y-0 scale-100 pointer-events-auto mt-3 sm:mt-4'
           }`}
         >
           <div
-            className={`w-full rounded-full bg-white border border-slate-300/90 shadow-[0_3px_14px_rgba(15,23,42,0.05)] flex items-center transition-all duration-300 ${
+            className={`w-full rounded-full bg-white border border-slate-300/90 shadow-[0_3px_14px_rgba(15,23,42,0.05)] flex items-center transition-all duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] ${
               shouldCollapse
                 ? 'max-w-[680px] sm:max-w-[720px] min-h-[46px] sm:min-h-[50px] pl-3.5 sm:pl-5 pr-1 sm:pr-1.5 py-0.5 sm:py-1'
                 : 'max-w-[850px] min-h-[58px] sm:min-h-[66px] pl-4 sm:pl-7 pr-1.5 sm:pr-2.5 py-1.5'
