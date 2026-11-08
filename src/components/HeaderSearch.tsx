@@ -29,6 +29,10 @@ import {
   SiteBranding,
 } from '@/data/listings';
 import { BrandLogo } from './BrandLogo';
+import { SearchLocationPanel } from './SearchLocationPanel';
+import { SearchCalendar } from './SearchCalendar';
+import { SearchGuestSelector } from './SearchGuestSelector';
+import { MobileSearchModal } from './MobileSearchModal';
 
 interface HeaderSearchProps {
   branding: SiteBranding;
@@ -46,6 +50,11 @@ interface HeaderSearchProps {
   customCheckInDay: number | null;
   customCheckOutDay: number | null;
   onSelectCalendarDay: (day: number) => void;
+
+  checkInIso?: string | null;
+  checkOutIso?: string | null;
+  onSelectDateRange?: (checkIn: string | null, checkOut: string | null, display: string, nights: number) => void;
+  onClearDates?: () => void;
 
   adults: number;
   childrenCount: number;
@@ -103,6 +112,10 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
   customCheckInDay,
   customCheckOutDay,
   onSelectCalendarDay,
+  checkInIso,
+  checkOutIso,
+  onSelectDateRange,
+  onClearDates,
   adults,
   childrenCount,
   infants,
@@ -145,7 +158,33 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
 
   const [isScrolled, setIsScrolled] = useState(false);
   const [isManualExpand, setIsManualExpand] = useState(false);
+  const [isMobileModalOpen, setIsMobileModalOpen] = useState(false);
+  const [mobileInitialTab, setMobileInitialTab] = useState<'where' | 'when' | 'who'>('where');
+
   const shouldCollapse = isScrolled && !isManualExpand;
+
+  const handleOpenSearchModal = (tab: 'where' | 'when' | 'who' = 'where') => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      setMobileInitialTab(tab);
+      setIsMobileModalOpen(true);
+    } else {
+      setIsManualExpand(true);
+      onSetActivePopover(tab);
+    }
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onSetActivePopover(null);
+        setIsManualExpand(false);
+        setIsMobileModalOpen(false);
+        onCloseMenus();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onSetActivePopover, onCloseMenus]);
 
   useEffect(() => {
     const handleOutside = (e: MouseEvent) => {
@@ -166,9 +205,6 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
 
   const isScrolledRef = useRef(false);
   const isManualExpandRef = useRef(false);
-  const lockScrollFeedbackUntilRef = useRef(0);
-  const lastUserIntentRef = useRef<'down' | 'up' | null>(null);
-  const lastScrollYRef = useRef(0);
 
   useEffect(() => {
     isScrolledRef.current = isScrolled;
@@ -179,9 +215,6 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
   }, [isManualExpand]);
 
   useEffect(() => {
-    let lastTouchY = 0;
-    let isTouching = false;
-
     const getScrollY = () => {
       if (typeof window === 'undefined') return 0;
       return (
@@ -193,107 +226,50 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
       );
     };
 
-    lastScrollYRef.current = getScrollY();
+    // Airbnb-style threshold:
+    // Scroll > 50px collapses header smoothly into compact mode.
+    // Scrolling back towards top (<= 40px) expands header smoothly back to full size.
+    // 10px hysteresis band prevents any border-flicker or layout oscillation.
+    const SCROLL_THRESHOLD = 50;
+    const HYSTERESIS = 10;
 
-    const setCollapseState = (nextCollapsed: boolean, isUserIntent: boolean = true) => {
-      const now = performance.now();
-      if (isUserIntent) {
-        lastUserIntentRef.current = nextCollapsed ? 'down' : 'up';
-        lockScrollFeedbackUntilRef.current = now + 350;
-      }
+    let ticking = false;
 
-      if (isScrolledRef.current !== nextCollapsed) {
-        isScrolledRef.current = nextCollapsed;
-        setIsScrolled(nextCollapsed);
-      }
-
-      if (!nextCollapsed && isManualExpandRef.current) {
-        setIsManualExpand(false);
-      }
-    };
-
-    // 1. Mobile & Touch: Collapse as soon as downward swipe starts; only expand when reaching top
-    const handleTouchStart = (e: TouchEvent) => {
-      if (e.touches && e.touches.length > 0) {
-        lastTouchY = e.touches[0].clientY;
-        isTouching = true;
-      }
-    };
-
-    const handleTouchMove = (e: TouchEvent) => {
-      if (!isTouching || !e.touches || e.touches.length === 0) return;
-      const currentTouchY = e.touches[0].clientY;
-      const diffY = lastTouchY - currentTouchY; // positive = finger moved UP -> scrolling DOWN into page
-      lastTouchY = currentTouchY;
-
+    const updateScrollState = () => {
       const scrollY = getScrollY();
 
-      if (diffY > 2) {
-        // Scrolling DOWN into page: immediately shrink
-        setCollapseState(true, true);
-      } else if (diffY < -2) {
-        // Scrolling UP: ONLY expand when reaching the very top where nothing is scrolled
-        if (scrollY <= 5) {
-          setCollapseState(false, true);
+      if (scrollY > SCROLL_THRESHOLD) {
+        if (!isScrolledRef.current) {
+          isScrolledRef.current = true;
+          setIsScrolled(true);
         }
-      }
-    };
-
-    const handleTouchEnd = () => {
-      isTouching = false;
-    };
-
-    // 2. Desktop Mouse Wheel / Trackpad:
-    // Shrink immediately on scroll down; only expand when reaching the very top
-    const handleWheel = (e: WheelEvent) => {
-      const scrollY = getScrollY();
-
-      if (e.deltaY > 1) {
-        // Scrolling DOWN: immediately shrink
-        setCollapseState(true, true);
-      } else if (e.deltaY < -1) {
-        // Scrolling UP: ONLY expand when reaching the very top
-        if (scrollY <= 5) {
-          setCollapseState(false, true);
-        }
-      } else if (scrollY <= 5 && e.deltaY <= 0) {
-        setCollapseState(false, true);
-      }
-    };
-
-    // 3. Fallback for native scroll events (scrollbar dragging, momentum scroll, anchor jumps)
-    const handleScroll = () => {
-      const scrollY = getScrollY();
-      const now = performance.now();
-      lastScrollYRef.current = scrollY;
-
-      // When reaching the very top (scrollY <= 5) and nothing is scrolled: expand smoothly
-      if (scrollY <= 5) {
-        setCollapseState(false, false);
-        return;
-      }
-
-      // If user has scrolled down into the page (> 12px): collapse smoothly
-      if (scrollY > 12) {
-        if (now >= lockScrollFeedbackUntilRef.current) {
-          if (!isScrolledRef.current && !isManualExpandRef.current) {
-            setCollapseState(true, false);
+      } else if (scrollY <= SCROLL_THRESHOLD - HYSTERESIS) {
+        if (isScrolledRef.current) {
+          isScrolledRef.current = false;
+          setIsScrolled(false);
+          if (isManualExpandRef.current) {
+            setIsManualExpand(false);
           }
         }
       }
     };
 
-    window.addEventListener('touchstart', handleTouchStart, { passive: true });
-    window.addEventListener('touchmove', handleTouchMove, { passive: true });
-    window.addEventListener('touchend', handleTouchEnd, { passive: true });
-    window.addEventListener('wheel', handleWheel, { passive: true });
+    const handleScroll = () => {
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          updateScrollState();
+          ticking = false;
+        });
+        ticking = true;
+      }
+    };
+
+    // Initialize on mount
+    updateScrollState();
+
     window.addEventListener('scroll', handleScroll, { passive: true });
 
     return () => {
-      window.removeEventListener('touchstart', handleTouchStart);
-      window.removeEventListener('touchmove', handleTouchMove);
-      window.removeEventListener('touchend', handleTouchEnd);
-      window.removeEventListener('wheel', handleWheel);
       window.removeEventListener('scroll', handleScroll);
     };
   }, []);
@@ -330,7 +306,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
       className={`sticky top-0 z-50 bg-white/98 backdrop-blur-md w-full transition-all duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] ${
         shouldCollapse
           ? 'border-b border-slate-200/90 shadow-[0_4px_20px_rgba(15,23,42,0.06)]'
-          : 'border-b border-slate-200/90'
+          : 'border-b border-slate-200/60 shadow-none'
       }`}
     >
       <div
@@ -428,10 +404,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
                 type="button"
                 data-testid="compact-search-pill"
                 aria-label="Search destination, dates, guests"
-                onClick={() => {
-                  setIsManualExpand(true);
-                  onSetActivePopover('where');
-                }}
+                onClick={() => handleOpenSearchModal('where')}
                 className="inline-flex items-center gap-1.5 sm:gap-2.5 bg-white border border-slate-300/90 hover:border-slate-400 rounded-full pl-2.5 sm:pl-3.5 pr-1 sm:pr-1.5 py-1 sm:py-1.5 shadow-[0_2px_8px_rgba(15,23,42,0.08)] hover:shadow-[0_4px_14px_rgba(15,23,42,0.14)] transition-all cursor-pointer group min-w-0"
               >
                 {/* Stay / Category Logo beside Where */}
@@ -898,12 +871,11 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
           >
             {/* Segment 1: Where */}
             <div
-              onClick={() => {
-                onSetActivePopover('where');
-                whereInputRef.current?.focus();
-              }}
-              className={`flex-1 min-w-0 py-0.5 sm:py-1 pr-1.5 sm:pr-2 rounded-full flex items-center justify-between gap-1 cursor-pointer transition-colors ${
-                activePopover === 'where' ? 'bg-slate-50 px-3 -ml-2' : ''
+              onClick={() => handleOpenSearchModal('where')}
+              className={`flex-1 min-w-0 py-1.5 sm:py-2 px-3 sm:px-4 rounded-full flex items-center justify-between gap-1 cursor-pointer transition-all ${
+                activePopover === 'where'
+                  ? 'bg-white shadow-[0_4px_16px_rgba(0,0,0,0.12)] border border-slate-200/90'
+                  : 'hover:bg-slate-100/60'
               }`}
             >
               <div className="min-w-0 flex-1">
@@ -920,7 +892,11 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
                   id="qaaga-where-input"
                   type="text"
                   value={whereQuery}
-                  onFocus={() => onSetActivePopover('where')}
+                  onFocus={() => {
+                    if (typeof window !== 'undefined' && window.innerWidth >= 768) {
+                      onSetActivePopover('where');
+                    }
+                  }}
                   onChange={(e) => onWhereChange(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
@@ -928,7 +904,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
                       handleExecuteSearch();
                     }
                   }}
-                  placeholder="Search destination"
+                  placeholder="Where are you going?"
                   className={`w-full bg-transparent text-slate-800 placeholder:text-slate-400 focus:outline-none truncate transition-all ${
                     shouldCollapse
                       ? 'text-[12px] sm:text-[13px] mt-0'
@@ -944,27 +920,29 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
                     e.stopPropagation();
                     onWhereChange('');
                   }}
-                  className="w-5 h-5 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-700 flex items-center justify-center shrink-0 cursor-pointer"
+                  className="w-5 h-5 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-700 flex items-center justify-center shrink-0 cursor-pointer transition-colors"
                 >
                   <X size={11} />
                 </button>
               )}
             </div>
 
-            {/* Crisp Dark Vertical Divider */}
+            {/* Crisp Divider 1: Fades out when adjacent segment is active */}
             <div
-              className={`w-[1.5px] bg-slate-800/80 mx-1.5 sm:mx-3 shrink-0 transition-all ${
-                shouldCollapse ? 'h-4 sm:h-5' : 'h-6 sm:h-7'
-              }`}
+              className={`w-[1px] bg-slate-300 mx-1 shrink-0 transition-opacity ${
+                activePopover === 'where' || activePopover === 'when' ? 'opacity-0' : 'opacity-100'
+              } ${shouldCollapse ? 'h-4 sm:h-5' : 'h-6 sm:h-7'}`}
               aria-hidden="true"
             />
 
             {/* Segment 2: When */}
             <button
               type="button"
-              onClick={() => onSetActivePopover(activePopover === 'when' ? null : 'when')}
-              className={`w-[26%] sm:w-[30%] min-w-0 text-left py-0.5 sm:py-1 px-1.5 sm:px-2 rounded-full hover:bg-slate-50/80 transition-colors cursor-pointer ${
-                activePopover === 'when' ? 'bg-slate-100/80' : ''
+              onClick={() => handleOpenSearchModal('when')}
+              className={`w-[28%] sm:w-[32%] min-w-0 text-left py-1.5 sm:py-2 px-3 sm:px-4 rounded-full transition-all cursor-pointer ${
+                activePopover === 'when'
+                  ? 'bg-white shadow-[0_4px_16px_rgba(0,0,0,0.12)] border border-slate-200/90'
+                  : 'hover:bg-slate-100/60'
               }`}
             >
               <span
@@ -987,20 +965,22 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
               </span>
             </button>
 
-            {/* Crisp Dark Vertical Divider */}
+            {/* Crisp Divider 2: Fades out when adjacent segment is active */}
             <div
-              className={`w-[1.5px] bg-slate-800/80 mx-1.5 sm:mx-3 shrink-0 transition-all ${
-                shouldCollapse ? 'h-4 sm:h-5' : 'h-6 sm:h-7'
-              }`}
+              className={`w-[1px] bg-slate-300 mx-1 shrink-0 transition-opacity ${
+                activePopover === 'when' || activePopover === 'who' ? 'opacity-0' : 'opacity-100'
+              } ${shouldCollapse ? 'h-4 sm:h-5' : 'h-6 sm:h-7'}`}
               aria-hidden="true"
             />
 
             {/* Segment 3: Who */}
             <button
               type="button"
-              onClick={() => onSetActivePopover(activePopover === 'who' ? null : 'who')}
-              className={`w-[23%] sm:w-[25%] min-w-0 text-left py-0.5 sm:py-1 px-1.5 sm:px-2 rounded-full hover:bg-slate-50/80 transition-colors cursor-pointer ${
-                activePopover === 'who' ? 'bg-slate-100/80' : ''
+              onClick={() => handleOpenSearchModal('who')}
+              className={`w-[24%] sm:w-[26%] min-w-0 text-left py-1.5 sm:py-2 px-3 sm:px-4 rounded-full transition-all cursor-pointer ${
+                activePopover === 'who'
+                  ? 'bg-white shadow-[0_4px_16px_rgba(0,0,0,0.12)] border border-slate-200/90'
+                  : 'hover:bg-slate-100/60'
               }`}
             >
               <span
@@ -1069,252 +1049,121 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
           {/* POPOVER 1: WHERE */}
           {activePopover === 'where' && (
             <div
-              className={`absolute left-0 right-0 mx-auto md:left-1/2 md:-translate-x-1/2 md:mx-0 w-full max-w-[440px] bg-white rounded-3xl shadow-[0_16px_48px_rgba(15,23,42,0.16)] border border-slate-200 p-4 z-40 text-left transition-all ${
+              className={`hidden md:block absolute left-0 right-0 mx-auto md:left-1/4 md:-translate-x-1/4 md:mx-0 w-full max-w-[480px] bg-white rounded-3xl shadow-[0_16px_48px_rgba(15,23,42,0.16)] border border-slate-200 p-5 z-40 text-left transition-all ${
                 shouldCollapse ? 'top-[50px] sm:top-[56px]' : 'top-[66px] sm:top-[74px]'
               }`}
             >
-              <div className="flex items-center justify-between px-2 pb-2">
-                <span className="text-xs font-bold text-slate-500">
-                  Suggested destinations in Kuala Lumpur
-                </span>
-                {whereQuery && (
-                  <button
-                    type="button"
-                    onClick={() => onWhereChange('')}
-                    className="text-xs font-semibold text-[#C72B62] hover:underline cursor-pointer"
-                  >
-                    Clear
-                  </button>
-                )}
-              </div>
-              <div className="space-y-1">
-                {KL_DESTINATIONS.map((dest) => (
-                  <button
-                    key={dest.name}
-                    type="button"
-                    onClick={() => {
-                      const chosen = dest.name === 'All Kuala Lumpur' ? '' : dest.name;
-                      onWhereChange(chosen);
-                      onSetActivePopover('when');
-                    }}
-                    className="w-full flex items-center gap-3.5 px-3 py-2.5 rounded-2xl hover:bg-slate-50 transition-colors text-left cursor-pointer"
-                  >
-                    <span className="w-10 h-10 rounded-xl bg-[#C72B62]/10 flex items-center justify-center shrink-0">
-                      <MapPin size={18} className="text-[#C72B62]" />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-slate-900">{dest.name}</p>
-                      <p className="text-xs text-slate-500 truncate">{dest.subtitle}</p>
-                    </div>
-                  </button>
-                ))}
-              </div>
+              <SearchLocationPanel
+                whereQuery={whereQuery}
+                onSelectLocation={(chosen) => {
+                  onWhereChange(chosen);
+                  onSetActivePopover('when');
+                }}
+                onClear={() => onWhereChange('')}
+                onClose={() => onSetActivePopover(null)}
+              />
             </div>
           )}
 
-          {/* POPOVER 2: WHEN */}
+          {/* POPOVER 2: WHEN (Two-month calendar on Desktop) */}
           {activePopover === 'when' && (
             <div
-              className={`absolute left-0 right-0 mx-auto md:left-1/2 md:-translate-x-1/2 md:mx-0 w-full max-w-[500px] bg-white rounded-3xl shadow-[0_16px_48px_rgba(15,23,42,0.16)] border border-slate-200 p-5 z-40 text-left space-y-4 transition-all ${
+              className={`hidden md:block absolute left-0 right-0 mx-auto md:left-1/2 md:-translate-x-1/2 md:mx-0 w-full max-w-[760px] bg-white rounded-3xl shadow-[0_16px_48px_rgba(15,23,42,0.16)] border border-slate-200 p-6 z-40 text-left transition-all ${
                 shouldCollapse ? 'top-[50px] sm:top-[56px]' : 'top-[66px] sm:top-[74px]'
               }`}
             >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    aria-label="Previous month"
-                    onClick={onToggleCalendarMonth}
-                    className="w-7 h-7 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-600 cursor-pointer"
-                  >
-                    <ChevronLeft size={16} />
-                  </button>
-                  <h4 className="text-sm font-bold text-slate-900">
-                    {calendarMonth === 'Nov' ? 'November 2026' : 'December 2026'}
-                  </h4>
-                  <button
-                    type="button"
-                    aria-label="Next month"
-                    onClick={onToggleCalendarMonth}
-                    className="w-7 h-7 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-600 cursor-pointer"
-                  >
-                    <ChevronRight size={16} />
-                  </button>
-                </div>
-                <button
-                  type="button"
-                  aria-label="Close calendar"
-                  onClick={() => onSetActivePopover(null)}
-                  className="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-500 cursor-pointer"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-
-              <div>
-                <div className="grid grid-cols-7 text-center text-[11px] font-semibold text-slate-400 mb-1.5">
-                  {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((d) => (
-                    <span key={d}>{d}</span>
-                  ))}
-                </div>
-                <div className="grid grid-cols-7 gap-1 text-center tabular-nums">
-                  {Array.from(
-                    { length: calendarMonth === 'Nov' ? 30 : 31 },
-                    (_, i) => i + 1
-                  ).map((day) => {
-                    const isStart = customCheckInDay === day;
-                    const isEnd = customCheckOutDay === day;
-                    const inRange =
-                      customCheckInDay !== null &&
-                      customCheckOutDay !== null &&
-                      day > customCheckInDay &&
-                      day < customCheckOutDay;
-                    return (
-                      <button
-                        key={day}
-                        type="button"
-                        onClick={() => onSelectCalendarDay(day)}
-                        className={`h-9 rounded-full text-xs font-semibold transition-colors cursor-pointer ${
-                          isStart || isEnd
-                            ? 'bg-[#C72B62] text-white'
-                            : inRange
-                            ? 'bg-[#C72B62]/10 text-[#C72B62]'
-                            : 'hover:bg-slate-100 text-slate-800'
-                        }`}
-                      >
-                        {day}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
-                {DATE_OPTIONS.map((opt) => {
-                  const active = selectedDates.id === opt.id;
-                  return (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={() => {
-                        onSelectDates(opt);
-                        onSetActivePopover('who');
-                      }}
-                      className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors cursor-pointer ${
-                        active
-                          ? 'bg-[#C72B62] text-white border-[#C72B62]'
-                          : 'bg-white text-slate-700 border-slate-300 hover:border-slate-900'
-                      }`}
-                    >
-                      {opt.tag}
-                    </button>
-                  );
-                })}
-              </div>
+              <SearchCalendar
+                checkInDate={checkInIso || null}
+                checkOutDate={checkOutIso || null}
+                onSelectRange={(start, end, display, nights) => {
+                  if (onSelectDateRange) {
+                    onSelectDateRange(start, end, display, nights);
+                  } else {
+                    onSelectDates({
+                      id: `range-${start}-${end}`,
+                      label: display,
+                      display: display,
+                      nights: nights,
+                      tag: `${display} · ${nights} night${nights > 1 ? 's' : ''}`,
+                    });
+                  }
+                }}
+                onClear={() => {
+                  if (onClearDates) {
+                    onClearDates();
+                  } else {
+                    onSelectDates(DATE_OPTIONS[0]);
+                  }
+                }}
+                onClose={() => onSetActivePopover(null)}
+                onNext={() => onSetActivePopover('who')}
+                isMobileSheet={false}
+              />
             </div>
           )}
 
           {/* POPOVER 3: WHO */}
           {activePopover === 'who' && (
             <div
-              className={`absolute left-0 right-0 mx-auto md:left-auto md:mx-0 md:right-20 w-full max-w-[380px] bg-white rounded-3xl shadow-[0_16px_48px_rgba(15,23,42,0.16)] border border-slate-200 p-5 z-40 text-left transition-all ${
+              className={`hidden md:block absolute left-0 right-0 mx-auto md:left-auto md:mx-0 md:right-16 w-full max-w-[400px] bg-white rounded-3xl shadow-[0_16px_48px_rgba(15,23,42,0.16)] border border-slate-200 p-5 z-40 text-left transition-all ${
                 shouldCollapse ? 'top-[50px] sm:top-[56px]' : 'top-[66px] sm:top-[74px]'
               }`}
             >
-              <div className="divide-y divide-slate-100">
-                {[
-                  {
-                    key: 'adults' as const,
-                    title: 'Adults',
-                    sub: 'Ages 13 or above',
-                    val: adults,
-                    min: 0,
-                    max: 8,
-                  },
-                  {
-                    key: 'children' as const,
-                    title: 'Children',
-                    sub: 'Ages 2 – 12',
-                    val: childrenCount,
-                    min: 0,
-                    max: 6,
-                  },
-                  {
-                    key: 'infants' as const,
-                    title: 'Infants',
-                    sub: 'Under 2',
-                    val: infants,
-                    min: 0,
-                    max: 4,
-                  },
-                  {
-                    key: 'pets' as const,
-                    title: 'Pets',
-                    sub: 'Bringing a service animal?',
-                    val: pets,
-                    min: 0,
-                    max: 3,
-                  },
-                ].map((row) => (
-                  <div
-                    key={row.key}
-                    className="py-3 first:pt-0 flex items-center justify-between gap-4"
-                  >
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">{row.title}</p>
-                      <p className="text-xs text-slate-500">{row.sub}</p>
-                    </div>
-                    <div className="flex items-center gap-3 tabular-nums">
-                      <button
-                        type="button"
-                        aria-label={`Decrease ${row.title}`}
-                        disabled={row.val <= row.min}
-                        onClick={() =>
-                          onChangeGuestCount(row.key, Math.max(row.min, row.val - 1))
-                        }
-                        className="w-8 h-8 rounded-full border border-slate-300 disabled:opacity-35 hover:border-slate-900 flex items-center justify-center text-slate-700 cursor-pointer disabled:cursor-not-allowed"
-                      >
-                        <Minus size={14} />
-                      </button>
-                      <span className="w-5 text-center text-sm font-semibold text-slate-900">
-                        {row.val}
-                      </span>
-                      <button
-                        type="button"
-                        aria-label={`Increase ${row.title}`}
-                        disabled={row.val >= row.max}
-                        onClick={() =>
-                          onChangeGuestCount(row.key, Math.min(row.max, row.val + 1))
-                        }
-                        className="w-8 h-8 rounded-full border border-slate-300 disabled:opacity-35 hover:border-slate-900 flex items-center justify-center text-slate-700 cursor-pointer disabled:cursor-not-allowed"
-                      >
-                        <Plus size={14} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="pt-3 mt-1 border-t border-slate-100 flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={onClearGuests}
-                  className="text-xs font-semibold text-slate-600 hover:underline cursor-pointer"
-                >
-                  Clear guests
-                </button>
-                <button
-                  type="button"
-                  onClick={handleExecuteSearch}
-                  className="search-button px-5 py-2.5 text-white text-xs font-semibold active:scale-[0.98] cursor-pointer"
-                >
-                  Apply ({matchingCount} matches)
-                </button>
-              </div>
+              <SearchGuestSelector
+                adults={adults}
+                childrenCount={childrenCount}
+                infants={infants}
+                pets={pets}
+                onChangeGuestCount={onChangeGuestCount}
+                onClear={onClearGuests}
+                onApply={() => onSetActivePopover(null)}
+              />
             </div>
           )}
         </div>
       </div>
+
+      {/* Mobile Dedicated Search Bottom Sheet / Modal */}
+      <MobileSearchModal
+        isOpen={isMobileModalOpen}
+        onClose={() => setIsMobileModalOpen(false)}
+        whereQuery={whereQuery}
+        onSelectLocation={(chosen) => onWhereChange(chosen)}
+        onClearLocation={() => onWhereChange('')}
+        checkInDate={checkInIso || null}
+        checkOutDate={checkOutIso || null}
+        onSelectDateRange={(start, end, display, nights) => {
+          if (onSelectDateRange) {
+            onSelectDateRange(start, end, display, nights);
+          } else {
+            onSelectDates({
+              id: `range-${start}-${end}`,
+              label: display,
+              display: display,
+              nights: nights,
+              tag: `${display} · ${nights} night${nights > 1 ? 's' : ''}`,
+            });
+          }
+        }}
+        onClearDates={() => {
+          if (onClearDates) {
+            onClearDates();
+          } else {
+            onSelectDates(DATE_OPTIONS[0]);
+          }
+        }}
+        selectedDatesDisplay={selectedDates.display}
+        adults={adults}
+        childrenCount={childrenCount}
+        infants={infants}
+        pets={pets}
+        onChangeGuestCount={onChangeGuestCount}
+        onClearGuests={onClearGuests}
+        guestSummaryText={guestSummaryText}
+        onExecuteSearch={handleExecuteSearch}
+        matchingCount={matchingCount}
+        initialTab={mobileInitialTab}
+      />
     </div>
   );
 };

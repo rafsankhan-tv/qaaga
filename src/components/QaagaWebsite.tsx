@@ -145,8 +145,10 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
   const [calendarMonth, setCalendarMonth] = useState<'Nov' | 'Dec'>('Nov');
   const [customCheckInDay, setCustomCheckInDay] = useState<number | null>(null);
   const [customCheckOutDay, setCustomCheckOutDay] = useState<number | null>(null);
+  const [checkInIso, setCheckInIso] = useState<string | null>(null);
+  const [checkOutIso, setCheckOutIso] = useState<string | null>(null);
 
-  const [adults, setAdults] = useState<number>(0);
+  const [adults, setAdults] = useState<number>(1);
   const [childrenCount, setChildrenCount] = useState<number>(0);
   const [infants, setInfants] = useState<number>(0);
   const [pets, setPets] = useState<number>(0);
@@ -791,7 +793,9 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
     setSelectedDates(DATE_OPTIONS[0]);
     setCustomCheckInDay(null);
     setCustomCheckOutDay(null);
-    setAdults(0);
+    setCheckInIso(null);
+    setCheckOutIso(null);
+    setAdults(1);
     setChildrenCount(0);
     setInfants(0);
     setPets(0);
@@ -820,6 +824,31 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
     } else {
       navigateTo(`/${cat}`);
     }
+  };
+
+  const handleSelectDateRange = (
+    start: string | null,
+    end: string | null,
+    display: string,
+    nights: number
+  ) => {
+    setCheckInIso(start);
+    setCheckOutIso(end);
+    setSelectedDates({
+      id: `range-${start}-${end}`,
+      label: display,
+      display: display,
+      nights: nights,
+      tag: `${display} · ${nights} night${nights > 1 ? 's' : ''}`,
+    });
+  };
+
+  const handleClearDates = () => {
+    setCheckInIso(null);
+    setCheckOutIso(null);
+    setCustomCheckInDay(null);
+    setCustomCheckOutDay(null);
+    setSelectedDates(DATE_OPTIONS[0]);
   };
 
   const handleSelectCalendarDay = (day: number) => {
@@ -858,23 +887,14 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
     type: 'adults' | 'children' | 'infants' | 'pets',
     val: number
   ) => {
-    if (type === 'adults') setAdults(val);
-    if (type === 'children') {
-      setChildrenCount(val);
-      if (val > 0 && adults === 0) setAdults(1);
-    }
-    if (type === 'infants') {
-      setInfants(val);
-      if (val > 0 && adults === 0) setAdults(1);
-    }
-    if (type === 'pets') {
-      setPets(val);
-      if (val > 0 && adults === 0) setAdults(1);
-    }
+    if (type === 'adults') setAdults(Math.max(1, val));
+    if (type === 'children') setChildrenCount(Math.max(0, val));
+    if (type === 'infants') setInfants(Math.max(0, val));
+    if (type === 'pets') setPets(Math.max(0, val));
   };
 
   const handleClearGuests = () => {
-    setAdults(0);
+    setAdults(1);
     setChildrenCount(0);
     setInfants(0);
     setPets(0);
@@ -1203,6 +1223,10 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
         customCheckInDay={customCheckInDay}
         customCheckOutDay={customCheckOutDay}
         onSelectCalendarDay={handleSelectCalendarDay}
+        checkInIso={checkInIso}
+        checkOutIso={checkOutIso}
+        onSelectDateRange={handleSelectDateRange}
+        onClearDates={handleClearDates}
         adults={adults}
         childrenCount={childrenCount}
         infants={infants}
