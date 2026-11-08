@@ -466,14 +466,10 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
                   {displayWho}
                 </span>
 
-                {/* Gradient Search Circle Button matching linear-gradient(90deg, #E91D58, #D90065) */}
+                {/* Gradient Search Button */}
                 <span
-                  style={{
-                    background: 'linear-gradient(90deg, #E91D58, #D90065)',
-                    color: '#FFFFFF',
-                    borderRadius: '100px',
-                  }}
-                  className="w-7 h-7 sm:w-8 sm:h-8 text-white flex items-center justify-center shrink-0 ml-0.5 sm:ml-1 shadow-[0_2px_8px_rgba(233,29,88,0.32)] transition-all duration-200 ease-out group-hover:scale-105 group-hover:brightness-90"
+                  className="search-button w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center shrink-0 ml-0.5 sm:ml-1 transition-all duration-200 ease-out group-hover:scale-105"
+                  style={{ borderRadius: '32px' }}
                 >
                   <Search size={14} className="text-white" strokeWidth={2.5} />
                 </span>
@@ -1034,20 +1030,12 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
               </span>
             </button>
 
-            {/* Custom Linear Gradient Search Button:
-                background: linear-gradient(90deg, #E91D58, #D90065)
-                Normal/resting: shows search icon only
-                When Where, When, or Who is clicked: expands to show "Search" text */}
+            {/* Custom Search Button with exact linear gradient, hover radial-gradient, and border-radius: 32px */}
             <button
               type="button"
               aria-label="Search"
               onClick={handleExecuteSearch}
-              style={{
-                background: 'linear-gradient(90deg, #E91D58, #D90065)',
-                color: '#FFFFFF',
-                borderRadius: '100px',
-              }}
-              className={`inline-flex items-center justify-center border-0 border-none text-white font-[600] tracking-normal cursor-pointer select-none shrink-0 shadow-[0_4px_16px_rgba(233,29,88,0.32)] transition-all duration-300 ease-out hover:brightness-90 hover:scale-[1.02] hover:shadow-[0_6px_22px_rgba(233,29,88,0.42)] active:scale-[0.98] ml-1 sm:ml-2 ${
+              className={`search-button inline-flex items-center justify-center border-0 border-none text-white font-[600] tracking-normal cursor-pointer select-none shrink-0 transition-all duration-200 ease-out hover:scale-[1.02] active:scale-[0.98] ml-1 sm:ml-2 ${
                 activePopover
                   ? 'py-[10px] sm:py-[14px] px-[16px] sm:px-[24px] gap-[8px]'
                   : 'w-11 h-11 sm:w-12 sm:h-12 p-0'
@@ -1325,12 +1313,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
                 <button
                   type="button"
                   onClick={handleExecuteSearch}
-                  style={{
-                    background: 'linear-gradient(90deg, #E91D58, #D90065)',
-                    color: '#FFFFFF',
-                    borderRadius: '100px',
-                  }}
-                  className="px-5 py-2.5 text-white text-xs font-semibold shadow-md transition-all duration-200 ease-out hover:brightness-90 hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+                  className="search-button px-5 py-2.5 text-white text-xs font-semibold active:scale-[0.98] cursor-pointer"
                 >
                   Apply ({matchingCount} matches)
                 </button>

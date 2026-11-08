@@ -20,3 +20,30 @@ body {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+.search-button {
+  background: linear-gradient(
+    to right,
+    #E61E4D 0%,
+    #E31C5F 50%,
+    #D70466 100%
+  );
+  color: #FFFFFF;
+  border-radius: 32px;
+  box-shadow:
+    0 3px 12px rgba(0, 0, 0, 0.10),
+    0 1px 2px rgba(0, 0, 0, 0.08);
+  transition: all 0.2s ease;
+}
+
+.search-button:hover {
+  background: radial-gradient(
+    circle at center,
+    #FF385C 0%,
+    #E61E4D 27.5%,
+    #E31C5F 40%,
+    #D70466 57.5%,
+    #BD1E59 75%,
+    #BD1E59 100%
+  );
+}
