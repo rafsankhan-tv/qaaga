@@ -205,6 +205,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
 
   const isScrolledRef = useRef(false);
   const isManualExpandRef = useRef(false);
+  const lastToggleTimeRef = useRef(0);
 
   useEffect(() => {
     isScrolledRef.current = isScrolled;
@@ -226,26 +227,37 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
       );
     };
 
-    // Airbnb-style threshold:
-    // Scroll > 50px collapses header smoothly into compact mode.
-    // Scrolling back towards top (<= 40px) expands header smoothly back to full size.
-    // 10px hysteresis band prevents any border-flicker or layout oscillation.
-    const SCROLL_THRESHOLD = 50;
-    const HYSTERESIS = 10;
+    // Airbnb-style asymmetric threshold & transition protection:
+    // 1. Scrolling down past 25px smoothly compacts the navigation bar at the very start of scroll.
+    // 2. Scrolling back up ONLY expands when reaching the very top (scrollY <= 5px), exactly as requested:
+    //    "একদম যখন টপে চলে আসবো আর কিছুই স্ক্রল করা থাকবে না, জাস্ট সেই মুহূর্তে নেভিগেশন বারটা আবার বড় হয়ে যাবে।"
+    // 3. A 320ms transition lock discards synthetic reflow scroll events, completely preventing jitter ("lafalafi").
+    const COLLAPSE_THRESHOLD = 25;
+    const EXPAND_THRESHOLD = 5;
 
     let ticking = false;
 
     const updateScrollState = () => {
       const scrollY = getScrollY();
+      const now = Date.now();
 
-      if (scrollY > SCROLL_THRESHOLD) {
+      // Guard against synthetic scroll oscillations during CSS transitions
+      if (now - lastToggleTimeRef.current < 320) {
+        if (scrollY > EXPAND_THRESHOLD) {
+          return;
+        }
+      }
+
+      if (scrollY > COLLAPSE_THRESHOLD) {
         if (!isScrolledRef.current) {
           isScrolledRef.current = true;
+          lastToggleTimeRef.current = now;
           setIsScrolled(true);
         }
-      } else if (scrollY <= SCROLL_THRESHOLD - HYSTERESIS) {
+      } else if (scrollY <= EXPAND_THRESHOLD) {
         if (isScrolledRef.current) {
           isScrolledRef.current = false;
+          lastToggleTimeRef.current = now;
           setIsScrolled(false);
           if (isManualExpandRef.current) {
             setIsManualExpand(false);
@@ -313,21 +325,15 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
         className={`w-full px-3 sm:px-6 lg:px-10 xl:px-12 2xl:px-16 transition-all duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] ${
           shouldCollapse
             ? 'py-2 sm:py-2.5 space-y-0'
-            : 'pt-3 sm:pt-5 pb-3 sm:pb-6 space-y-3 sm:space-y-5'
+            : 'pt-3 sm:pt-4 pb-3 sm:pb-4 space-y-2.5 sm:space-y-4'
         }`}
       >
         {/* ================================================================= */}
         {/* ROW 1: qaaga.com — Centered Tabs / Compact Pill — Host, Bell, User */}
         {/* ================================================================= */}
-        <header
-          className={`w-full transition-all duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-            shouldCollapse
-              ? 'flex items-center justify-between gap-1.5 sm:gap-3 md:gap-4'
-              : 'flex flex-col md:grid md:grid-cols-[1fr_auto_1fr] md:items-center gap-2.5 md:gap-4'
-          }`}
-        >
+        <header className="w-full flex items-center justify-between gap-1.5 sm:gap-3 md:gap-4">
           {/* Top-Left Official Brand Logo */}
-          <div className="flex items-center shrink-0 md:justify-self-start">
+          <div className="flex items-center shrink-0">
             <button
               type="button"
               aria-label="qaaga.com home"
@@ -343,11 +349,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
           {/* Center: Category Tabs (Top) OR Compact Search Pill + Plus Button (Scrolled) */}
           <div
             ref={compactPillRef}
-            className={`flex items-center justify-center relative min-h-[44px] sm:min-h-[48px] ${
-              shouldCollapse
-                ? 'flex-1 md:flex-initial md:justify-self-center min-w-0 px-1'
-                : 'w-full md:w-auto md:justify-self-center'
-            }`}
+            className="flex-1 flex items-center justify-center relative min-h-[44px] sm:min-h-[48px] px-1 sm:px-2 min-w-0"
           >
             {/* Category Tabs: Shown at top */}
             <nav
@@ -458,19 +460,18 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
             </div>
           </div>
 
-          {/* Right: "become a host" + Notification Bell + Avatar Menu (desktop only, hidden on mobile view top) */}
+          {/* Right: "become a host" + Notification Bell + Avatar Menu */}
           <div
             ref={rightUtilsRef}
-            className="relative hidden md:flex items-center justify-end shrink-0 gap-1.5 sm:gap-2.5 md:gap-3 lg:gap-4 md:justify-self-end"
+            className="relative flex items-center justify-end shrink-0 gap-1.5 sm:gap-2.5 md:gap-3 lg:gap-4"
           >
             <div className="flex items-center gap-1.5 sm:gap-2.5 md:gap-3.5 lg:gap-4">
               <button
                 type="button"
                 onClick={onOpenHostModal}
-                className="inline-flex items-center text-xs sm:text-[13px] md:text-[15px] text-slate-800 hover:text-slate-950 font-medium px-2 py-1 rounded-full hover:bg-slate-100/80 transition-colors whitespace-nowrap cursor-pointer"
+                className="hidden md:inline-flex items-center text-xs sm:text-[13px] md:text-[15px] text-slate-800 hover:text-slate-950 font-medium px-2 py-1 rounded-full hover:bg-slate-100/80 transition-colors whitespace-nowrap cursor-pointer"
               >
-                <span className="hidden sm:inline">become a host</span>
-                <span className="inline sm:hidden">Host</span>
+                <span>become a host</span>
               </button>
 
               {/* Notification Bell Icon + #C72B62 Combined Total Count */}
@@ -856,10 +857,15 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
         {/* ================================================================= */}
         <div
           ref={searchRef}
-          className={`relative flex items-center justify-center gap-2 sm:gap-3.5 transition-all duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+          style={{
+            transitionProperty: 'max-height, opacity, transform, margin, padding',
+            transitionDuration: '350ms',
+            transitionTimingFunction: 'cubic-bezier(0.16, 1, 0.3, 1)',
+          }}
+          className={`relative flex items-center justify-center gap-2 sm:gap-3.5 overflow-hidden ${
             shouldCollapse
-              ? 'max-h-0 opacity-0 -translate-y-4 scale-95 pointer-events-none overflow-hidden my-0 py-0'
-              : 'max-h-[160px] opacity-100 translate-y-0 scale-100 pointer-events-auto mt-3 sm:mt-4'
+              ? 'max-h-0 opacity-0 -translate-y-3 scale-95 pointer-events-none mt-0 mb-0 py-0'
+              : 'max-h-[140px] opacity-100 translate-y-0 scale-100 pointer-events-auto mt-2 sm:mt-4 mb-0'
           }`}
         >
           <div
