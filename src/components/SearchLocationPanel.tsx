@@ -190,7 +190,18 @@ export const SearchLocationPanel: React.FC<SearchLocationPanelProps> = ({
         <input
           type="text"
           value={searchInput}
-          onChange={(e) => setSearchInput(e.target.value)}
+          onChange={(e) => {
+            const val = e.target.value;
+            setSearchInput(val);
+            onSelectLocation(val);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              onSelectLocation(searchInput);
+              onClose();
+            }
+          }}
           placeholder="Search destinations in Kuala Lumpur"
           className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-10 pr-10 py-2.5 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-[#C72B62] focus:bg-white transition-all shadow-inner"
           autoFocus

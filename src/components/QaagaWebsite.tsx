@@ -1973,10 +1973,17 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
             setIsHostModalOpen(true);
             navigateTo('/host');
           }}
-          className="flex flex-col items-center justify-center cursor-pointer"
+          className="flex flex-col items-center justify-center cursor-pointer active:scale-95 transition-transform"
         >
-          <span className="w-10 h-10 rounded-full bg-[#C72B62] text-white flex items-center justify-center shadow-sm">
-            <Plus size={21} strokeWidth={2.5} />
+          <span
+            style={{
+              background: 'linear-gradient(90deg, #E91D58, #D90065)',
+              borderRadius: '100px',
+              color: '#FFFFFF',
+            }}
+            className="w-10 h-10 flex items-center justify-center shadow-[0_2px_10px_rgba(233,29,88,0.35)] text-white hover:brightness-95"
+          >
+            <Plus size={21} strokeWidth={2.6} className="text-white" />
           </span>
         </button>
 

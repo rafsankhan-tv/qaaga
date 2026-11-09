@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Search, RotateCcw, MapPin, Calendar as CalendarIcon, Users } from 'lucide-react';
 import { SearchLocationPanel } from './SearchLocationPanel';
 import { SearchCalendar } from './SearchCalendar';
@@ -52,6 +52,12 @@ export const MobileSearchModal: React.FC<MobileSearchModalProps> = ({
   initialTab = 'where',
 }) => {
   const [activeTab, setActiveTab] = useState<'where' | 'when' | 'who'>(initialTab);
+
+  useEffect(() => {
+    if (isOpen && initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [isOpen, initialTab]);
 
   if (!isOpen) return null;
 

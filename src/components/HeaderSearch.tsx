@@ -14,6 +14,7 @@ import {
   Plus,
   Search,
   Shield,
+  SlidersHorizontal,
   User,
   X,
 } from 'lucide-react';
@@ -346,15 +347,17 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
             </button>
           </div>
 
-          {/* Center: Category Tabs (Top) OR Compact Search Pill + Plus Button (Scrolled) */}
+          {/* Center: Desktop Category Tabs (Top) OR Compact Search Pill + Plus Button (Scrolled) */}
           <div
             ref={compactPillRef}
-            className="flex-1 flex items-center justify-center relative min-h-[44px] sm:min-h-[48px] px-1 sm:px-2 min-w-0"
+            className={`flex items-center justify-center relative min-h-[44px] sm:min-h-[48px] px-1 sm:px-2 min-w-0 ${
+              shouldCollapse ? 'flex-1 md:flex-initial' : 'hidden md:flex flex-1'
+            }`}
           >
-            {/* Category Tabs: Shown at top */}
+            {/* Desktop Category Tabs: Shown at top on md+ */}
             <nav
               aria-label="Listing categories"
-              className={`flex items-center justify-between min-[410px]:justify-center gap-2 min-[410px]:gap-4 sm:gap-7 lg:gap-10 overflow-x-auto scrollbar-none px-0.5 transition-all duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+              className={`hidden md:flex items-center justify-center gap-4 sm:gap-7 lg:gap-10 overflow-x-auto scrollbar-none px-0.5 transition-all duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] ${
                 shouldCollapse
                   ? 'opacity-0 scale-95 pointer-events-none -translate-y-2 absolute invisible'
                   : 'opacity-100 scale-100 pointer-events-auto translate-y-0 visible'
@@ -394,7 +397,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
               })}
             </nav>
 
-            {/* Compact Search Pill + Adjacent '+' Button: Shown on scroll */}
+            {/* Compact Search Pill + Adjacent '+' Button: Shown on scroll on all screen sizes */}
             <div
               className={`flex items-center gap-1.5 sm:gap-2.5 transition-all duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] max-w-full ${
                 shouldCollapse
@@ -407,7 +410,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
                 data-testid="compact-search-pill"
                 aria-label="Search destination, dates, guests"
                 onClick={() => handleOpenSearchModal('where')}
-                className="inline-flex items-center gap-1.5 sm:gap-2.5 bg-white border border-slate-300/90 hover:border-slate-400 rounded-full pl-2.5 sm:pl-3.5 pr-1 sm:pr-1.5 py-1 sm:py-1.5 shadow-[0_2px_8px_rgba(15,23,42,0.08)] hover:shadow-[0_4px_14px_rgba(15,23,42,0.14)] transition-all cursor-pointer group min-w-0"
+                className="inline-flex items-center gap-1.5 sm:gap-2.5 bg-white border border-slate-300/90 hover:border-slate-400 rounded-full pl-2 sm:pl-3.5 pr-1 sm:pr-1.5 py-1 sm:py-1.5 shadow-[0_2px_8px_rgba(15,23,42,0.08)] hover:shadow-[0_4px_14px_rgba(15,23,42,0.14)] transition-all cursor-pointer group min-w-0"
               >
                 {/* Stay / Category Logo beside Where */}
                 <img
@@ -424,13 +427,13 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
 
                 <span className="w-[1px] sm:w-[1.5px] h-3 sm:h-3.5 md:h-4 bg-slate-300 shrink-0" aria-hidden="true" />
 
-                <span className="text-[11px] sm:text-[12.5px] md:text-[13.5px] font-bold text-slate-900 truncate max-w-[60px] sm:max-w-[90px] md:max-w-[120px]">
+                <span className="text-[11px] sm:text-[12.5px] md:text-[13.5px] font-bold text-slate-900 truncate max-w-[55px] sm:max-w-[90px] md:max-w-[120px]">
                   {displayWhen}
                 </span>
 
-                <span className="w-[1px] sm:w-[1.5px] h-3 sm:h-3.5 md:h-4 bg-slate-300 shrink-0" aria-hidden="true" />
+                <span className="hidden sm:inline-block w-[1px] sm:w-[1.5px] h-3 sm:h-3.5 md:h-4 bg-slate-300 shrink-0" aria-hidden="true" />
 
-                <span className="text-[11px] sm:text-[12.5px] md:text-[13.5px] font-normal text-slate-700 truncate max-w-[55px] sm:max-w-[85px] md:max-w-[110px]">
+                <span className="hidden sm:inline-block text-[11px] sm:text-[12.5px] md:text-[13.5px] font-normal text-slate-700 truncate max-w-[55px] sm:max-w-[85px] md:max-w-[110px]">
                   {displayWho}
                 </span>
 
@@ -453,7 +456,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
                   color: '#FFFFFF',
                   borderRadius: '100px',
                 }}
-                className="hidden md:flex w-7 h-7 sm:w-8 sm:h-8 border-0 border-none items-center justify-center text-white active:scale-95 transition-all shrink-0 cursor-pointer shadow-[0_2px_8px_rgba(233,29,88,0.32)] hover:brightness-90 hover:scale-105"
+                className="flex w-7 h-7 sm:w-8 sm:h-8 border-0 border-none items-center justify-center text-white active:scale-95 transition-all shrink-0 cursor-pointer shadow-[0_2px_8px_rgba(233,29,88,0.32)] hover:brightness-90 hover:scale-105"
               >
                 <Plus size={16} strokeWidth={2.6} className="text-white" />
               </button>
@@ -853,7 +856,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
         </header>
 
         {/* ================================================================= */}
-        {/* ROW 2: Centered 3-Segment Search Pill + Adjacent '+' Button       */}
+        {/* ROW 2: Search Section (Mobile Dedicated Card & Categories + Desktop 3-Segment) */}
         {/* ================================================================= */}
         <div
           ref={searchRef}
@@ -862,14 +865,87 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
             transitionDuration: '350ms',
             transitionTimingFunction: 'cubic-bezier(0.16, 1, 0.3, 1)',
           }}
-          className={`relative flex items-center justify-center gap-2 sm:gap-3.5 overflow-hidden ${
+          className={`relative flex flex-col items-center justify-center gap-2 sm:gap-3.5 overflow-hidden w-full ${
             shouldCollapse
               ? 'max-h-0 opacity-0 -translate-y-3 scale-95 pointer-events-none mt-0 mb-0 py-0'
-              : 'max-h-[140px] opacity-100 translate-y-0 scale-100 pointer-events-auto mt-2 sm:mt-4 mb-0'
+              : 'max-h-[240px] md:max-h-[140px] opacity-100 translate-y-0 scale-100 pointer-events-auto mt-2 sm:mt-4 mb-0'
           }`}
         >
+          {/* MOBILE ONLY (md:hidden): Dedicated Full-Width Search Card + Category Tab Strip */}
+          <div className="md:hidden w-full space-y-2.5">
+            {/* Full-Width Mobile Airbnb Search Bar */}
+            <button
+              type="button"
+              onClick={() => handleOpenSearchModal('where')}
+              className="w-full flex items-center justify-between bg-white border border-slate-300/90 rounded-full px-3.5 py-2 shadow-[0_2px_10px_rgba(15,23,42,0.08)] hover:shadow-[0_4px_16px_rgba(15,23,42,0.12)] transition-all cursor-pointer text-left active:scale-[0.99]"
+            >
+              <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                <span className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center shrink-0">
+                  <Search size={15} className="text-[#C72B62]" strokeWidth={2.6} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] font-bold text-slate-900 truncate leading-tight">
+                    {whereQuery.trim() ? whereQuery : 'Where to?'}
+                  </p>
+                  <p className="text-[11px] text-slate-500 truncate leading-tight mt-0.5">
+                    {[
+                      whereQuery ? 'Any week' : 'Anywhere',
+                      selectedDates.display || 'Any week',
+                      guestSummaryText || 'Add guests',
+                    ].join(' · ')}
+                  </p>
+                </div>
+              </div>
+              <span
+                className="search-button w-8 h-8 flex items-center justify-center shrink-0 ml-1.5"
+                style={{ borderRadius: '32px' }}
+              >
+                <SlidersHorizontal size={14} className="text-white" />
+              </span>
+            </button>
+
+            {/* Mobile Category Tabs Strip */}
+            <nav
+              aria-label="Mobile listing categories"
+              className="flex items-center justify-center gap-5 min-[380px]:gap-7 overflow-x-auto scrollbar-none px-1 pt-0.5"
+            >
+              {CATEGORY_TABS.map((tab) => {
+                const isActive = activeCategory === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => onSelectCategory(tab.id)}
+                    className={`relative flex items-center gap-1.5 whitespace-nowrap shrink-0 transition-all duration-200 cursor-pointer pb-2 pt-1 ${
+                      isActive
+                        ? 'text-slate-950 font-bold'
+                        : 'text-slate-500 hover:text-slate-800 font-semibold'
+                    }`}
+                  >
+                    <img
+                      src={tab.iconSrc}
+                      alt=""
+                      aria-hidden="true"
+                      referrerPolicy="no-referrer"
+                      className={`w-5 h-5 min-[380px]:w-6 min-[380px]:h-6 object-contain transition-all ${
+                        isActive ? 'scale-110' : 'opacity-85'
+                      }`}
+                    />
+                    <span className="text-[12.5px] min-[380px]:text-[13px] tracking-[-0.01em]">
+                      {tab.label}
+                    </span>
+                    {isActive && (
+                      <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-slate-900 rounded-full" />
+                    )}
+                  </button>
+                );
+              })}
+            </nav>
+          </div>
+
+          {/* DESKTOP ONLY (hidden md:flex): Centered 3-Segment Search Pill */}
           <div
-            className={`w-full rounded-full bg-white border border-slate-300/90 shadow-[0_3px_14px_rgba(15,23,42,0.05)] flex items-center transition-all duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+            className={`hidden md:flex w-full rounded-full bg-white border border-slate-300/90 shadow-[0_3px_14px_rgba(15,23,42,0.05)] items-center transition-all duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] ${
               shouldCollapse
                 ? 'max-w-[680px] sm:max-w-[720px] min-h-[46px] sm:min-h-[50px] pl-3.5 sm:pl-5 pr-1 sm:pr-1.5 py-0.5 sm:py-1'
                 : 'max-w-[850px] min-h-[58px] sm:min-h-[66px] pl-4 sm:pl-7 pr-1.5 sm:pr-2.5 py-1.5'
