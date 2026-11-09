@@ -865,44 +865,62 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
             transitionDuration: '350ms',
             transitionTimingFunction: 'cubic-bezier(0.16, 1, 0.3, 1)',
           }}
-          className={`relative flex flex-col items-center justify-center gap-2 sm:gap-3.5 overflow-hidden w-full ${
+          className={`relative flex flex-col items-center justify-center gap-2 sm:gap-3.5 w-full ${
             shouldCollapse
-              ? 'max-h-0 opacity-0 -translate-y-3 scale-95 pointer-events-none mt-0 mb-0 py-0'
-              : 'max-h-[240px] md:max-h-[140px] opacity-100 translate-y-0 scale-100 pointer-events-auto mt-2 sm:mt-4 mb-0'
+              ? 'max-h-0 opacity-0 -translate-y-3 scale-95 pointer-events-none mt-0 mb-0 py-0 overflow-hidden'
+              : 'max-h-[240px] md:max-h-[140px] opacity-100 translate-y-0 scale-100 pointer-events-auto mt-2 sm:mt-4 mb-0 overflow-visible'
           }`}
         >
-          {/* MOBILE ONLY (md:hidden): Dedicated Full-Width Search Card + Category Tab Strip */}
+          {/* MOBILE ONLY (md:hidden): Dedicated Full-Width Search Card + Adjacent '+' Button */}
           <div className="md:hidden w-full space-y-2.5">
-            {/* Full-Width Mobile Airbnb Search Bar */}
-            <button
-              type="button"
-              onClick={() => handleOpenSearchModal('where')}
-              className="w-full flex items-center justify-between bg-white border border-slate-300/90 rounded-full px-3.5 py-2 shadow-[0_2px_10px_rgba(15,23,42,0.08)] hover:shadow-[0_4px_16px_rgba(15,23,42,0.12)] transition-all cursor-pointer text-left active:scale-[0.99]"
-            >
-              <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                <span className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center shrink-0">
-                  <Search size={15} className="text-[#C72B62]" strokeWidth={2.6} />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-[13px] font-bold text-slate-900 truncate leading-tight">
-                    {whereQuery.trim() ? whereQuery : 'Where to?'}
-                  </p>
-                  <p className="text-[11px] text-slate-500 truncate leading-tight mt-0.5">
-                    {[
-                      whereQuery ? 'Any week' : 'Anywhere',
-                      selectedDates.display || 'Any week',
-                      guestSummaryText || 'Add guests',
-                    ].join(' · ')}
-                  </p>
-                </div>
-              </div>
-              <span
-                className="search-button w-8 h-8 flex items-center justify-center shrink-0 ml-1.5"
-                style={{ borderRadius: '32px' }}
+            {/* Mobile Search Bar + Adjacent '+' Button */}
+            <div className="flex items-center gap-2 w-full">
+              {/* Full-Width Mobile Airbnb Search Bar */}
+              <button
+                type="button"
+                onClick={() => handleOpenSearchModal('where')}
+                className="flex-1 min-w-0 flex items-center justify-between bg-white border border-slate-300/90 rounded-full px-3.5 py-2 shadow-[0_2px_10px_rgba(15,23,42,0.08)] hover:shadow-[0_4px_16px_rgba(15,23,42,0.12)] transition-all cursor-pointer text-left active:scale-[0.99]"
               >
-                <SlidersHorizontal size={14} className="text-white" />
-              </span>
-            </button>
+                <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                  <span className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center shrink-0">
+                    <Search size={15} className="text-[#C72B62]" strokeWidth={2.6} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[13px] font-bold text-slate-900 truncate leading-tight">
+                      {whereQuery.trim() ? whereQuery : 'Where to?'}
+                    </p>
+                    <p className="text-[11px] text-slate-500 truncate leading-tight mt-0.5">
+                      {[
+                        whereQuery ? 'Any week' : 'Anywhere',
+                        selectedDates.display || 'Any week',
+                        guestSummaryText || 'Add guests',
+                      ].join(' · ')}
+                    </p>
+                  </div>
+                </div>
+                <span
+                  className="search-button w-8 h-8 flex items-center justify-center shrink-0 ml-1.5"
+                  style={{ borderRadius: '32px' }}
+                >
+                  <SlidersHorizontal size={14} className="text-white" />
+                </span>
+              </button>
+
+              {/* Mobile '+' Button right beside search bar */}
+              <button
+                type="button"
+                aria-label="Create new listing"
+                onClick={onOpenHostModal}
+                style={{
+                  background: 'linear-gradient(90deg, #E91D58, #D90065)',
+                  color: '#FFFFFF',
+                  borderRadius: '100px',
+                }}
+                className="w-10 h-10 flex border-0 border-none text-white items-center justify-center active:scale-95 transition-all shrink-0 cursor-pointer shadow-[0_2px_8px_rgba(233,29,88,0.32)] hover:brightness-90"
+              >
+                <Plus size={18} strokeWidth={2.6} className="text-white" />
+              </button>
+            </div>
 
             {/* Mobile Category Tabs Strip */}
             <nav
@@ -943,14 +961,15 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
             </nav>
           </div>
 
-          {/* DESKTOP ONLY (hidden md:flex): Centered 3-Segment Search Pill */}
-          <div
-            className={`hidden md:flex w-full rounded-full bg-white border border-slate-300/90 shadow-[0_3px_14px_rgba(15,23,42,0.05)] items-center transition-all duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-              shouldCollapse
-                ? 'max-w-[680px] sm:max-w-[720px] min-h-[46px] sm:min-h-[50px] pl-3.5 sm:pl-5 pr-1 sm:pr-1.5 py-0.5 sm:py-1'
-                : 'max-w-[850px] min-h-[58px] sm:min-h-[66px] pl-4 sm:pl-7 pr-1.5 sm:pr-2.5 py-1.5'
-            }`}
-          >
+          {/* DESKTOP ONLY (hidden md:flex): Centered 3-Segment Search Pill + Adjacent '+' Button */}
+          <div className="hidden md:flex items-center justify-center gap-2 sm:gap-3.5 w-full">
+            <div
+              className={`w-full rounded-full bg-white border border-slate-300/90 shadow-[0_3px_14px_rgba(15,23,42,0.05)] flex items-center transition-all duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+                shouldCollapse
+                  ? 'max-w-[680px] sm:max-w-[720px] min-h-[46px] sm:min-h-[50px] pl-3.5 sm:pl-5 pr-1 sm:pr-1.5 py-0.5 sm:py-1'
+                  : 'max-w-[850px] min-h-[58px] sm:min-h-[66px] pl-4 sm:pl-7 pr-1.5 sm:pr-2.5 py-1.5'
+              }`}
+            >
             {/* Segment 1: Where */}
             <div
               onClick={() => handleOpenSearchModal('where')}
@@ -1127,6 +1146,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
           >
             <Plus size={shouldCollapse ? 20 : 24} strokeWidth={2.6} className="text-white" />
           </button>
+        </div>
 
           {/* POPOVER 1: WHERE */}
           {activePopover === 'where' && (
