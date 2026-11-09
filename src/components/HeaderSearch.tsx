@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useRef, useEffect, useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import {
   Bell,
   CalendarCheck2,
@@ -9,6 +10,7 @@ import {
   Heart,
   HelpCircle,
   MapPin,
+  Menu,
   MessageSquare,
   Minus,
   Plus,
@@ -219,6 +221,10 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
   useEffect(() => {
     const getScrollY = () => {
       if (typeof window === 'undefined') return 0;
+      const lenis = (window as any).__lenis;
+      if (lenis && typeof lenis.scroll === 'number') {
+        return lenis.scroll;
+      }
       return (
         window.pageYOffset ||
         window.scrollY ||
@@ -229,12 +235,11 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
     };
 
     // Airbnb-style asymmetric threshold & transition protection:
-    // 1. Scrolling down past 25px smoothly compacts the navigation bar at the very start of scroll.
-    // 2. Scrolling back up ONLY expands when reaching the very top (scrollY <= 5px), exactly as requested:
-    //    "একদম যখন টপে চলে আসবো আর কিছুই স্ক্রল করা থাকবে না, জাস্ট সেই মুহূর্তে নেভিগেশন বারটা আবার বড় হয়ে যাবে।"
-    // 3. A 320ms transition lock discards synthetic reflow scroll events, completely preventing jitter ("lafalafi").
-    const COLLAPSE_THRESHOLD = 25;
-    const EXPAND_THRESHOLD = 5;
+    // 1. Scrolling down past 45px smoothly compacts the navigation bar.
+    // 2. Scrolling back up expands when reaching the very top (scrollY <= 8px).
+    // 3. A 280ms transition lock discards synthetic reflow scroll events, preventing animation jitter.
+    const COLLAPSE_THRESHOLD = 45;
+    const EXPAND_THRESHOLD = 8;
 
     let ticking = false;
 
@@ -243,7 +248,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
       const now = Date.now();
 
       // Guard against synthetic scroll oscillations during CSS transitions
-      if (now - lastToggleTimeRef.current < 320) {
+      if (now - lastToggleTimeRef.current < 280) {
         if (scrollY > EXPAND_THRESHOLD) {
           return;
         }
@@ -281,9 +286,16 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
     updateScrollState();
 
     window.addEventListener('scroll', handleScroll, { passive: true });
+    const lenis = (window as any).__lenis;
+    if (lenis?.on) {
+      lenis.on('scroll', handleScroll);
+    }
 
     return () => {
       window.removeEventListener('scroll', handleScroll);
+      if (lenis?.off) {
+        lenis.off('scroll', handleScroll);
+      }
     };
   }, []);
 
@@ -495,44 +507,49 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
                 )}
               </button>
 
-              {/* User Profile Avatar Button (opens profile interface with qaaga.com logo & left functions) */}
+              {/* User Profile / Account Menu Pill (Airbnb style: hamburger + avatar, opens Account & Admin menu) */}
               <button
                 type="button"
-                aria-label={profile.verified ? `${profile.fullName}'s profile` : 'Log in or sign up'}
-                onClick={() => {
-                  onCloseMenus();
-                  if (profile.verified) {
-                    onOpenProfileModal();
-                  } else {
-                    onOpenAuthModal();
-                  }
-                }}
-                className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-slate-300 hover:border-slate-400 text-white flex items-center justify-center transition-all cursor-pointer shadow-2xs hover:shadow-xs shrink-0 active:scale-95 relative ${
-                  profile.verified ? 'bg-[#C72B62] hover:bg-[#ad2253]' : 'bg-[#9E9E9E] hover:bg-[#828282]'
-                }`}
+                aria-label={profile.verified ? `${profile.fullName}'s account menu` : 'Main account menu'}
+                onClick={onToggleAccount}
+                className="flex items-center gap-2 pl-2.5 sm:pl-3 pr-1 sm:pr-1.5 py-1 rounded-full border border-slate-300 hover:border-slate-400 hover:shadow-md transition-all cursor-pointer bg-white active:scale-95 shrink-0"
               >
-                {profile.avatarUrl ? (
-                  <img
-                    src={profile.avatarUrl}
-                    alt={profile.fullName}
-                    className="w-full h-full rounded-full object-cover"
-                  />
-                ) : profile.verified ? (
-                  <span className="text-xs sm:text-sm font-bold text-white uppercase select-none">
-                    {profile.fullName.charAt(0) || 'U'}
-                  </span>
-                ) : (
-                  <User size={18} className="fill-white text-white" />
-                )}
-                {profile.verified && (
-                  <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-white" />
-                )}
+                <Menu size={16} className="text-slate-700 shrink-0 ml-0.5" />
+                <div
+                  className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full border border-slate-300 text-white flex items-center justify-center shrink-0 relative ${
+                    profile.verified ? 'bg-[#C72B62]' : 'bg-[#717171]'
+                  }`}
+                >
+                  {profile.avatarUrl ? (
+                    <img
+                      src={profile.avatarUrl}
+                      alt={profile.fullName}
+                      className="w-full h-full rounded-full object-cover"
+                    />
+                  ) : profile.verified ? (
+                    <span className="text-xs sm:text-sm font-bold text-white uppercase select-none">
+                      {profile.fullName.charAt(0) || 'U'}
+                    </span>
+                  ) : (
+                    <User size={16} className="fill-white text-white" />
+                  )}
+                  {profile.verified && (
+                    <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-emerald-500 rounded-full border-2 border-white" />
+                  )}
+                </div>
               </button>
             </div>
 
             {/* Notifications Dropdown Popover with Messages, Bookings & Wishlist Access */}
-            {isNotifOpen && (
-              <div className="absolute right-0 top-2 md:top-12 w-80 sm:w-96 bg-white rounded-2xl shadow-[0_14px_40px_rgba(15,23,42,0.18)] border border-slate-200 py-3 z-50 text-left animate-in fade-in zoom-in-95 duration-150">
+            <AnimatePresence>
+              {isNotifOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: 8, scale: 0.96 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 6, scale: 0.96 }}
+                  transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                  className="absolute right-0 top-11 sm:top-12 w-80 sm:w-96 bg-white rounded-2xl shadow-[0_14px_40px_rgba(15,23,42,0.18)] border border-slate-200 py-3 z-50 text-left"
+                >
                 {/* Header */}
                 <div className="px-4 pb-2.5 border-b border-slate-100 flex items-center justify-between">
                   <div>
@@ -701,12 +718,20 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
                     ))
                   )}
                 </div>
-              </div>
+              </motion.div>
             )}
+          </AnimatePresence>
 
             {/* Account / Profile Dropdown Menu */}
-            {isAccountOpen && (
-              <div className="absolute right-0 top-2 md:top-12 w-72 bg-white rounded-2xl shadow-[0_14px_40px_rgba(15,23,42,0.16)] border border-slate-200 py-2 z-50 text-left">
+            <AnimatePresence>
+              {isAccountOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: 8, scale: 0.96 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 6, scale: 0.96 }}
+                  transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                  className="absolute right-0 top-11 sm:top-12 w-72 bg-white rounded-2xl shadow-[0_14px_40px_rgba(15,23,42,0.16)] border border-slate-200 py-2 z-50 text-left"
+                >
                 {/* Primary Log In or Sign Up Button */}
                 <div className="p-1.5 border-b border-slate-100">
                   <button
@@ -850,8 +875,9 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
                     <span>Help Center & Guest Protection</span>
                   </button>
                 </div>
-              </div>
+              </motion.div>
             )}
+          </AnimatePresence>
           </div>
         </header>
 

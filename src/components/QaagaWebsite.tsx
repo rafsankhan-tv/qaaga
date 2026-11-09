@@ -132,9 +132,12 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
   /* ======================================================================= */
   /* NAVIGATION & SEARCH STATE                                               */
   /* ======================================================================= */
-  const [activeCategory, setActiveCategory] = useState<QaagaCategory>(
-    initialRoute === '/rooms' ? 'stay' : 'all'
-  );
+  const [activeCategory, setActiveCategory] = useState<QaagaCategory>(() => {
+    if (initialRoute === '/rooms' || initialRoute === '/stay') return 'stay';
+    if (initialRoute === '/experiences') return 'experiences';
+    if (initialRoute === '/services') return 'services';
+    return 'all';
+  });
   const [subFilter, setSubFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<SortOption>('recommended');
 
@@ -222,7 +225,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
   const [explorerCollection, setExplorerCollection] = useState<{
     mode: 'popular-kl' | 'wishlist' | 'experiences-services';
     title: string;
-  } | null>(null);
+  } | null>(() => (initialRoute === '/wishlist' ? { mode: 'wishlist', title: 'Wishlist' } : null));
   const [explorerOnlyFavorites, setExplorerOnlyFavorites] = useState<boolean>(false);
   const [explorerSort, setExplorerSort] = useState<SortOption>('recommended');
 
@@ -590,8 +593,20 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
         const id = path.replace('/rooms/', '');
         const match = allListings.find((i) => i.id === id);
         if (match) setSelectedListing(match);
-      } else if (path === '/rooms') {
+      } else if (path === '/rooms' || path === '/stay') {
         setActiveCategory('stay');
+        setSelectedListing(null);
+        setExplorerCollection(null);
+      } else if (path === '/experiences') {
+        setActiveCategory('experiences');
+        setSelectedListing(null);
+        setExplorerCollection(null);
+      } else if (path === '/services') {
+        setActiveCategory('services');
+        setSelectedListing(null);
+        setExplorerCollection(null);
+      } else if (path === '/wishlist') {
+        setExplorerCollection({ mode: 'wishlist', title: 'Wishlist' });
         setSelectedListing(null);
       } else if (path === '/my-bookings') {
         setIsTripsOpen(true);
@@ -810,6 +825,9 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
     setIsAdminOpen(false);
     setIsMessagesOpen(false);
     setExplorerCollection(null);
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
     navigateTo('/');
   }, [navigateTo]);
 
@@ -817,6 +835,9 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
     setActiveCategory(cat);
     setSubFilter('all');
     setActivePopover(null);
+    if (typeof window !== 'undefined' && window.scrollY > 80) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
     if (cat === 'stay') {
       navigateTo('/rooms');
     } else if (cat === 'all') {
@@ -907,6 +928,16 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
     }
     setActivePopover(null);
     setSearchSubmitted(true);
+    if (typeof window !== 'undefined') {
+      window.setTimeout(() => {
+        const target = document.getElementById('qaaga-listings-canvas');
+        if (target) {
+          const navOffset = 90;
+          const targetY = target.getBoundingClientRect().top + window.pageYOffset - navOffset;
+          window.scrollTo({ top: targetY > 0 ? targetY : 0, behavior: 'smooth' });
+        }
+      }, 50);
+    }
   };
 
   const handleToggleWishlist = (e: React.MouseEvent, item: QaagaListing) => {
@@ -1301,7 +1332,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
       {/* =================================================================== */}
       {/* MAIN MARKETPLACE CANVAS                                             */}
       {/* =================================================================== */}
-      <main className="flex-1 w-full px-4 sm:px-6 lg:px-10 xl:px-12 2xl:px-16 3xl:px-20 pt-6 sm:pt-7 pb-14 space-y-9 sm:space-y-11">
+      <main id="qaaga-listings-canvas" className="flex-1 w-full px-4 sm:px-6 lg:px-10 xl:px-12 2xl:px-16 3xl:px-20 pt-6 sm:pt-7 pb-14 space-y-9 sm:space-y-11">
         {/* ----------------------------------------------------------------- */}
         {/* CASE A: ACTIVE SEARCH RESULTS ON "ALL"                            */}
         {/* ----------------------------------------------------------------- */}

@@ -2,6 +2,7 @@ import React, { ReactNode } from 'react';
 import type { Metadata, Viewport } from 'next';
 import { FaviconHeadSync } from '@/components/FaviconHeadSync';
 import { readServerBranding } from '@/lib/brandingStorage.server';
+import { SmoothScrollProvider } from '@/components/SmoothScrollProvider';
 import './globals.css';
 
 export const dynamic = 'force-dynamic';
@@ -53,7 +54,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
       </head>
       <body className="font-['Plus_Jakarta_Sans',sans-serif] antialiased bg-white text-slate-900 selection:bg-[#C72B62] selection:text-white">
         <FaviconHeadSync initialBranding={initialBranding} />
-        {children}
+        <SmoothScrollProvider>{children}</SmoothScrollProvider>
       </body>
     </html>
   );

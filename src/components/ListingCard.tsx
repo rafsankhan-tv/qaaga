@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { motion } from 'motion/react';
 import { Building2, Heart, Star } from 'lucide-react';
 import { QaagaListing } from '@/data/listings';
 
@@ -75,17 +76,12 @@ export const ListingCard: React.FC<ListingCardProps> = ({
     responsiveWidthClass = cardWidthClass;
   } else if (carouselItem) {
     if (variant === 'recent') {
-      // Mobile: 3.25 cards shown (3 full + 0.25 peek) with gap-3 (12px)
-      // Laptop: 8 cards shown with gap-4 (16px)
       responsiveWidthClass =
         'snap-start shrink-0 w-[calc((100%-36px)/3.25)] min-[540px]:w-[calc((100%-48px)/4.25)] sm:w-[calc((100%-60px)/5.25)] md:w-[calc((100%-80px)/6)] lg:w-[calc((100%-112px)/8)] xl:w-[calc((100%-112px)/8)] 2xl:w-[calc((100%-112px)/8)]';
     } else if (variant === 'wishlist') {
-      // Mobile: 2 cards shown with gap-3.5 (14px)
-      // Laptop: 5 cards shown with gap-4 (16px)
       responsiveWidthClass =
         'snap-start shrink-0 w-[calc((100%-14px)/2)] min-[500px]:w-[calc((100%-28px)/3)] md:w-[calc((100%-48px)/4)] lg:w-[calc((100%-64px)/5)] xl:w-[calc((100%-64px)/5)] 2xl:w-[calc((100%-64px)/5)]';
     } else {
-      // Default: mobile 2 cards, laptop 5-6 cards
       responsiveWidthClass =
         'snap-start shrink-0 w-[calc((100%-14px)/2)] min-[500px]:w-[calc((100%-28px)/3)] md:w-[calc((100%-48px)/4)] lg:w-[calc((100%-64px)/5)] xl:w-[calc((100%-80px)/6)] 2xl:w-[calc((100%-100px)/7)]';
     }
@@ -93,10 +89,10 @@ export const ListingCard: React.FC<ListingCardProps> = ({
 
   return (
     <article
-      className={`group relative flex flex-col text-left rounded-[16px] sm:rounded-[20px] ${responsiveWidthClass}`}
+      className={`group relative flex flex-col text-left rounded-[16px] sm:rounded-[20px] transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-1 ${responsiveWidthClass}`}
     >
-      {/* Rounded Square Photo Frame matching Screenshot_2026-11-04_at_2.23.12_AM */}
-      <div className="relative w-full aspect-[1.05/1] rounded-[16px] sm:rounded-[20px] overflow-hidden bg-slate-100">
+      {/* Rounded Square Photo Frame */}
+      <div className="relative w-full aspect-[1.05/1] rounded-[16px] sm:rounded-[20px] overflow-hidden bg-slate-100 shadow-[0_2px_8px_rgba(0,0,0,0.04)] group-hover:shadow-[0_8px_20px_rgba(0,0,0,0.1)] transition-shadow duration-300">
         <button
           type="button"
           aria-label={`View details for ${item.title}`}
@@ -106,14 +102,14 @@ export const ListingCard: React.FC<ListingCardProps> = ({
           <ListingImage
             src={item.image}
             alt={item.title}
-            className="w-full h-full object-cover object-center scale-[1.035] group-hover:scale-[1.075] transition-transform duration-300"
+            className="w-full h-full object-cover object-center scale-[1.02] group-hover:scale-[1.08] transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
           />
         </button>
 
         {/* Top-Left "Guest favorite" Pill */}
         {item.guestFavorite && (
           <span
-            className={`absolute top-2 left-2 sm:top-3 sm:left-3 z-10 bg-white/95 backdrop-blur-xs text-slate-900 font-semibold rounded-full shadow-[0_2px_8px_rgba(0,0,0,0.12)] leading-tight pointer-events-none ${
+            className={`absolute top-2 left-2 sm:top-3 sm:left-3 z-10 bg-white/95 backdrop-blur-xs text-slate-900 font-semibold rounded-full shadow-[0_2px_8px_rgba(0,0,0,0.12)] leading-tight pointer-events-none transition-transform duration-200 group-hover:scale-[1.02] ${
               variant === 'recent'
                 ? 'hidden sm:inline-block text-[11px] px-2 py-0.5'
                 : 'text-[11px] sm:text-[12px] px-2.5 sm:px-3 py-0.5 sm:py-1'
@@ -123,15 +119,18 @@ export const ListingCard: React.FC<ListingCardProps> = ({
           </span>
         )}
 
-        {/* Top-Right 1-Click Interactive Heart Button */}
-        <button
+        {/* Top-Right 1-Click Interactive Heart Button with spring physics */}
+        <motion.button
           type="button"
           title={isSaved ? 'Remove from Wishlist' : 'Save to Wishlist'}
           aria-label={
             isSaved ? `Remove ${item.title} from wishlist` : `Save ${item.title} to wishlist`
           }
+          whileHover={{ scale: 1.15 }}
+          whileTap={{ scale: 0.82 }}
+          transition={{ type: 'spring', stiffness: 450, damping: 22 }}
           onClick={(e) => onToggleWishlist(e, item)}
-          className={`absolute top-1.5 right-1.5 sm:top-2 sm:right-2 z-20 flex items-center justify-center rounded-full cursor-pointer hover:scale-110 active:scale-90 transition-transform ${
+          className={`absolute top-1.5 right-1.5 sm:top-2 sm:right-2 z-20 flex items-center justify-center rounded-full cursor-pointer ${
             variant === 'recent'
               ? 'min-w-[32px] min-h-[32px] sm:min-w-[40px] sm:min-h-[40px]'
               : 'min-w-[40px] min-h-[40px]'
@@ -141,13 +140,13 @@ export const ListingCard: React.FC<ListingCardProps> = ({
             size={variant === 'recent' ? 18 : 22}
             className={
               showCrimsonHeart
-                ? 'fill-[#C72B62] text-white stroke-[2] drop-shadow-[0_1px_4px_rgba(0,0,0,0.3)]'
+                ? 'fill-[#C72B62] text-white stroke-[2] drop-shadow-[0_1px_4px_rgba(0,0,0,0.3)] transition-colors duration-200'
                 : isSaved
-                ? 'fill-black/50 hover:fill-[#C72B62] text-white stroke-[2] drop-shadow-[0_1px_4px_rgba(0,0,0,0.28)]'
-                : 'fill-black/20 hover:fill-[#C72B62] text-white/95 stroke-[2] drop-shadow-[0_1px_4px_rgba(0,0,0,0.28)]'
+                ? 'fill-black/50 hover:fill-[#C72B62] text-white stroke-[2] drop-shadow-[0_1px_4px_rgba(0,0,0,0.28)] transition-colors duration-200'
+                : 'fill-black/20 hover:fill-[#C72B62] text-white/95 stroke-[2] drop-shadow-[0_1px_4px_rgba(0,0,0,0.28)] transition-colors duration-200'
             }
           />
-        </button>
+        </motion.button>
       </div>
 
       {/* Clean Unboxed Metadata Underneath Photo */}
