@@ -1175,79 +1175,100 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
         </div>
 
           {/* POPOVER 1: WHERE */}
-          {activePopover === 'where' && (
-            <div
-              className={`hidden md:block absolute left-0 right-0 mx-auto md:left-1/4 md:-translate-x-1/4 md:mx-0 w-full max-w-[480px] bg-white rounded-3xl shadow-[0_16px_48px_rgba(15,23,42,0.16)] border border-slate-200 p-5 z-40 text-left transition-all ${
-                shouldCollapse ? 'top-[50px] sm:top-[56px]' : 'top-[66px] sm:top-[74px]'
-              }`}
-            >
-              <SearchLocationPanel
-                whereQuery={whereQuery}
-                onSelectLocation={(chosen) => {
-                  onWhereChange(chosen);
-                  onSetActivePopover('when');
-                }}
-                onClear={() => onWhereChange('')}
-                onClose={() => onSetActivePopover(null)}
-              />
-            </div>
-          )}
+          <AnimatePresence>
+            {activePopover === 'where' && (
+              <motion.div
+                key="popover-where"
+                initial={{ opacity: 0, y: 12, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 8, scale: 0.98 }}
+                transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+                className={`hidden md:block absolute left-0 right-0 mx-auto md:left-1/4 md:-translate-x-1/4 md:mx-0 w-full max-w-[480px] bg-white rounded-3xl shadow-[0_16px_48px_rgba(15,23,42,0.16)] border border-slate-200 p-5 z-40 text-left ${
+                  shouldCollapse ? 'top-[50px] sm:top-[56px]' : 'top-[66px] sm:top-[74px]'
+                }`}
+              >
+                <SearchLocationPanel
+                  whereQuery={whereQuery}
+                  onSelectLocation={(chosen) => {
+                    onWhereChange(chosen);
+                    onSetActivePopover('when');
+                  }}
+                  onClear={() => onWhereChange('')}
+                  onClose={() => onSetActivePopover(null)}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* POPOVER 2: WHEN (Two-month calendar on Desktop) */}
-          {activePopover === 'when' && (
-            <div
-              className={`hidden md:block absolute left-0 right-0 mx-auto md:left-1/2 md:-translate-x-1/2 md:mx-0 w-full max-w-[760px] bg-white rounded-3xl shadow-[0_16px_48px_rgba(15,23,42,0.16)] border border-slate-200 p-6 z-40 text-left transition-all ${
-                shouldCollapse ? 'top-[50px] sm:top-[56px]' : 'top-[66px] sm:top-[74px]'
-              }`}
-            >
-              <SearchCalendar
-                checkInDate={checkInIso || null}
-                checkOutDate={checkOutIso || null}
-                onSelectRange={(start, end, display, nights) => {
-                  if (onSelectDateRange) {
-                    onSelectDateRange(start, end, display, nights);
-                  } else {
-                    onSelectDates({
-                      id: `range-${start}-${end}`,
-                      label: display,
-                      display: display,
-                      nights: nights,
-                      tag: `${display} · ${nights} night${nights > 1 ? 's' : ''}`,
-                    });
-                  }
-                }}
-                onClear={() => {
-                  if (onClearDates) {
-                    onClearDates();
-                  } else {
-                    onSelectDates(DATE_OPTIONS[0]);
-                  }
-                }}
-                onClose={() => onSetActivePopover(null)}
-                onNext={() => onSetActivePopover('who')}
-                isMobileSheet={false}
-              />
-            </div>
-          )}
+          <AnimatePresence>
+            {activePopover === 'when' && (
+              <motion.div
+                key="popover-when"
+                initial={{ opacity: 0, y: 12, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 8, scale: 0.98 }}
+                transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+                className={`hidden md:block absolute left-0 right-0 mx-auto md:left-1/2 md:-translate-x-1/2 md:mx-0 w-full max-w-[760px] bg-white rounded-3xl shadow-[0_16px_48px_rgba(15,23,42,0.16)] border border-slate-200 p-6 z-40 text-left ${
+                  shouldCollapse ? 'top-[50px] sm:top-[56px]' : 'top-[66px] sm:top-[74px]'
+                }`}
+              >
+                <SearchCalendar
+                  checkInDate={checkInIso || null}
+                  checkOutDate={checkOutIso || null}
+                  onSelectRange={(start, end, display, nights) => {
+                    if (onSelectDateRange) {
+                      onSelectDateRange(start, end, display, nights);
+                    } else {
+                      onSelectDates({
+                        id: `range-${start}-${end}`,
+                        label: display,
+                        display: display,
+                        nights: nights,
+                        tag: `${display} · ${nights} night${nights > 1 ? 's' : ''}`,
+                      });
+                    }
+                  }}
+                  onClear={() => {
+                    if (onClearDates) {
+                      onClearDates();
+                    } else {
+                      onSelectDates(DATE_OPTIONS[0]);
+                    }
+                  }}
+                  onClose={() => onSetActivePopover(null)}
+                  onNext={() => onSetActivePopover('who')}
+                  isMobileSheet={false}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* POPOVER 3: WHO */}
-          {activePopover === 'who' && (
-            <div
-              className={`hidden md:block absolute left-0 right-0 mx-auto md:left-auto md:mx-0 md:right-16 w-full max-w-[400px] bg-white rounded-3xl shadow-[0_16px_48px_rgba(15,23,42,0.16)] border border-slate-200 p-5 z-40 text-left transition-all ${
-                shouldCollapse ? 'top-[50px] sm:top-[56px]' : 'top-[66px] sm:top-[74px]'
-              }`}
-            >
-              <SearchGuestSelector
-                adults={adults}
-                childrenCount={childrenCount}
-                infants={infants}
-                pets={pets}
-                onChangeGuestCount={onChangeGuestCount}
-                onClear={onClearGuests}
-                onApply={() => onSetActivePopover(null)}
-              />
-            </div>
-          )}
+          <AnimatePresence>
+            {activePopover === 'who' && (
+              <motion.div
+                key="popover-who"
+                initial={{ opacity: 0, y: 12, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 8, scale: 0.98 }}
+                transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+                className={`hidden md:block absolute left-0 right-0 mx-auto md:left-auto md:mx-0 md:right-16 w-full max-w-[400px] bg-white rounded-3xl shadow-[0_16px_48px_rgba(15,23,42,0.16)] border border-slate-200 p-5 z-40 text-left ${
+                  shouldCollapse ? 'top-[50px] sm:top-[56px]' : 'top-[66px] sm:top-[74px]'
+                }`}
+              >
+                <SearchGuestSelector
+                  adults={adults}
+                  childrenCount={childrenCount}
+                  infants={infants}
+                  pets={pets}
+                  onChangeGuestCount={onChangeGuestCount}
+                  onClear={onClearGuests}
+                  onApply={() => onSetActivePopover(null)}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
 

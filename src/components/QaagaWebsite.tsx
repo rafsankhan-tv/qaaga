@@ -49,6 +49,7 @@ import {
   readSyncLocalBranding,
   reconcileBrandingOnLoad,
 } from '@/lib/brandingStorage.client';
+import { smoothScrollTo } from './SmoothScrollProvider';
 import {
   CollectionExplorerModal,
   HelpCenterModal,
@@ -825,9 +826,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
     setIsAdminOpen(false);
     setIsMessagesOpen(false);
     setExplorerCollection(null);
-    if (typeof window !== 'undefined') {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
+    smoothScrollTo(0, { duration: 1.0 });
     navigateTo('/');
   }, [navigateTo]);
 
@@ -836,7 +835,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
     setSubFilter('all');
     setActivePopover(null);
     if (typeof window !== 'undefined' && window.scrollY > 80) {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      smoothScrollTo(0, { duration: 1.0 });
     }
     if (cat === 'stay') {
       navigateTo('/rooms');
@@ -928,16 +927,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
     }
     setActivePopover(null);
     setSearchSubmitted(true);
-    if (typeof window !== 'undefined') {
-      window.setTimeout(() => {
-        const target = document.getElementById('qaaga-listings-canvas');
-        if (target) {
-          const navOffset = 90;
-          const targetY = target.getBoundingClientRect().top + window.pageYOffset - navOffset;
-          window.scrollTo({ top: targetY > 0 ? targetY : 0, behavior: 'smooth' });
-        }
-      }, 50);
-    }
+    smoothScrollTo('#qaaga-listings-canvas', { offset: -90, duration: 1.1 });
   };
 
   const handleToggleWishlist = (e: React.MouseEvent, item: QaagaListing) => {
@@ -1437,7 +1427,8 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
 
               <div
                 ref={recentCarouselRef}
-                className="flex gap-3 sm:gap-3.5 lg:gap-4 overflow-x-auto scrollbar-none snap-x snap-mandatory pb-1"
+                data-lenis-prevent
+                className="flex gap-3 sm:gap-3.5 lg:gap-4 overflow-x-auto scrollbar-none snap-x snap-mandatory scroll-smooth pb-1"
               >
                 {recentlyViewedListings.map((item) => (
                   <ListingCard
@@ -1521,7 +1512,8 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
               ) : (
                 <div
                   ref={wishlistCarouselRef}
-                  className="flex gap-3.5 sm:gap-4 overflow-x-auto scrollbar-none snap-x snap-mandatory pb-1"
+                  data-lenis-prevent
+                  className="flex gap-3.5 sm:gap-4 overflow-x-auto scrollbar-none snap-x snap-mandatory scroll-smooth pb-1"
                 >
                   {wishlistListings.map((item) => (
                     <ListingCard
@@ -1594,7 +1586,8 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
 
               <div
                 ref={popularCarouselRef}
-                className="flex gap-3.5 sm:gap-4 overflow-x-auto scrollbar-none snap-x snap-mandatory pb-1"
+                data-lenis-prevent
+                className="flex gap-3.5 sm:gap-4 overflow-x-auto scrollbar-none snap-x snap-mandatory scroll-smooth pb-1"
               >
                 {popularKLListings.map((item) => (
                   <ListingCard
@@ -1669,7 +1662,8 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
 
               <div
                 ref={curatedCarouselRef}
-                className="flex gap-3.5 sm:gap-4 overflow-x-auto scrollbar-none snap-x snap-mandatory pb-1"
+                data-lenis-prevent
+                className="flex gap-3.5 sm:gap-4 overflow-x-auto scrollbar-none snap-x snap-mandatory scroll-smooth pb-1"
               >
                 {curatedExperiencesAndServices.map((item) => (
                   <ListingCard
@@ -1730,7 +1724,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
             </div>
 
             {/* Clean Interactive Filter Controls */}
-            <div className="flex items-center gap-2 overflow-x-auto scrollbar-none pb-1">
+            <div data-lenis-prevent className="flex items-center gap-2 overflow-x-auto scrollbar-none scroll-smooth pb-1">
               {(activeCategory === 'stay'
                 ? STAY_SUBFILTERS
                 : activeCategory === 'experiences'
@@ -1824,7 +1818,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
                         setActiveCategory('all');
                         setWhereQuery(hood);
                         setSearchSubmitted(true);
-                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                        smoothScrollTo(0, { duration: 1.0 });
                       }}
                       className="hover:text-[#C72B62] hover:underline cursor-pointer"
                     >

@@ -727,3 +727,674 @@ export async function updateUserRoleInDatabase(
   }
   return true;
 }
+
+/* ========================================================================= */
+/* 7. PROPERTY ADVANCED OPERATIONS & AVAILABILITY                            */
+/* ========================================================================= */
+export interface PropertyRecord extends QaagaListing {
+  hostEmail?: string;
+  propertyType?: string;
+  roomType?: string;
+  priceDaily?: number;
+  priceWeekly?: number;
+  priceMonthly?: number;
+  status?: 'active' | 'inactive' | 'pending_approval' | 'rejected';
+  isFeatured?: boolean;
+  facilities?: Record<string, boolean>;
+  createdAt?: string;
+}
+
+export async function getPropertiesByHost(hostEmail: string): Promise<PropertyRecord[]> {
+  const cleanEmail = hostEmail.trim().toLowerCase();
+  const supabase = getSupabase();
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('properties')
+        .select('*')
+        .eq('host_email', cleanEmail)
+        .order('created_at', { ascending: false });
+
+      if (!error && Array.isArray(data) && data.length > 0) {
+        return data.map((row) => ({
+          ...mapDbListingToModel(row),
+          hostEmail: row.host_email,
+          propertyType: row.property_type,
+          roomType: row.room_type,
+          priceDaily: Number(row.price_daily) || Math.round(row.two_night_price_usd / 2),
+          priceWeekly: Number(row.price_weekly) || undefined,
+          priceMonthly: Number(row.price_monthly) || undefined,
+          status: row.status || 'active',
+          isFeatured: Boolean(row.is_featured),
+          facilities: row.facilities || {},
+          createdAt: row.created_at,
+        }));
+      }
+    } catch (err) {
+      console.warn('Notice: Properties by host fetch fallback:', err);
+    }
+  }
+  return [];
+}
+
+export async function updatePropertyStatus(
+  id: string,
+  status: 'active' | 'inactive' | 'pending_approval' | 'rejected'
+): Promise<boolean> {
+  const supabase = getSupabase();
+  if (supabase) {
+    try {
+      const { error } = await supabase
+        .from('properties')
+        .update({ status, updated_at: new Date().toISOString() })
+        .eq('id', id);
+      return !error;
+    } catch {
+      return false;
+    }
+  }
+  return true;
+}
+
+export async function checkPropertyAvailability(
+  propertyId: string,
+  checkInDate: string,
+  checkOutDate: string
+): Promise<{ isAvailable: boolean; conflictReason?: string }> {
+  const supabase = getSupabase();
+  if (!supabase) return { isAvailable: true };
+
+  try {
+    // 1. Check for overlapping confirmed or accepted bookings
+    const { data: bookings, error: bookingErr } = await supabase
+      .from('bookings')
+      .select('id, check_in, check_out, status')
+      .eq('property_id', propertyId)
+      .in('status', ['Confirmed', 'Accepted', 'Pending']);
+
+    if (!bookingErr && Array.isArray(bookings)) {
+      const inTime = new Date(checkInDate).getTime();
+      const outTime = new Date(checkOutDate).getTime();
+
+      for (const b of bookings) {
+        const bIn = new Date(b.check_in).getTime();
+        const bOut = new Date(b.check_out).getTime();
+        if (inTime < bOut && outTime > bIn) {
+          return {
+            isAvailable: false,
+            conflictReason: `Dates conflict with existing reservation (${b.check_in} to ${b.check_out})`,
+          };
+        }
+      }
+    }
+
+    // 2. Check for manual blocked dates in property_availability
+    const { data: blocked, error: blockErr } = await supabase
+      .from('property_availability')
+      .select('date, is_available')
+      .eq('property_id', propertyId)
+      .eq('is_available', false)
+      .gte('date', checkInDate)
+      .lte('date', checkOutDate);
+
+    if (!blockErr && Array.isArray(blocked) && blocked.length > 0) {
+      return {
+        isAvailable: false,
+        conflictReason: 'Selected dates include dates manually blocked by the host.',
+      };
+    }
+
+    return { isAvailable: true };
+  } catch {
+    return { isAvailable: true };
+  }
+}
+
+/* ========================================================================= */
+/* 8. HOST INCOMING BOOKINGS & STATUS MANAGEMENT                            */
+/* ========================================================================= */
+export async function getBookingsForHost(hostEmail: string): Promise<any[]> {
+  const cleanEmail = hostEmail.trim().toLowerCase();
+  const supabase = getSupabase();
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('bookings')
+        .select('*')
+        .or(`host_email.eq.${cleanEmail},host_name.ilike.%${cleanEmail}%`)
+        .order('created_at', { ascending: false });
+
+      if (!error && Array.isArray(data)) {
+        return data.map((b) => ({
+          id: b.id,
+          confirmationCode: b.confirmation_code,
+          propertyId: b.property_id || b.listing_id,
+          title: b.title,
+          area: b.area,
+          image: b.image,
+          customerEmail: b.customer_email || b.guest_email,
+          customerName: b.customer_name || b.guest_name,
+          customerPhone: b.customer_phone,
+          checkIn: b.check_in,
+          checkOut: b.check_out,
+          checkInLabel: b.check_in_label,
+          nights: Number(b.nights) || 1,
+          guests: Number(b.guests) || 1,
+          totalUsd: Number(b.total_usd) || 100,
+          status: b.status || 'Pending',
+          cancellationReason: b.cancellation_reason,
+          createdAt: b.created_at,
+        }));
+      }
+    } catch (err) {
+      console.warn('Notice: Host bookings fetch error:', err);
+    }
+  }
+  return [];
+}
+
+export async function updateBookingStatus(
+  bookingId: string,
+  status: 'Pending' | 'Confirmed' | 'Accepted' | 'Rejected' | 'Cancelled' | 'Completed',
+  reason?: string,
+  cancelledBy?: string
+): Promise<boolean> {
+  const supabase = getSupabase();
+  if (supabase) {
+    try {
+      const payload: Record<string, any> = {
+        status,
+        updated_at: new Date().toISOString(),
+      };
+      if (reason) payload.cancellation_reason = reason;
+      if (cancelledBy) {
+        payload.cancelled_by = cancelledBy;
+        payload.cancelled_at = new Date().toISOString();
+      }
+
+      const { error } = await supabase
+        .from('bookings')
+        .update(payload)
+        .eq('id', bookingId);
+
+      return !error;
+    } catch {
+      return false;
+    }
+  }
+  return true;
+}
+
+/* ========================================================================= */
+/* 9. PAYMENT RECORDS & PROOF UPLOADS (Direct Guest-to-Host)                */
+/* ========================================================================= */
+export interface PaymentProofRecord {
+  id: string;
+  bookingId: string;
+  amount: number;
+  currency: string;
+  paymentMethod: string;
+  transactionReference: string;
+  proofImageUrl: string;
+  payerName: string;
+  payerEmail: string;
+  status: 'pending_review' | 'verified' | 'rejected';
+  hostNotes?: string;
+  adminNotes?: string;
+  createdAt: string;
+}
+
+export async function submitPaymentProof(data: {
+  bookingId: string;
+  amount: number;
+  currency?: string;
+  paymentMethod: string;
+  transactionReference: string;
+  proofImageUrl: string;
+  payerName: string;
+  payerEmail: string;
+}): Promise<PaymentProofRecord | null> {
+  const supabase = getSupabase();
+  const id = `pay-${Date.now()}`;
+  const now = new Date().toISOString();
+
+  const record: PaymentProofRecord = {
+    id,
+    bookingId: data.bookingId,
+    amount: data.amount,
+    currency: data.currency || 'USD',
+    paymentMethod: data.paymentMethod,
+    transactionReference: data.transactionReference,
+    proofImageUrl: data.proofImageUrl,
+    payerName: data.payerName,
+    payerEmail: data.payerEmail,
+    status: 'pending_review',
+    createdAt: now,
+  };
+
+  if (supabase) {
+    try {
+      const { data: inserted, error } = await supabase
+        .from('payment_records')
+        .insert({
+          booking_id: data.bookingId,
+          amount: data.amount,
+          currency: data.currency || 'USD',
+          payment_method: data.paymentMethod,
+          transaction_reference: data.transactionReference,
+          proof_image_url: data.proofImageUrl,
+          payer_name: data.payerName,
+          payer_email: data.payerEmail,
+          status: 'pending_review',
+        })
+        .select()
+        .single();
+
+      if (!error && inserted) {
+        return {
+          id: inserted.id,
+          bookingId: inserted.booking_id,
+          amount: Number(inserted.amount),
+          currency: inserted.currency,
+          paymentMethod: inserted.payment_method,
+          transactionReference: inserted.transaction_reference,
+          proofImageUrl: inserted.proof_image_url,
+          payerName: inserted.payer_name,
+          payerEmail: inserted.payer_email,
+          status: inserted.status,
+          createdAt: inserted.created_at,
+        };
+      }
+    } catch (err) {
+      console.warn('Notice: Supabase payment record insert notice:', err);
+    }
+  }
+
+  // Local storage fallback for seamless client preview
+  if (typeof window !== 'undefined') {
+    try {
+      const existing = JSON.parse(localStorage.getItem('qaaga_payment_records') || '[]');
+      localStorage.setItem('qaaga_payment_records', JSON.stringify([record, ...existing]));
+    } catch {}
+  }
+
+  return record;
+}
+
+export async function getPaymentProofs(bookingId?: string): Promise<PaymentProofRecord[]> {
+  const supabase = getSupabase();
+  if (supabase) {
+    try {
+      let query = supabase.from('payment_records').select('*').order('created_at', { ascending: false });
+      if (bookingId) query = query.eq('booking_id', bookingId);
+      const { data, error } = await query;
+      if (!error && Array.isArray(data)) {
+        return data.map((p) => ({
+          id: p.id,
+          bookingId: p.booking_id,
+          amount: Number(p.amount),
+          currency: p.currency || 'USD',
+          paymentMethod: p.payment_method,
+          transactionReference: p.transaction_reference,
+          proofImageUrl: p.proof_image_url,
+          payerName: p.payer_name,
+          payerEmail: p.payer_email,
+          status: p.status,
+          hostNotes: p.host_notes,
+          adminNotes: p.admin_notes,
+          createdAt: p.created_at,
+        }));
+      }
+    } catch (err) {
+      console.warn('Notice: Payment records query error:', err);
+    }
+  }
+
+  if (typeof window !== 'undefined') {
+    try {
+      const saved = JSON.parse(localStorage.getItem('qaaga_payment_records') || '[]');
+      if (bookingId) return saved.filter((s: any) => s.bookingId === bookingId);
+      return saved;
+    } catch {}
+  }
+  return [];
+}
+
+export async function updatePaymentProofStatus(
+  id: string,
+  status: 'pending_review' | 'verified' | 'rejected',
+  notes?: string
+): Promise<boolean> {
+  const supabase = getSupabase();
+  if (supabase) {
+    try {
+      const { error } = await supabase
+        .from('payment_records')
+        .update({
+          status,
+          admin_notes: notes,
+          verified_at: status === 'verified' ? new Date().toISOString() : null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id);
+      return !error;
+    } catch {
+      return false;
+    }
+  }
+  return true;
+}
+
+/* ========================================================================= */
+/* 10. IDENTITY VERIFICATION SYSTEM                                         */
+/* ========================================================================= */
+export interface IdentityVerificationRecord {
+  id: string;
+  userEmail: string;
+  userName: string;
+  documentType: 'passport' | 'national_id' | 'driving_license';
+  documentFrontUrl: string;
+  documentBackUrl?: string;
+  selfieUrl?: string;
+  status: 'pending' | 'approved' | 'rejected';
+  rejectionReason?: string;
+  reviewedBy?: string;
+  reviewedAt?: string;
+  createdAt: string;
+}
+
+export async function submitIdentityVerification(data: {
+  userEmail: string;
+  userName: string;
+  documentType: 'passport' | 'national_id' | 'driving_license';
+  documentFrontUrl: string;
+  documentBackUrl?: string;
+  selfieUrl?: string;
+}): Promise<IdentityVerificationRecord | null> {
+  const cleanEmail = data.userEmail.trim().toLowerCase();
+  const supabase = getSupabase();
+  const now = new Date().toISOString();
+
+  const record: IdentityVerificationRecord = {
+    id: `idv-${Date.now()}`,
+    userEmail: cleanEmail,
+    userName: data.userName,
+    documentType: data.documentType,
+    documentFrontUrl: data.documentFrontUrl,
+    documentBackUrl: data.documentBackUrl,
+    selfieUrl: data.selfieUrl,
+    status: 'pending',
+    createdAt: now,
+  };
+
+  if (supabase) {
+    try {
+      const { data: inserted, error } = await supabase
+        .from('identity_verifications')
+        .insert({
+          user_email: cleanEmail,
+          user_name: data.userName,
+          document_type: data.documentType,
+          document_front_url: data.documentFrontUrl,
+          document_back_url: data.documentBackUrl || null,
+          selfie_url: data.selfieUrl || null,
+          status: 'pending',
+        })
+        .select()
+        .single();
+
+      if (!error && inserted) {
+        // Also update profiles table identity_status
+        await supabase
+          .from('profiles')
+          .update({ identity_status: 'pending', updated_at: now })
+          .eq('email', cleanEmail);
+
+        return {
+          id: inserted.id,
+          userEmail: inserted.user_email,
+          userName: inserted.user_name,
+          documentType: inserted.document_type,
+          documentFrontUrl: inserted.document_front_url,
+          documentBackUrl: inserted.document_back_url,
+          selfieUrl: inserted.selfie_url,
+          status: inserted.status,
+          createdAt: inserted.created_at,
+        };
+      }
+    } catch (err) {
+      console.warn('Notice: Supabase identity verification submit error:', err);
+    }
+  }
+
+  // Local storage fallback
+  if (typeof window !== 'undefined') {
+    try {
+      const existing = JSON.parse(localStorage.getItem('qaaga_verifications') || '[]');
+      localStorage.setItem('qaaga_verifications', JSON.stringify([record, ...existing]));
+    } catch {}
+  }
+
+  return record;
+}
+
+export async function getIdentityVerifications(
+  userEmail?: string
+): Promise<IdentityVerificationRecord[]> {
+  const supabase = getSupabase();
+  if (supabase) {
+    try {
+      let query = supabase.from('identity_verifications').select('*').order('created_at', { ascending: false });
+      if (userEmail) query = query.eq('user_email', userEmail.trim().toLowerCase());
+      const { data, error } = await query;
+      if (!error && Array.isArray(data)) {
+        return data.map((v) => ({
+          id: v.id,
+          userEmail: v.user_email,
+          userName: v.user_name,
+          documentType: v.document_type,
+          documentFrontUrl: v.document_front_url,
+          documentBackUrl: v.document_back_url,
+          selfieUrl: v.selfie_url,
+          status: v.status,
+          rejectionReason: v.rejection_reason,
+          reviewedBy: v.reviewed_by,
+          reviewedAt: v.reviewed_at,
+          createdAt: v.created_at,
+        }));
+      }
+    } catch (err) {
+      console.warn('Notice: Identity verifications query fallback:', err);
+    }
+  }
+
+  if (typeof window !== 'undefined') {
+    try {
+      const saved = JSON.parse(localStorage.getItem('qaaga_verifications') || '[]');
+      if (userEmail) return saved.filter((s: any) => s.userEmail === userEmail);
+      return saved;
+    } catch {}
+  }
+  return [];
+}
+
+export async function updateIdentityVerificationStatus(
+  id: string,
+  userEmail: string,
+  status: 'approved' | 'rejected',
+  rejectionReason?: string,
+  reviewedBy: string = 'Super Admin'
+): Promise<boolean> {
+  const supabase = getSupabase();
+  const cleanEmail = userEmail.trim().toLowerCase();
+  const now = new Date().toISOString();
+
+  if (supabase) {
+    try {
+      await supabase
+        .from('identity_verifications')
+        .update({
+          status,
+          rejection_reason: rejectionReason || null,
+          reviewed_by: reviewedBy,
+          reviewed_at: now,
+          updated_at: now,
+        })
+        .eq('id', id);
+
+      await supabase
+        .from('profiles')
+        .update({
+          identity_status: status === 'approved' ? 'verified' : 'rejected',
+          verified: status === 'approved',
+          updated_at: now,
+        })
+        .eq('email', cleanEmail);
+
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/* ========================================================================= */
+/* 11. DYNAMIC CALCULATED ADMIN PLATFORM STATISTICS                          */
+/* ========================================================================= */
+export interface AdminPlatformStats {
+  totalUsers: number;
+  totalHosts: number;
+  totalProperties: number;
+  activeProperties: number;
+  totalBookings: number;
+  confirmedBookings: number;
+  pendingBookings: number;
+  totalGrossRevenueUsd: number;
+  pendingVerifications: number;
+  pendingPayments: number;
+}
+
+export async function getAdminPlatformStats(): Promise<AdminPlatformStats> {
+  const supabase = getSupabase();
+  if (supabase) {
+    try {
+      const [
+        { count: userCount },
+        { count: hostCount },
+        { data: props },
+        { data: allBookings },
+        { count: pendingIdCount },
+        { count: pendingPayCount },
+      ] = await Promise.all([
+        supabase.from('profiles').select('*', { count: 'exact', head: true }),
+        supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'host'),
+        supabase.from('properties').select('id, status'),
+        supabase.from('bookings').select('id, total_usd, status'),
+        supabase.from('identity_verifications').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
+        supabase.from('payment_records').select('*', { count: 'exact', head: true }).eq('status', 'pending_review'),
+      ]);
+
+      const properties = Array.isArray(props) ? props : [];
+      const bookingsList = Array.isArray(allBookings) ? allBookings : [];
+
+      const activeProps = properties.filter((p) => p.status === 'active').length;
+      const confirmed = bookingsList.filter((b) => b.status === 'Confirmed' || b.status === 'Accepted').length;
+      const pending = bookingsList.filter((b) => b.status === 'Pending').length;
+      const totalRevenue = bookingsList
+        .filter((b) => b.status !== 'Cancelled' && b.status !== 'Rejected')
+        .reduce((sum, b) => sum + (Number(b.total_usd) || 0), 0);
+
+      return {
+        totalUsers: Math.max(userCount || 0, INITIAL_USERS.length),
+        totalHosts: hostCount || 0,
+        totalProperties: properties.length || INITIAL_LISTINGS.length,
+        activeProperties: activeProps || INITIAL_LISTINGS.length,
+        totalBookings: bookingsList.length || INITIAL_BOOKINGS.length,
+        confirmedBookings: confirmed || INITIAL_BOOKINGS.filter((b) => b.status === 'Confirmed').length,
+        pendingBookings: pending,
+        totalGrossRevenueUsd: totalRevenue || INITIAL_BOOKINGS.reduce((acc, b) => acc + (b.totalUsd || 0), 0),
+        pendingVerifications: pendingIdCount || 0,
+        pendingPayments: pendingPayCount || 0,
+      };
+    } catch (err) {
+      console.warn('Notice: Calculating dynamic platform stats fallback:', err);
+    }
+  }
+
+  // Fallback calculated from base data
+  const totalRevenue = INITIAL_BOOKINGS.reduce((acc, b) => acc + (b.totalUsd || 0), 0);
+  return {
+    totalUsers: INITIAL_USERS.length,
+    totalHosts: INITIAL_USERS.filter((u) => u.role === 'host').length,
+    totalProperties: INITIAL_LISTINGS.length,
+    activeProperties: INITIAL_LISTINGS.length,
+    totalBookings: INITIAL_BOOKINGS.length,
+    confirmedBookings: INITIAL_BOOKINGS.filter((b) => b.status === 'Confirmed').length,
+    pendingBookings: 0,
+    totalGrossRevenueUsd: totalRevenue,
+    pendingVerifications: 0,
+    pendingPayments: 0,
+  };
+}
+
+/* ========================================================================= */
+/* 12. NOTIFICATIONS MANAGEMENT                                              */
+/* ========================================================================= */
+export async function getNotificationsFromDatabase(
+  recipientEmail: string
+): Promise<any[]> {
+  const cleanEmail = recipientEmail.trim().toLowerCase();
+  const supabase = getSupabase();
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('recipient_email', cleanEmail)
+        .order('created_at', { ascending: false });
+
+      if (!error && Array.isArray(data) && data.length > 0) {
+        return data.map((n) => ({
+          id: n.id,
+          title: n.title,
+          desc: n.message,
+          time: new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          read: Boolean(n.read),
+          link: n.link,
+          type: n.type,
+        }));
+      }
+    } catch (err) {
+      console.warn('Notice: Notifications query fallback:', err);
+    }
+  }
+  return [];
+}
+
+export async function createNotificationInDatabase(
+  recipientEmail: string,
+  title: string,
+  message: string,
+  type: string = 'system',
+  link?: string
+): Promise<boolean> {
+  const supabase = getSupabase();
+  if (supabase) {
+    try {
+      const { error } = await supabase.from('notifications').insert({
+        recipient_email: recipientEmail.trim().toLowerCase(),
+        title,
+        message,
+        type,
+        link,
+      });
+      return !error;
+    } catch {
+      return false;
+    }
+  }
+  return true;
+}
+

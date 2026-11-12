@@ -15,6 +15,34 @@ const SmoothScrollContext = createContext<SmoothScrollContextType>({
 
 export const useSmoothScroll = () => useContext(SmoothScrollContext);
 
+/**
+ * Universal helper to smoothly scroll to any element, selector, or Y position using Lenis if available
+ */
+export const smoothScrollTo = (
+  target: string | number | HTMLElement,
+  options?: { offset?: number; duration?: number; immediate?: boolean }
+) => {
+  if (typeof window === 'undefined') return;
+  const lenis = (window as any).__lenis as Lenis | undefined;
+  if (lenis) {
+    lenis.scrollTo(target, {
+      offset: options?.offset ?? -80,
+      duration: options?.duration ?? 1.1,
+      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+      immediate: options?.immediate ?? false,
+    });
+  } else {
+    if (typeof target === 'number') {
+      window.scrollTo({ top: target, behavior: 'smooth' });
+    } else if (typeof target === 'string') {
+      const el = document.querySelector(target);
+      if (el) el.scrollIntoView({ behavior: 'smooth' });
+    } else if (target instanceof HTMLElement) {
+      target.scrollIntoView({ behavior: 'smooth' });
+    }
+  }
+};
+
 interface SmoothScrollProviderProps {
   children: ReactNode;
 }
@@ -23,28 +51,27 @@ export const SmoothScrollProvider: React.FC<SmoothScrollProviderProps> = ({ chil
   const lenisRef = useRef<Lenis | null>(null);
 
   useEffect(() => {
-    // Respect user's motion preference
     if (typeof window === 'undefined') return;
-    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (prefersReducedMotion) return;
 
-    // Initialize Lenis for natural, fluid momentum scrolling
+    // Initialize Lenis for natural, fluid momentum scrolling throughout the entire site
     const lenis = new Lenis({
-      duration: 1.1,
+      autoRaf: true,
+      duration: 1.15,
       easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)), // Natural cubic ease-out
       orientation: 'vertical',
       gestureOrientation: 'vertical',
       smoothWheel: true,
-      wheelMultiplier: 0.9,
-      touchMultiplier: 1.5,
-      infinite: false,
+      wheelMultiplier: 1.0,
+      touchMultiplier: 1.6,
+      anchors: true,
       prevent: (node) => {
-        // Prevent Lenis smooth scrolling inside modals, bottom sheets, and scrollable panels
+        // Prevent hijacking inside modals, bottom sheets, dropdowns, and scrollable panels
         return (
           node.hasAttribute('data-lenis-prevent') ||
           node.closest('[data-lenis-prevent]') !== null ||
           node.classList.contains('modal-scroll') ||
-          node.closest('.modal-scroll') !== null
+          node.closest('.modal-scroll') !== null ||
+          node.hasAttribute('data-radix-scroll-area-viewport')
         );
       },
     });
@@ -52,15 +79,33 @@ export const SmoothScrollProvider: React.FC<SmoothScrollProviderProps> = ({ chil
     lenisRef.current = lenis;
     (window as any).__lenis = lenis;
 
-    let rafId: number;
-    const raf = (time: number) => {
-      lenis.raf(time);
-      rafId = requestAnimationFrame(raf);
+    // Apply Lenis classes to documentElement
+    document.documentElement.classList.add('lenis', 'lenis-smooth');
+
+    // Intercept native window.scrollTo({ behavior: 'smooth' }) so all existing codebase calls glide via Lenis
+    const originalScrollTo = window.scrollTo.bind(window);
+    const patchedScrollTo: typeof window.scrollTo = (optionsOrX: any, y?: any) => {
+      if (typeof optionsOrX === 'object' && optionsOrX !== null) {
+        if (optionsOrX.behavior === 'smooth') {
+          const top = optionsOrX.top ?? window.scrollY;
+          lenis.scrollTo(top, {
+            duration: 1.1,
+            easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+          });
+          return;
+        }
+        originalScrollTo(optionsOrX);
+      } else if (typeof optionsOrX === 'number' && typeof y === 'number') {
+        originalScrollTo(optionsOrX, y);
+      } else {
+        originalScrollTo(optionsOrX);
+      }
     };
-    rafId = requestAnimationFrame(raf);
+    window.scrollTo = patchedScrollTo;
 
     return () => {
-      cancelAnimationFrame(rafId);
+      window.scrollTo = originalScrollTo;
+      document.documentElement.classList.remove('lenis', 'lenis-smooth');
       lenis.destroy();
       lenisRef.current = null;
       delete (window as any).__lenis;
@@ -68,23 +113,7 @@ export const SmoothScrollProvider: React.FC<SmoothScrollProviderProps> = ({ chil
   }, []);
 
   const scrollTo = (target: string | number | HTMLElement, options?: Record<string, any>) => {
-    if (lenisRef.current) {
-      lenisRef.current.scrollTo(target, {
-        offset: -80,
-        duration: 1.0,
-        easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
-        ...options,
-      });
-    } else if (typeof window !== 'undefined') {
-      if (typeof target === 'number') {
-        window.scrollTo({ top: target, behavior: 'smooth' });
-      } else if (typeof target === 'string') {
-        const el = document.querySelector(target);
-        if (el) el.scrollIntoView({ behavior: 'smooth' });
-      } else if (target instanceof HTMLElement) {
-        target.scrollIntoView({ behavior: 'smooth' });
-      }
-    }
+    smoothScrollTo(target, options);
   };
 
   return (
