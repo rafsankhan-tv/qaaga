@@ -72,7 +72,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
     profile.bio ||
       'Travel enthusiast exploring Southeast Asia. Focused on design-forward apartments and skyline views in Kuala Lumpur.'
   );
-  const [formRole, setFormRole] = useState<'guest' | 'host' | 'admin'>(
+  const [formRole, setFormRole] = useState<'customer' | 'guest' | 'host' | 'admin'>(
     profile.role || 'guest'
   );
   const [formAvatar, setFormAvatar] = useState(profile.avatarUrl || '');

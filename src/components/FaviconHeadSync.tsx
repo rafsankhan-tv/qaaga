@@ -150,11 +150,22 @@ export function FaviconHeadSync({
       }
     };
 
-    reconcileBrandingOnLoad(initialBranding).then((resolved) => {
-      if (!cancelled) {
-        syncFavicon(resolved.faviconUrl);
-      }
-    });
+    const runSync = () => {
+      reconcileBrandingOnLoad(initialBranding).then((resolved) => {
+        if (!cancelled) {
+          syncFavicon(resolved.faviconUrl);
+        }
+      });
+    };
+
+    let idleHandle: number | undefined;
+    let timerHandle: ReturnType<typeof setTimeout> | undefined;
+    const win = typeof window !== 'undefined' ? (window as any) : null;
+    if (win && typeof win.requestIdleCallback === 'function') {
+      idleHandle = win.requestIdleCallback(runSync, { timeout: 1500 });
+    } else if (typeof globalThis !== 'undefined') {
+      timerHandle = globalThis.setTimeout(runSync, 250);
+    }
 
     const onBrandingUpdated = (evt: Event) => {
       const custom = evt as CustomEvent<SiteBranding | undefined>;
@@ -173,6 +184,12 @@ export function FaviconHeadSync({
     window.addEventListener('storage', onBrandingUpdated);
     return () => {
       cancelled = true;
+      if (idleHandle !== undefined && typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
+        (window as any).cancelIdleCallback(idleHandle);
+      }
+      if (timerHandle !== undefined && typeof window !== 'undefined') {
+        window.clearTimeout(timerHandle);
+      }
       window.removeEventListener('qaaga-branding-updated', onBrandingUpdated);
       window.removeEventListener('storage', onBrandingUpdated);
     };

@@ -669,7 +669,7 @@ export const ProfileModal: React.FC<{
   const [email, setEmail] = useState(profile.email);
   const [city, setCity] = useState(profile.city);
   const [phone, setPhone] = useState(profile.phone || '');
-  const [role, setRole] = useState<'guest' | 'host' | 'admin'>(profile.role || 'guest');
+  const [role, setRole] = useState<'customer' | 'guest' | 'host' | 'admin'>(profile.role || 'guest');
   const [bio, setBio] = useState(profile.bio || '');
   const [avatarUrl, setAvatarUrl] = useState(profile.avatarUrl || '');
 

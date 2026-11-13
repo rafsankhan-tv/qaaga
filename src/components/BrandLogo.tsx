@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { DEFAULT_SITE_LOGO_URL, LogoSizePreset, SiteBranding } from '@/data/listings';
 
 const HEADER_SIZE_CLASSES: Record<LogoSizePreset, string> = {
@@ -22,7 +23,7 @@ interface BrandLogoProps {
   variant?: 'header' | 'footer';
 }
 
-export const BrandLogo: React.FC<BrandLogoProps> = ({
+export const BrandLogo: React.FC<BrandLogoProps> = React.memo(({
   branding,
   variant = 'header',
 }) => {
@@ -41,17 +42,39 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
         ? HEADER_SIZE_CLASSES[branding.size]
         : FOOTER_SIZE_CLASSES[branding.size];
 
+    const sharedClasses = `${sizeClasses} w-auto object-contain object-left select-none transition-transform duration-200 ${
+      branding.blendMultiply
+        ? 'mix-blend-multiply brightness-[1.02] contrast-[1.04]'
+        : ''
+    } ${isDefaultScreenshotAsset ? '-ml-2 sm:-ml-2.5' : ''}`;
+
+    const isInlineUri =
+      branding.logoUrl.startsWith('data:') || branding.logoUrl.startsWith('blob:');
+
+    if (isInlineUri) {
+      return (
+        <img
+          src={branding.logoUrl}
+          alt={branding.altText || 'qaaga.com'}
+          referrerPolicy="no-referrer"
+          decoding="async"
+          onError={() => setImgFailed(true)}
+          className={sharedClasses}
+        />
+      );
+    }
+
     return (
-      <img
+      <Image
         src={branding.logoUrl}
         alt={branding.altText || 'qaaga.com'}
+        width={225}
+        height={68}
+        sizes="225px"
+        priority={variant === 'header'}
         referrerPolicy="no-referrer"
         onError={() => setImgFailed(true)}
-        className={`${sizeClasses} w-auto object-contain object-left select-none transition-all ${
-          branding.blendMultiply
-            ? 'mix-blend-multiply brightness-[1.02] contrast-[1.04]'
-            : ''
-        } ${isDefaultScreenshotAsset ? '-ml-2 sm:-ml-2.5' : ''}`}
+        className={sharedClasses}
       />
     );
   }
@@ -91,4 +114,6 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
       )}
     </span>
   );
-};
+});
+
+BrandLogo.displayName = 'BrandLogo';

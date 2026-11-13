@@ -1,17 +1,17 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import dynamic from 'next/dynamic';
+import Link from 'next/link';
+import { ShieldAlert, ArrowLeft, KeyRound } from 'lucide-react';
 import {
   DEFAULT_BRANDING,
   SiteBranding,
   GuestProfile,
-  INITIAL_LISTINGS,
-  INITIAL_BOOKINGS,
   QaagaListing,
   BookingRecord,
   SUPER_ADMIN_EMAIL,
 } from '@/data/listings';
-import { AdminPanelModal } from '@/components/AdminPanelModal';
 import {
   persistBrandingEverywhere,
   readSyncLocalBranding,
@@ -21,22 +21,34 @@ import {
   getListingsFromDatabase,
   getBookingsFromDatabase,
 } from '@/lib/supabaseService';
-import { ShieldAlert, ArrowLeft, KeyRound } from 'lucide-react';
-import Link from 'next/link';
+import { DashboardSkeleton } from '@/components/Skeletons';
+
+const AdminPanelModal = dynamic(
+  () => import('@/components/AdminPanelModal').then((m) => m.AdminPanelModal),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="min-h-screen bg-slate-50 py-6">
+        <DashboardSkeleton />
+      </div>
+    ),
+  }
+);
 
 export default function AdminPage() {
   const [branding, setBranding] = useState<SiteBranding>(DEFAULT_BRANDING);
   const brandingRef = useRef<SiteBranding>(DEFAULT_BRANDING);
   const [userProfile, setUserProfile] = useState<GuestProfile | null>(null);
-  const [isAuthorized, setIsAuthorized] = useState<boolean>(true); // default true, checks on mount
-  const [listings, setListings] = useState<QaagaListing[]>(INITIAL_LISTINGS);
-  const [bookings, setBookings] = useState<BookingRecord[]>(INITIAL_BOOKINGS);
+  const [isAuthorized, setIsAuthorized] = useState<boolean>(true);
+  const [listings, setListings] = useState<QaagaListing[]>([]);
+  const [bookings, setBookings] = useState<BookingRecord[]>([]);
 
   useEffect(() => {
     brandingRef.current = branding;
   }, [branding]);
 
   useEffect(() => {
+    let active = true;
     try {
       const stored = localStorage.getItem('qaaga_v3_profile');
       if (stored) {
@@ -53,24 +65,27 @@ export default function AdminPage() {
       // ignore
     }
 
-    getListingsFromDatabase().then((dbListings) => {
-      if (dbListings && dbListings.length > 0) setListings(dbListings);
-    });
-
-    getBookingsFromDatabase().then((dbBookings) => {
-      if (dbBookings && dbBookings.length > 0) setBookings(dbBookings);
-    });
-
     const syncLocal = readSyncLocalBranding();
     if (syncLocal) {
       setBranding(syncLocal);
       brandingRef.current = syncLocal;
     }
 
-    reconcileBrandingOnLoad().then((resolved) => {
-      setBranding(resolved);
-      brandingRef.current = resolved;
+    Promise.all([
+      getListingsFromDatabase(),
+      getBookingsFromDatabase(),
+      reconcileBrandingOnLoad(),
+    ]).then(([dbListings, dbBookings, resolvedBranding]) => {
+      if (!active) return;
+      setListings(dbListings || []);
+      setBookings(dbBookings || []);
+      setBranding(resolvedBranding);
+      brandingRef.current = resolvedBranding;
     });
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   const persistBranding = useCallback(async (next: SiteBranding) => {
@@ -127,6 +142,7 @@ export default function AdminPage() {
         <div className="flex items-center gap-3 mt-6">
           <Link
             href="/"
+            prefetch={true}
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition-colors"
           >
             <ArrowLeft size={14} />
@@ -157,3 +173,4 @@ export default function AdminPage() {
     />
   );
 }
+

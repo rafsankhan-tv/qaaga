@@ -1,7 +1,6 @@
 import { QaagaWebsite } from '@/components/QaagaWebsite';
 import { readServerBranding } from '@/lib/brandingStorage.server';
-import { INITIAL_LISTINGS } from '@/data/listings';
-import { notFound } from 'next/navigation';
+import { getListingByIdFromDatabase } from '@/lib/supabaseService';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,13 +10,15 @@ interface RoomDetailsProps {
 
 export async function generateMetadata({ params }: RoomDetailsProps) {
   const { id } = await params;
-  const listing = INITIAL_LISTINGS.find((item) => item.id === id);
+  const listing = await getListingByIdFromDatabase(id);
   if (!listing) {
     return { title: 'Room Details — QAAGA Super Marketplace' };
   }
   return {
     title: `${listing.title} — ${listing.area}, ${listing.city} · QAAGA`,
-    description: listing.description || `Book ${listing.title} on qaaga.com. ${listing.bedrooms}, top amenities and skyline views.`,
+    description:
+      listing.description ||
+      `Book ${listing.title} on qaaga.com. ${listing.bedrooms}, top amenities and skyline views.`,
   };
 }
 

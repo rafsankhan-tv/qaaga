@@ -20,6 +20,7 @@ import {
   Plus,
   Power,
   Shield,
+  ShieldCheck,
   Trash2,
   Upload,
   User,
@@ -29,10 +30,10 @@ import {
   XCircle,
 } from 'lucide-react';
 import { BrandLogo } from '@/components/BrandLogo';
+import { ListingImage } from '@/components/ListingCard';
 import {
   DEFAULT_BRANDING,
   GuestProfile,
-  INITIAL_LISTINGS,
   QaagaListing,
   SiteBranding,
 } from '@/data/listings';
@@ -83,7 +84,10 @@ export default function HostDashboard({
   const [properties, setProperties] = useState<PropertyRecord[]>([]);
   const [loadingProps, setLoadingProps] = useState(true);
   const [bookings, setBookings] = useState<any[]>([]);
+  const [loadingBookings, setLoadingBookings] = useState(true);
   const [payments, setPayments] = useState<PaymentProofRecord[]>([]);
+  const [loadingPayments, setLoadingPayments] = useState(true);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   // Add / Edit Property Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -135,35 +139,33 @@ export default function HostDashboard({
       if (p) setHostProfile({ ...p, role: 'host' });
     });
 
-    // Fetch Host Properties
+    // Fetch Host Properties, Incoming Bookings & Payments in parallel
     setLoadingProps(true);
-    getPropertiesByHost(currentEmail).then((res) => {
-      if (res && res.length > 0) {
-        setProperties(res);
-      } else {
-        // Show demo host initial property if database is fresh
-        const fallbackProps: PropertyRecord[] = INITIAL_LISTINGS.slice(0, 3).map((item) => ({
-          ...item,
-          hostEmail: currentEmail,
-          propertyType: 'Apartment',
-          priceDaily: Math.round(item.twoNightPriceUsd / 2),
-          status: 'active',
-          facilities: { wifi: true, ac: true, kitchen: true, pool: true },
-        }));
-        setProperties(fallbackProps);
-      }
-      setLoadingProps(false);
-    });
+    setLoadingBookings(true);
+    setLoadingPayments(true);
+    let active = true;
 
-    // Fetch Incoming Bookings
-    getBookingsForHost(currentEmail).then((bks) => {
-      setBookings(bks);
-    });
+    Promise.all([
+      getPropertiesByHost(currentEmail),
+      getBookingsForHost(currentEmail),
+      getPaymentProofs(),
+    ])
+      .then(([res, bks, allPays]) => {
+        if (!active) return;
+        setProperties(res || []);
+        setBookings(bks || []);
+        setPayments(allPays || []);
+      })
+      .finally(() => {
+        if (!active) return;
+        setLoadingProps(false);
+        setLoadingBookings(false);
+        setLoadingPayments(false);
+      });
 
-    // Fetch Payment Proofs
-    getPaymentProofs().then((all) => {
-      setPayments(all);
-    });
+    return () => {
+      active = false;
+    };
   }, []);
 
   // Toggle Property Availability (Active / Inactive)
@@ -176,10 +178,11 @@ export default function HostDashboard({
   };
 
   // Delete Property
-  const handleDeleteProperty = async (id: string) => {
-    if (!confirm('Are you sure you want to permanently delete this property listing?')) return;
-    await deleteListingFromDatabase(id);
-    setProperties((prev) => prev.filter((p) => p.id !== id));
+  const handleConfirmDeleteProperty = async () => {
+    if (!deleteConfirmId) return;
+    await deleteListingFromDatabase(deleteConfirmId);
+    setProperties((prev) => prev.filter((p) => p.id !== deleteConfirmId));
+    setDeleteConfirmId(null);
   };
 
   // Upload Photo to Supabase Storage
@@ -313,13 +316,14 @@ export default function HostDashboard({
           <div className="flex items-center gap-4">
             <Link
               href="/"
+              prefetch={true}
               className="inline-flex items-center gap-2 text-xs font-bold text-slate-600 hover:text-slate-900 transition-colors"
             >
               <ArrowLeft size={16} />
               <span>Back to Marketplace</span>
             </Link>
             <div className="h-5 w-px bg-slate-200" />
-            <BrandLogo branding={branding} size="sm" />
+            <BrandLogo branding={branding} variant="header" />
           </div>
 
           <div className="flex items-center gap-3">
@@ -331,15 +335,25 @@ export default function HostDashboard({
                 setDescription('');
                 setIsAddModalOpen(true);
               }}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#C72B62] hover:bg-[#ad2253] text-white text-xs font-bold transition-all shadow-sm"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#C72B62] hover:bg-[#ad2253] text-white text-xs font-bold transition-colors shadow-sm cursor-pointer"
             >
               <Plus size={15} />
               <span>Add Apartment / Room</span>
             </button>
 
             <Link
+              href="/properties"
+              prefetch={true}
+              className="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 transition-colors"
+            >
+              <Home size={14} />
+              <span>All Properties</span>
+            </Link>
+
+            <Link
               href="/user/dashboard"
-              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700"
+              prefetch={true}
+              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 transition-colors"
             >
               <User size={14} />
               <span>Customer View</span>
@@ -477,8 +491,15 @@ export default function HostDashboard({
             </div>
 
             {loadingProps ? (
-              <div className="py-12 text-center text-xs text-slate-400">
-                Loading your properties from Supabase...
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                {Array.from({ length: 3 }).map((_, idx) => (
+                  <div key={idx} className="bg-white rounded-3xl border border-slate-200 overflow-hidden p-4 space-y-3">
+                    <div className="w-full aspect-video rounded-2xl qaaga-skeleton" />
+                    <div className="h-4 w-2/3 rounded-md qaaga-skeleton" />
+                    <div className="h-3.5 w-1/2 rounded-md qaaga-skeleton" />
+                    <div className="h-8 w-full rounded-xl qaaga-skeleton" />
+                  </div>
+                ))}
               </div>
             ) : properties.length === 0 ? (
               <div className="bg-white rounded-2xl p-10 text-center border border-slate-200">
@@ -490,7 +511,7 @@ export default function HostDashboard({
                 <button
                   type="button"
                   onClick={() => setIsAddModalOpen(true)}
-                  className="px-4 py-2 rounded-xl bg-[#C72B62] text-white text-xs font-bold"
+                  className="px-4 py-2 rounded-xl bg-[#C72B62] hover:bg-[#ad2253] text-white text-xs font-bold cursor-pointer transition-colors"
                 >
                   Publish First Apartment
                 </button>
@@ -506,9 +527,10 @@ export default function HostDashboard({
                     >
                       <div>
                         <div className="relative aspect-video">
-                          <img
+                          <ListingImage
                             src={prop.image}
                             alt={prop.title}
+                            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                             className="w-full h-full object-cover"
                           />
                           <div className="absolute top-3 right-3 flex items-center gap-1.5">
@@ -576,8 +598,8 @@ export default function HostDashboard({
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleDeleteProperty(prop.id)}
-                            className="w-8 h-8 rounded-lg hover:bg-rose-50 flex items-center justify-center text-rose-600"
+                            onClick={() => setDeleteConfirmId(prop.id)}
+                            className="w-8 h-8 rounded-lg hover:bg-rose-50 flex items-center justify-center text-rose-600 cursor-pointer transition-colors"
                             title="Delete Listing"
                           >
                             <Trash2 size={14} />
@@ -600,7 +622,13 @@ export default function HostDashboard({
               Review guest reservations, accept or reject bookings, view contact numbers
             </p>
 
-            {bookings.length === 0 ? (
+            {loadingBookings ? (
+              <div className="space-y-3">
+                {Array.from({ length: 3 }).map((_, idx) => (
+                  <div key={idx} className="h-28 rounded-2xl qaaga-skeleton" />
+                ))}
+              </div>
+            ) : bookings.length === 0 ? (
               <div className="bg-white rounded-2xl p-10 text-center border border-slate-200">
                 <Clock size={28} className="text-slate-400 mx-auto mb-2" />
                 <h3 className="text-sm font-bold text-slate-800">No incoming booking requests</h3>
@@ -696,7 +724,13 @@ export default function HostDashboard({
               Inspect bank transfers, Wise receipts, and eWallet slips submitted by your guests.
             </p>
 
-            {payments.length === 0 ? (
+            {loadingPayments ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {Array.from({ length: 3 }).map((_, idx) => (
+                  <div key={idx} className="h-56 rounded-2xl qaaga-skeleton" />
+                ))}
+              </div>
+            ) : payments.length === 0 ? (
               <div className="bg-white rounded-2xl p-10 text-center border border-slate-200">
                 <DollarSign size={28} className="text-slate-400 mx-auto mb-2" />
                 <h3 className="text-sm font-bold text-slate-800">No payment proofs submitted yet</h3>
@@ -728,11 +762,15 @@ export default function HostDashboard({
 
                     <div
                       onClick={() => setViewPaymentProof(p)}
-                      className="aspect-video rounded-xl overflow-hidden bg-slate-100 border border-slate-200 cursor-pointer group"
+                      className="aspect-video rounded-xl overflow-hidden bg-slate-100 border border-slate-200 cursor-pointer group relative"
                     >
                       <img
                         src={p.proofImageUrl}
                         alt="Payment Receipt"
+                        width={400}
+                        height={225}
+                        decoding="async"
+                        referrerPolicy="no-referrer"
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                       />
                     </div>
@@ -786,19 +824,48 @@ export default function HostDashboard({
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="p-4 rounded-2xl border border-slate-200 bg-white">
-                <p className="text-xs font-bold text-slate-500">Base Daily Rate</p>
-                <p className="text-2xl font-black text-slate-900 mt-1">$65 USD</p>
-                <span className="text-[11px] text-slate-400">Standard weeknight rate</span>
+                <p className="text-xs font-bold text-slate-500">Average Daily Rate</p>
+                <p className="text-2xl font-black text-slate-900 mt-1">
+                  {properties.length > 0
+                    ? `$${Math.round(
+                        properties.reduce(
+                          (sum, p) => sum + (p.priceDaily || Math.round(p.twoNightPriceUsd / 2)),
+                          0
+                        ) / properties.length
+                      )} USD`
+                    : '—'}
+                </p>
+                <span className="text-[11px] text-slate-400">
+                  {properties.length > 0 ? `Across ${properties.length} hosted properties` : 'Add a property to set rates'}
+                </span>
               </div>
               <div className="p-4 rounded-2xl border border-slate-200 bg-white">
-                <p className="text-xs font-bold text-slate-500">Weekly Discount (7+ nights)</p>
-                <p className="text-2xl font-black text-emerald-600 mt-1">15% OFF</p>
-                <span className="text-[11px] text-slate-400">Auto-calculated: ~$390 / week</span>
+                <p className="text-xs font-bold text-slate-500">Weekly Rate Average (7+ nights)</p>
+                <p className="text-2xl font-black text-emerald-600 mt-1">
+                  {properties.length > 0
+                    ? `$${Math.round(
+                        properties.reduce(
+                          (sum, p) => sum + (p.priceWeekly || (p.priceDaily || 65) * 6),
+                          0
+                        ) / properties.length
+                      )} USD`
+                    : '—'}
+                </p>
+                <span className="text-[11px] text-slate-400">Configured per listing</span>
               </div>
               <div className="p-4 rounded-2xl border border-slate-200 bg-white">
-                <p className="text-xs font-bold text-slate-500">Monthly Furnished Stay (30+ nights)</p>
-                <p className="text-2xl font-black text-[#C72B62] mt-1">30% OFF</p>
-                <span className="text-[11px] text-slate-400">Auto-calculated: ~$1,400 / month</span>
+                <p className="text-xs font-bold text-slate-500">Monthly Furnished Average</p>
+                <p className="text-2xl font-black text-[#C72B62] mt-1">
+                  {properties.length > 0
+                    ? `$${Math.round(
+                        properties.reduce(
+                          (sum, p) => sum + (p.priceMonthly || (p.priceDaily || 65) * 24),
+                          0
+                        ) / properties.length
+                      )} USD`
+                    : '—'}
+                </p>
+                <span className="text-[11px] text-slate-400">Long-stay monthly furnished rate</span>
               </div>
             </div>
           </div>
@@ -1125,7 +1192,7 @@ export default function HostDashboard({
               <button
                 type="button"
                 onClick={() => setViewPaymentProof(null)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer"
               >
                 Close
               </button>
@@ -1133,11 +1200,39 @@ export default function HostDashboard({
                 <button
                   type="button"
                   onClick={() => handleVerifyPayment(viewPaymentProof.id)}
-                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold"
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer"
                 >
                   Verify Payment
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Confirm Delete Property */}
+      {deleteConfirmId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-md p-6 space-y-4">
+            <h3 className="text-base font-bold text-slate-900">Delete Property Listing?</h3>
+            <p className="text-xs text-slate-500">
+              This will permanently remove the property listing from Supabase. This action cannot be undone.
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmId(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteProperty}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-sm cursor-pointer"
+              >
+                Delete Listing
+              </button>
             </div>
           </div>
         </div>

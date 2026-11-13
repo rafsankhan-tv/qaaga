@@ -1,16 +1,73 @@
 import { getSupabase } from './supabaseClient';
 import {
   BookingRecord,
-  DEFAULT_REVIEWS,
   GuestProfile,
   HostThread,
-  INITIAL_BOOKINGS,
-  INITIAL_LISTINGS,
-  INITIAL_THREADS,
-  INITIAL_USERS,
   ListingReview,
   QaagaListing,
 } from '@/data/listings';
+
+/* ========================================================================= */
+/* 0. REQUEST DEDUPLICATION & SHORT-TTL RESPONSE CACHE                       */
+/* ========================================================================= */
+export type FetchStatus = 'ok' | 'empty' | 'error';
+
+export interface ServiceResult<T> {
+  data: T;
+  status: FetchStatus;
+  error?: string;
+}
+
+const inFlightRequests = new Map<string, Promise<any>>();
+const responseCache = new Map<string, { data: any; timestamp: number }>();
+
+async function dedupFetch<T>(
+  key: string,
+  fetcher: () => Promise<T>,
+  ttlMs = 15000
+): Promise<T> {
+  const cached = responseCache.get(key);
+  if (cached && Date.now() - cached.timestamp < ttlMs) {
+    return cached.data as T;
+  }
+
+  const existingPromise = inFlightRequests.get(key);
+  if (existingPromise) {
+    return existingPromise as Promise<T>;
+  }
+
+  const promise = fetcher()
+    .then((result) => {
+      // Only cache non-error results (or short cache when result isn't an explicit error)
+      const isErrorResult =
+        result &&
+        typeof result === 'object' &&
+        'status' in (result as any) &&
+        (result as any).status === 'error';
+      if (!isErrorResult) {
+        responseCache.set(key, { data: result, timestamp: Date.now() });
+      }
+      return result;
+    })
+    .finally(() => {
+      inFlightRequests.delete(key);
+    });
+
+  inFlightRequests.set(key, promise);
+  return promise;
+}
+
+export function invalidateServiceCache(prefix?: string): void {
+  if (!prefix) {
+    responseCache.clear();
+    return;
+  }
+  for (const key of responseCache.keys()) {
+    if (key.startsWith(prefix)) {
+      responseCache.delete(key);
+    }
+  }
+}
 
 /**
  * Normalizes DB column naming (snake_case) to QaagaListing (camelCase)
@@ -21,14 +78,19 @@ function mapDbListingToModel(row: any): QaagaListing {
     title: row.title || 'Untitled Listing',
     area: row.area || 'Kuala Lumpur',
     city: row.city || 'Kuala Lumpur',
-    subType: row.sub_type || 'Apartment',
+    subType: row.sub_type || row.property_type || 'Apartment',
     category: row.category || 'stay',
-    twoNightPriceUsd: Number(row.two_night_price_usd) || 120,
+    twoNightPriceUsd:
+      Number(row.two_night_price_usd) ||
+      (Number(row.price_daily) ? Number(row.price_daily) * 2 : 120),
     rating: String(row.rating || '5.0'),
     reviewsCount: Number(row.reviews_count) || 0,
-    guestFavorite: Boolean(row.guest_favorite),
+    guestFavorite: Boolean(row.guest_favorite ?? row.is_featured),
     image: row.image || '/assets/kl-ui/kl-1.jpg',
-    gallery: Array.isArray(row.gallery) && row.gallery.length > 0 ? row.gallery : [row.image || '/assets/kl-ui/kl-1.jpg'],
+    gallery:
+      Array.isArray(row.gallery) && row.gallery.length > 0
+        ? row.gallery
+        : [row.image || '/assets/kl-ui/kl-1.jpg'],
     maxGuests: Number(row.max_guests) || 2,
     bedrooms: row.bedrooms || '1 bedroom',
     hostName: row.host_name || 'Host',
@@ -68,31 +130,83 @@ function mapModelToDbListing(model: QaagaListing): Record<string, any> {
 }
 
 /* ========================================================================= */
-/* 1. LISTINGS DATABASE OPERATIONS                                           */
+/* 1. LISTINGS DATABASE OPERATIONS (REAL SUPABASE, ZERO FAKE FALLBACKS)      */
 /* ========================================================================= */
-export async function getListingsFromDatabase(): Promise<QaagaListing[]> {
-  const supabase = getSupabase();
-  if (!supabase) return INITIAL_LISTINGS;
-
-  try {
-    const { data, error } = await supabase
-      .from('listings')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (!error && Array.isArray(data) && data.length > 0) {
-      return data.map(mapDbListingToModel);
+export async function fetchListingsWithStatus(): Promise<ServiceResult<QaagaListing[]>> {
+  return dedupFetch('listings:all', async () => {
+    const supabase = getSupabase();
+    if (!supabase) {
+      return { data: [], status: 'error', error: 'Supabase client is not configured.' };
     }
-  } catch (err) {
-    console.warn('Notice: Remote Supabase listings table read fallback:', err);
-  }
 
-  return INITIAL_LISTINGS;
+    try {
+      const [listingsRes, propsRes] = await Promise.all([
+        supabase.from('listings').select('*').order('created_at', { ascending: false }),
+        supabase
+          .from('properties')
+          .select('*')
+          .eq('status', 'active')
+          .order('created_at', { ascending: false }),
+      ]);
+
+      const mergedMap = new Map<string, QaagaListing>();
+
+      if (!listingsRes.error && Array.isArray(listingsRes.data)) {
+        for (const row of listingsRes.data) {
+          if (row.is_active === false) continue;
+          const mapped = mapDbListingToModel(row);
+          mergedMap.set(mapped.id, mapped);
+        }
+      }
+
+      if (!propsRes.error && Array.isArray(propsRes.data)) {
+        for (const row of propsRes.data) {
+          const mapped = mapDbListingToModel(row);
+          if (!mergedMap.has(mapped.id)) {
+            mergedMap.set(mapped.id, mapped);
+          }
+        }
+      }
+
+      if (listingsRes.error && propsRes.error) {
+        return {
+          data: [],
+          status: 'error',
+          error: listingsRes.error.message || propsRes.error.message,
+        };
+      }
+
+      const items = Array.from(mergedMap.values());
+      return {
+        data: items,
+        status: items.length > 0 ? 'ok' : 'empty',
+      };
+    } catch (err: any) {
+      return {
+        data: [],
+        status: 'error',
+        error: err?.message || 'Unable to reach Supabase listings table.',
+      };
+    }
+  });
+}
+
+export async function getListingsFromDatabase(): Promise<QaagaListing[]> {
+  const res = await fetchListingsWithStatus();
+  return res.data;
+}
+
+export async function getListingByIdFromDatabase(id: string): Promise<QaagaListing | null> {
+  const res = await fetchListingsWithStatus();
+  return res.data.find((item) => item.id === id) || null;
 }
 
 export async function insertListingToDatabase(
   listing: QaagaListing
 ): Promise<QaagaListing> {
+  invalidateServiceCache('listings:');
+  invalidateServiceCache('host_props:');
+  invalidateServiceCache('admin:stats');
   const supabase = getSupabase();
   if (!supabase) return listing;
 
@@ -108,60 +222,85 @@ export async function insertListingToDatabase(
       return mapDbListingToModel(data);
     }
   } catch (err) {
-    console.warn('Notice: Supabase listing insert fallback:', err);
+    console.warn('Notice: Supabase listing insert notice:', err);
   }
 
   return listing;
 }
 
 export async function deleteListingFromDatabase(id: string): Promise<boolean> {
+  invalidateServiceCache('listings:');
+  invalidateServiceCache('host_props:');
+  invalidateServiceCache('admin:stats');
   const supabase = getSupabase();
-  if (!supabase) return true;
+  if (!supabase) return false;
 
   try {
-    const { error } = await supabase.from('listings').delete().eq('id', id);
-    return !error;
+    const [{ error: err1 }, { error: err2 }] = await Promise.all([
+      supabase.from('listings').delete().eq('id', id),
+      supabase.from('properties').delete().eq('id', id),
+    ]);
+    return !err1 || !err2;
   } catch {
-    return true;
+    return false;
   }
 }
 
 /* ========================================================================= */
-/* 2. BOOKINGS DATABASE OPERATIONS                                           */
+/* 2. BOOKINGS DATABASE OPERATIONS (REAL SUPABASE)                           */
 /* ========================================================================= */
-export async function getBookingsFromDatabase(
+export async function fetchBookingsWithStatus(
   guestEmail?: string
-): Promise<BookingRecord[]> {
-  const supabase = getSupabase();
-  if (!supabase) return INITIAL_BOOKINGS;
-
-  try {
-    let query = supabase.from('bookings').select('*').order('created_at', { ascending: false });
-    if (guestEmail) {
-      query = query.eq('guest_email', guestEmail);
+): Promise<ServiceResult<BookingRecord[]>> {
+  const cacheKey = `bookings:${guestEmail ? guestEmail.trim().toLowerCase() : 'all'}`;
+  return dedupFetch(cacheKey, async () => {
+    const supabase = getSupabase();
+    if (!supabase) {
+      return { data: [], status: 'error', error: 'Supabase client unavailable.' };
     }
-    const { data, error } = await query;
-    if (!error && Array.isArray(data) && data.length > 0) {
-      return data.map((row: any) => ({
+
+    try {
+      let query = supabase
+        .from('bookings')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (guestEmail && guestEmail.trim()) {
+        query = query.eq('guest_email', guestEmail.trim().toLowerCase());
+      }
+      const { data, error } = await query;
+      if (error) {
+        return { data: [], status: 'error', error: error.message };
+      }
+      if (!Array.isArray(data) || data.length === 0) {
+        return { data: [], status: 'empty' };
+      }
+
+      const mapped: BookingRecord[] = data.map((row: any) => ({
         id: row.id,
         confirmationCode: row.confirmation_code,
-        listingId: row.listing_id,
+        listingId: row.listing_id || row.property_id,
         title: row.title,
         area: row.area,
-        image: row.image,
+        image: row.image || '/assets/kl-ui/kl-1.jpg',
         checkInLabel: row.check_in_label,
         nights: Number(row.nights) || 2,
         guests: Number(row.guests) || 1,
         totalUsd: Number(row.total_usd) || 100,
-        hostName: row.host_name,
+        hostName: row.host_name || 'Host',
         status: row.status || 'Confirmed',
       }));
+      return { data: mapped, status: 'ok' };
+    } catch (err: any) {
+      return { data: [], status: 'error', error: err?.message || 'Failed to fetch bookings.' };
     }
-  } catch (err) {
-    console.warn('Notice: Supabase bookings read fallback:', err);
-  }
+  });
+}
 
-  return INITIAL_BOOKINGS;
+export async function getBookingsFromDatabase(
+  guestEmail?: string
+): Promise<BookingRecord[]> {
+  const res = await fetchBookingsWithStatus(guestEmail);
+  return res.data;
 }
 
 export async function insertBookingToDatabase(
@@ -169,6 +308,9 @@ export async function insertBookingToDatabase(
   guestEmail: string,
   guestName: string
 ): Promise<BookingRecord> {
+  invalidateServiceCache('bookings:');
+  invalidateServiceCache('host_bookings:');
+  invalidateServiceCache('admin:stats');
   const supabase = getSupabase();
   if (!supabase) return booking;
 
@@ -177,7 +319,7 @@ export async function insertBookingToDatabase(
       id: booking.id,
       confirmation_code: booking.confirmationCode,
       listing_id: booking.listingId,
-      guest_email: guestEmail,
+      guest_email: guestEmail.trim().toLowerCase(),
       guest_name: guestName,
       title: booking.title,
       area: booking.area,
@@ -213,24 +355,38 @@ export async function insertBookingToDatabase(
       };
     }
   } catch (err) {
-    console.warn('Notice: Supabase booking insert fallback:', err);
+    console.warn('Notice: Supabase booking insert notice:', err);
   }
 
   return booking;
 }
 
-export async function cancelBookingInDatabase(id: string): Promise<boolean> {
+export async function cancelBookingInDatabase(
+  id: string,
+  reason?: string
+): Promise<boolean> {
+  invalidateServiceCache('bookings:');
+  invalidateServiceCache('host_bookings:');
+  invalidateServiceCache('admin:stats');
   const supabase = getSupabase();
-  if (!supabase) return true;
+  if (!supabase) return false;
 
   try {
+    const updatePayload: Record<string, any> = {
+      status: 'Cancelled',
+      updated_at: new Date().toISOString(),
+    };
+    if (reason) {
+      updatePayload.cancellation_reason = reason;
+      updatePayload.cancelled_at = new Date().toISOString();
+    }
     const { error } = await supabase
       .from('bookings')
-      .update({ status: 'Cancelled', updated_at: new Date().toISOString() })
+      .update(updatePayload)
       .eq('id', id);
     return !error;
   } catch {
-    return true;
+    return false;
   }
 }
 
@@ -240,40 +396,42 @@ export async function cancelBookingInDatabase(id: string): Promise<boolean> {
 export async function getReviewsFromDatabase(
   listingId: string
 ): Promise<ListingReview[]> {
-  const supabase = getSupabase();
-  const defaultReviews = DEFAULT_REVIEWS[listingId] || [];
-  if (!supabase) return defaultReviews;
+  return dedupFetch(`reviews:${listingId}`, async () => {
+    const supabase = getSupabase();
+    if (!supabase) return [];
 
-  try {
-    const { data, error } = await supabase
-      .from('reviews')
-      .select('*')
-      .eq('listing_id', listingId)
-      .order('created_at', { ascending: false });
+    try {
+      const { data, error } = await supabase
+        .from('reviews')
+        .select('*')
+        .eq('listing_id', listingId)
+        .order('created_at', { ascending: false });
 
-    if (!error && Array.isArray(data) && data.length > 0) {
-      return data.map((r: any) => ({
-        id: String(r.id),
-        author: r.author,
-        date: new Date(r.created_at).toLocaleDateString('en-US', {
-          month: 'short',
-          year: 'numeric',
-        }),
-        rating: Number(r.rating) || 5,
-        comment: r.comment,
-      }));
+      if (!error && Array.isArray(data)) {
+        return data.map((r: any) => ({
+          id: String(r.id),
+          author: r.author,
+          date: new Date(r.created_at).toLocaleDateString('en-US', {
+            month: 'short',
+            year: 'numeric',
+          }),
+          rating: Number(r.rating) || 5,
+          comment: r.comment,
+        }));
+      }
+    } catch (err) {
+      console.warn('Notice: Supabase reviews query error:', err);
     }
-  } catch (err) {
-    console.warn('Notice: Supabase reviews read fallback:', err);
-  }
 
-  return defaultReviews;
+    return [];
+  });
 }
 
 export async function insertReviewToDatabase(
   listingId: string,
   review: { author: string; rating: number; comment: string }
 ): Promise<ListingReview> {
+  invalidateServiceCache(`reviews:${listingId}`);
   const supabase = getSupabase();
   const newReview: ListingReview = {
     id: `rev-${Date.now()}`,
@@ -310,7 +468,7 @@ export async function insertReviewToDatabase(
       };
     }
   } catch (err) {
-    console.warn('Notice: Supabase review insert fallback:', err);
+    console.warn('Notice: Supabase review insert error:', err);
   }
 
   return newReview;
@@ -319,22 +477,32 @@ export async function insertReviewToDatabase(
 /* ========================================================================= */
 /* 4. MESSAGES & INBOX OPERATIONS                                            */
 /* ========================================================================= */
-export async function getThreadsFromDatabase(): Promise<HostThread[]> {
-  const supabase = getSupabase();
-  if (!supabase) return INITIAL_THREADS;
+export async function fetchThreadsWithStatus(): Promise<ServiceResult<HostThread[]>> {
+  return dedupFetch('threads:all', async () => {
+    const supabase = getSupabase();
+    if (!supabase) {
+      return { data: [], status: 'error', error: 'Supabase unavailable.' };
+    }
 
-  try {
-    const { data: threadsData, error } = await supabase
-      .from('threads')
-      .select('*, messages(*)')
-      .order('updated_at', { ascending: false });
+    try {
+      const { data: threadsData, error } = await supabase
+        .from('threads')
+        .select('*, messages(*)')
+        .order('updated_at', { ascending: false });
 
-    if (!error && Array.isArray(threadsData) && threadsData.length > 0) {
-      return threadsData.map((t: any) => ({
+      if (error) {
+        return { data: [], status: 'error', error: error.message };
+      }
+
+      if (!Array.isArray(threadsData) || threadsData.length === 0) {
+        return { data: [], status: 'empty' };
+      }
+
+      const mapped: HostThread[] = threadsData.map((t: any) => ({
         id: t.id,
         hostName: t.host_name,
         listingTitle: t.listing_title,
-        listingImage: t.listing_image,
+        listingImage: t.listing_image || '/assets/kl-ui/kl-1.jpg',
         unread: Boolean(t.unread),
         messages: Array.isArray(t.messages)
           ? t.messages.map((m: any) => ({
@@ -345,20 +513,25 @@ export async function getThreadsFromDatabase(): Promise<HostThread[]> {
             }))
           : [],
       }));
+      return { data: mapped, status: 'ok' };
+    } catch (err: any) {
+      return { data: [], status: 'error', error: err?.message || 'Threads query error.' };
     }
-  } catch (err) {
-    console.warn('Notice: Supabase threads read fallback:', err);
-  }
+  });
+}
 
-  return INITIAL_THREADS;
+export async function getThreadsFromDatabase(): Promise<HostThread[]> {
+  const res = await fetchThreadsWithStatus();
+  return res.data;
 }
 
 export async function sendMessageToDatabase(
   threadId: string,
   message: { sender: 'host' | 'guest'; text: string; time: string }
 ): Promise<boolean> {
+  invalidateServiceCache('threads:');
   const supabase = getSupabase();
-  if (!supabase) return true;
+  if (!supabase) return false;
 
   try {
     const { error: msgErr } = await supabase.from('messages').insert({
@@ -378,12 +551,12 @@ export async function sendMessageToDatabase(
 
     return !msgErr;
   } catch {
-    return true;
+    return false;
   }
 }
 
 /* ========================================================================= */
-/* 5. STORAGE FILE UPLOAD (SUPABASE STORAGE WITH FALLBACK)                   */
+/* 5. STORAGE FILE UPLOAD (SUPABASE STORAGE)                                 */
 /* ========================================================================= */
 export async function uploadFileToSupabaseStorage(
   file: File,
@@ -400,7 +573,7 @@ export async function uploadFileToSupabaseStorage(
       const { data, error } = await supabase.storage
         .from(bucket)
         .upload(filePath, file, {
-          cacheControl: '3600',
+          cacheControl: '31536000',
           upsert: true,
         });
 
@@ -412,11 +585,10 @@ export async function uploadFileToSupabaseStorage(
         return { url: publicUrl };
       }
     } catch (err) {
-      console.warn('Supabase storage direct upload notice, using optimized reader:', err);
+      console.warn('Supabase storage upload notice, using inline reader:', err);
     }
   }
 
-  // Graceful local data URL fallback
   return new Promise((resolve) => {
     const reader = new FileReader();
     reader.onload = () => resolve({ url: String(reader.result) });
@@ -435,7 +607,6 @@ export async function uploadBrandingAssetToSupabase(
   const supabase = getSupabase();
 
   if (supabase) {
-    // Try primary branding bucket, fallback to public or custom
     const bucketsToTry = ['qaaga-branding', 'branding', 'public-assets', 'public'];
     const fileExt = (file.name.split('.').pop() || (type === 'favicon' ? 'ico' : 'png')).toLowerCase();
     const cleanFileName = `${type}-${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
@@ -445,7 +616,7 @@ export async function uploadBrandingAssetToSupabase(
         const { data, error } = await supabase.storage
           .from(b)
           .upload(cleanFileName, file, {
-            cacheControl: '3600',
+            cacheControl: '31536000',
             upsert: true,
             contentType: file.type || (fileExt === 'svg' ? 'image/svg+xml' : 'image/png'),
           });
@@ -459,13 +630,12 @@ export async function uploadBrandingAssetToSupabase(
             };
           }
         }
-      } catch (err) {
-        // Continue to next bucket or graceful fallback
+      } catch {
+        // Try next bucket
       }
     }
   }
 
-  // Graceful optimized data URL fallback with reliable reader
   return new Promise((resolve) => {
     const reader = new FileReader();
     reader.onload = () => {
@@ -486,6 +656,7 @@ export async function uploadBrandingAssetToSupabase(
 }
 
 export async function saveBrandingToSupabase(branding: any): Promise<any> {
+  invalidateServiceCache('branding:');
   const supabase = getSupabase();
   if (!supabase) return branding;
 
@@ -525,49 +696,51 @@ export async function saveBrandingToSupabase(branding: any): Promise<any> {
       };
     }
   } catch (err) {
-    console.warn('Notice: Remote Supabase branding table save fallback:', err);
+    console.warn('Notice: Remote Supabase branding save notice:', err);
   }
 
   return branding;
 }
 
 export async function getBrandingFromSupabase(): Promise<any | null> {
-  const supabase = getSupabase();
-  if (!supabase) return null;
+  return dedupFetch('branding:default', async () => {
+    const supabase = getSupabase();
+    if (!supabase) return null;
 
-  try {
-    const { data, error } = await supabase
-      .from('site_branding')
-      .select('*')
-      .eq('id', 'default_branding')
-      .maybeSingle();
+    try {
+      const { data, error } = await supabase
+        .from('site_branding')
+        .select('*')
+        .eq('id', 'default_branding')
+        .maybeSingle();
 
-    if (!error && data) {
-      return {
-        logoUrl: data.logo_url ?? null,
-        faviconUrl: data.favicon_url ?? null,
-        altText: data.alt_text || 'qaaga.com',
-        fallbackText: data.fallback_text || 'qaaga',
-        fallbackDomain: data.fallback_domain || '.com',
-        showTextWhenRemoved: Boolean(data.show_text_when_removed),
-        size: data.size || 'md',
-        blendMultiply: Boolean(data.blend_multiply),
-        revision: Number(data.revision) || 1,
-        updatedAt: data.updated_at || new Date().toISOString(),
-      };
+      if (!error && data) {
+        return {
+          logoUrl: data.logo_url ?? null,
+          faviconUrl: data.favicon_url ?? null,
+          altText: data.alt_text || 'qaaga.com',
+          fallbackText: data.fallback_text || 'qaaga',
+          fallbackDomain: data.fallback_domain || '.com',
+          showTextWhenRemoved: Boolean(data.show_text_when_removed),
+          size: data.size || 'md',
+          blendMultiply: Boolean(data.blend_multiply),
+          revision: Number(data.revision) || 1,
+          updatedAt: data.updated_at || new Date().toISOString(),
+        };
+      }
+    } catch (err) {
+      console.warn('Notice: Remote Supabase branding query error:', err);
     }
-  } catch (err) {
-    console.warn('Notice: Remote Supabase branding read fallback:', err);
-  }
 
-  return null;
+    return null;
+  });
 }
 
 /* ========================================================================= */
-/* 6. REALTIME CHANNEL SUBSCRIPTION                                         */
+/* 6. REALTIME CHANNEL SUBSCRIPTION                                          */
 /* ========================================================================= */
 export function subscribeToSupabaseTable(
-  tableName: 'listings' | 'bookings' | 'reviews' | 'threads' | 'messages' | 'site_branding',
+  tableName: 'listings' | 'properties' | 'bookings' | 'reviews' | 'threads' | 'messages' | 'site_branding' | 'profiles',
   onPayload: (payload: any) => void
 ): () => void {
   const supabase = getSupabase();
@@ -580,6 +753,7 @@ export function subscribeToSupabaseTable(
         'postgres_changes',
         { event: '*', schema: 'public', table: tableName },
         (payload) => {
+          invalidateServiceCache(`${tableName}:`);
           onPayload(payload);
         }
       )
@@ -595,18 +769,22 @@ export function subscribeToSupabaseTable(
 }
 
 /* ========================================================================= */
-/* 6. USER PROFILES & AUTH DATABASE OPERATIONS                               */
+/* 7. USER PROFILES & AUTH DATABASE OPERATIONS                               */
 /* ========================================================================= */
 export async function getUserProfileFromDatabase(email: string): Promise<GuestProfile | null> {
   const cleanEmail = email.trim().toLowerCase();
-  const supabase = getSupabase();
-  if (supabase) {
+  if (!cleanEmail) return null;
+
+  return dedupFetch(`profile:${cleanEmail}`, async () => {
+    const supabase = getSupabase();
+    if (!supabase) return null;
+
     try {
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('email', cleanEmail)
-        .single();
+        .maybeSingle();
 
       if (!error && data) {
         return {
@@ -615,33 +793,39 @@ export async function getUserProfileFromDatabase(email: string): Promise<GuestPr
           city: data.city || 'Kuala Lumpur',
           verified: Boolean(data.verified),
           role: data.role || 'guest',
+          identity_status: data.identity_status || (data.verified ? 'verified' : 'unverified'),
           phone: data.phone || undefined,
           avatarUrl: data.avatar_url || '',
           bio: data.bio || '',
-          joinedDate: data.created_at ? new Date(data.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'Nov 2026',
+          joinedDate: data.created_at
+            ? new Date(data.created_at).toLocaleDateString('en-US', {
+                month: 'short',
+                year: 'numeric',
+              })
+            : undefined,
           status: data.status || 'active',
         };
       }
     } catch (err) {
-      console.warn('Notice: Remote Supabase profile query fallback:', err);
+      console.warn('Notice: Remote Supabase profile query error:', err);
     }
-  }
 
-  // Check local fallback users
-  const found = INITIAL_USERS.find((u) => u.email.toLowerCase() === cleanEmail);
-  return found || null;
+    return null;
+  });
 }
 
 export async function saveUserProfileToDatabase(profile: GuestProfile): Promise<GuestProfile> {
   const cleanEmail = profile.email.trim().toLowerCase();
+  invalidateServiceCache(`profile:${cleanEmail}`);
+  invalidateServiceCache('users:all');
   const normalized: GuestProfile = {
     ...profile,
     email: cleanEmail,
-    verified: true,
+    verified: Boolean(profile.verified),
   };
 
   const supabase = getSupabase();
-  if (supabase) {
+  if (supabase && cleanEmail) {
     try {
       const { error } = await supabase.from('profiles').upsert(
         {
@@ -653,7 +837,7 @@ export async function saveUserProfileToDatabase(profile: GuestProfile): Promise<
           avatar_url: normalized.avatarUrl || null,
           bio: normalized.bio || null,
           status: normalized.status || 'active',
-          verified: true,
+          verified: normalized.verified,
           updated_at: new Date().toISOString(),
         },
         { onConflict: 'email' }
@@ -666,7 +850,6 @@ export async function saveUserProfileToDatabase(profile: GuestProfile): Promise<
     }
   }
 
-  // Also update local storage for seamless client state
   if (typeof window !== 'undefined') {
     try {
       localStorage.setItem('qaaga_v3_profile', JSON.stringify(normalized));
@@ -676,60 +859,83 @@ export async function saveUserProfileToDatabase(profile: GuestProfile): Promise<
   return normalized;
 }
 
-export async function getAllUsersFromDatabase(): Promise<GuestProfile[]> {
-  const supabase = getSupabase();
-  if (supabase) {
+export async function fetchUsersWithStatus(): Promise<ServiceResult<GuestProfile[]>> {
+  return dedupFetch('users:all', async () => {
+    const supabase = getSupabase();
+    if (!supabase) {
+      return { data: [], status: 'error', error: 'Supabase client unavailable.' };
+    }
+
     try {
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (!error && Array.isArray(data) && data.length > 0) {
-        return data.map((d) => ({
-          fullName: d.full_name || 'Member',
-          email: d.email,
-          city: d.city || 'Kuala Lumpur',
-          verified: Boolean(d.verified),
-          role: d.role || 'guest',
-          phone: d.phone || undefined,
-          avatarUrl: d.avatar_url || '',
-          bio: d.bio || '',
-          joinedDate: d.created_at ? new Date(d.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'Nov 2026',
-          status: d.status || 'active',
-        }));
+      if (error) {
+        return { data: [], status: 'error', error: error.message };
       }
-    } catch (err) {
-      console.warn('Notice: Remote Supabase users query fallback:', err);
-    }
-  }
 
-  return INITIAL_USERS;
+      if (!Array.isArray(data) || data.length === 0) {
+        return { data: [], status: 'empty' };
+      }
+
+      const mapped: GuestProfile[] = data.map((d) => ({
+        fullName: d.full_name || 'Member',
+        email: d.email,
+        city: d.city || 'Kuala Lumpur',
+        verified: Boolean(d.verified),
+        role: d.role || 'guest',
+        identity_status: d.identity_status || (d.verified ? 'verified' : 'unverified'),
+        phone: d.phone || undefined,
+        avatarUrl: d.avatar_url || '',
+        bio: d.bio || '',
+        joinedDate: d.created_at
+          ? new Date(d.created_at).toLocaleDateString('en-US', {
+              month: 'short',
+              year: 'numeric',
+            })
+          : undefined,
+        status: d.status || 'active',
+      }));
+      return { data: mapped, status: 'ok' };
+    } catch (err: any) {
+      return { data: [], status: 'error', error: err?.message || 'Users query failed.' };
+    }
+  });
+}
+
+export async function getAllUsersFromDatabase(): Promise<GuestProfile[]> {
+  const res = await fetchUsersWithStatus();
+  return res.data;
 }
 
 export async function updateUserRoleInDatabase(
   email: string,
-  role: 'guest' | 'host' | 'admin',
+  role: 'customer' | 'guest' | 'host' | 'admin',
   status: 'active' | 'suspended' = 'active'
 ): Promise<boolean> {
   const cleanEmail = email.trim().toLowerCase();
+  invalidateServiceCache(`profile:${cleanEmail}`);
+  invalidateServiceCache('users:all');
+  invalidateServiceCache('admin:stats');
   const supabase = getSupabase();
-  if (supabase) {
-    try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ role, status, updated_at: new Date().toISOString() })
-        .eq('email', cleanEmail);
-      if (!error) return true;
-    } catch (err) {
-      console.warn('Notice: Remote Supabase update user role exception:', err);
-    }
+  if (!supabase) return false;
+
+  try {
+    const { error } = await supabase
+      .from('profiles')
+      .update({ role, status, updated_at: new Date().toISOString() })
+      .eq('email', cleanEmail);
+    return !error;
+  } catch (err) {
+    console.warn('Notice: Remote Supabase update user role exception:', err);
+    return false;
   }
-  return true;
 }
 
 /* ========================================================================= */
-/* 7. PROPERTY ADVANCED OPERATIONS & AVAILABILITY                            */
+/* 8. PROPERTY ADVANCED OPERATIONS & AVAILABILITY                            */
 /* ========================================================================= */
 export interface PropertyRecord extends QaagaListing {
   hostEmail?: string;
@@ -746,8 +952,10 @@ export interface PropertyRecord extends QaagaListing {
 
 export async function getPropertiesByHost(hostEmail: string): Promise<PropertyRecord[]> {
   const cleanEmail = hostEmail.trim().toLowerCase();
-  const supabase = getSupabase();
-  if (supabase) {
+  return dedupFetch(`host_props:${cleanEmail}`, async () => {
+    const supabase = getSupabase();
+    if (!supabase) return [];
+
     try {
       const { data, error } = await supabase
         .from('properties')
@@ -755,13 +963,13 @@ export async function getPropertiesByHost(hostEmail: string): Promise<PropertyRe
         .eq('host_email', cleanEmail)
         .order('created_at', { ascending: false });
 
-      if (!error && Array.isArray(data) && data.length > 0) {
+      if (!error && Array.isArray(data)) {
         return data.map((row) => ({
           ...mapDbListingToModel(row),
           hostEmail: row.host_email,
           propertyType: row.property_type,
           roomType: row.room_type,
-          priceDaily: Number(row.price_daily) || Math.round(row.two_night_price_usd / 2),
+          priceDaily: Number(row.price_daily) || Math.round((Number(row.two_night_price_usd) || 120) / 2),
           priceWeekly: Number(row.price_weekly) || undefined,
           priceMonthly: Number(row.price_monthly) || undefined,
           status: row.status || 'active',
@@ -771,29 +979,31 @@ export async function getPropertiesByHost(hostEmail: string): Promise<PropertyRe
         }));
       }
     } catch (err) {
-      console.warn('Notice: Properties by host fetch fallback:', err);
+      console.warn('Notice: Properties by host query error:', err);
     }
-  }
-  return [];
+    return [];
+  });
 }
 
 export async function updatePropertyStatus(
   id: string,
   status: 'active' | 'inactive' | 'pending_approval' | 'rejected'
 ): Promise<boolean> {
+  invalidateServiceCache('listings:');
+  invalidateServiceCache('host_props:');
+  invalidateServiceCache('admin:stats');
   const supabase = getSupabase();
-  if (supabase) {
-    try {
-      const { error } = await supabase
-        .from('properties')
-        .update({ status, updated_at: new Date().toISOString() })
-        .eq('id', id);
-      return !error;
-    } catch {
-      return false;
-    }
+  if (!supabase) return false;
+
+  try {
+    const { error } = await supabase
+      .from('properties')
+      .update({ status, updated_at: new Date().toISOString() })
+      .eq('id', id);
+    return !error;
+  } catch {
+    return false;
   }
-  return true;
 }
 
 export async function checkPropertyAvailability(
@@ -805,7 +1015,6 @@ export async function checkPropertyAvailability(
   if (!supabase) return { isAvailable: true };
 
   try {
-    // 1. Check for overlapping confirmed or accepted bookings
     const { data: bookings, error: bookingErr } = await supabase
       .from('bookings')
       .select('id, check_in, check_out, status')
@@ -817,6 +1026,7 @@ export async function checkPropertyAvailability(
       const outTime = new Date(checkOutDate).getTime();
 
       for (const b of bookings) {
+        if (!b.check_in || !b.check_out) continue;
         const bIn = new Date(b.check_in).getTime();
         const bOut = new Date(b.check_out).getTime();
         if (inTime < bOut && outTime > bIn) {
@@ -828,7 +1038,6 @@ export async function checkPropertyAvailability(
       }
     }
 
-    // 2. Check for manual blocked dates in property_availability
     const { data: blocked, error: blockErr } = await supabase
       .from('property_availability')
       .select('date, is_available')
@@ -851,12 +1060,14 @@ export async function checkPropertyAvailability(
 }
 
 /* ========================================================================= */
-/* 8. HOST INCOMING BOOKINGS & STATUS MANAGEMENT                            */
+/* 9. HOST INCOMING BOOKINGS & STATUS MANAGEMENT                            */
 /* ========================================================================= */
 export async function getBookingsForHost(hostEmail: string): Promise<any[]> {
   const cleanEmail = hostEmail.trim().toLowerCase();
-  const supabase = getSupabase();
-  if (supabase) {
+  return dedupFetch(`host_bookings:${cleanEmail}`, async () => {
+    const supabase = getSupabase();
+    if (!supabase) return [];
+
     try {
       const { data, error } = await supabase
         .from('bookings')
@@ -889,8 +1100,8 @@ export async function getBookingsForHost(hostEmail: string): Promise<any[]> {
     } catch (err) {
       console.warn('Notice: Host bookings fetch error:', err);
     }
-  }
-  return [];
+    return [];
+  });
 }
 
 export async function updateBookingStatus(
@@ -899,34 +1110,36 @@ export async function updateBookingStatus(
   reason?: string,
   cancelledBy?: string
 ): Promise<boolean> {
+  invalidateServiceCache('bookings:');
+  invalidateServiceCache('host_bookings:');
+  invalidateServiceCache('admin:stats');
   const supabase = getSupabase();
-  if (supabase) {
-    try {
-      const payload: Record<string, any> = {
-        status,
-        updated_at: new Date().toISOString(),
-      };
-      if (reason) payload.cancellation_reason = reason;
-      if (cancelledBy) {
-        payload.cancelled_by = cancelledBy;
-        payload.cancelled_at = new Date().toISOString();
-      }
+  if (!supabase) return false;
 
-      const { error } = await supabase
-        .from('bookings')
-        .update(payload)
-        .eq('id', bookingId);
-
-      return !error;
-    } catch {
-      return false;
+  try {
+    const payload: Record<string, any> = {
+      status,
+      updated_at: new Date().toISOString(),
+    };
+    if (reason) payload.cancellation_reason = reason;
+    if (cancelledBy) {
+      payload.cancelled_by = cancelledBy;
+      payload.cancelled_at = new Date().toISOString();
     }
+
+    const { error } = await supabase
+      .from('bookings')
+      .update(payload)
+      .eq('id', bookingId);
+
+    return !error;
+  } catch {
+    return false;
   }
-  return true;
 }
 
 /* ========================================================================= */
-/* 9. PAYMENT RECORDS & PROOF UPLOADS (Direct Guest-to-Host)                */
+/* 10. PAYMENT RECORDS & PROOF UPLOADS (Direct Guest-to-Host)                */
 /* ========================================================================= */
 export interface PaymentProofRecord {
   id: string;
@@ -954,78 +1167,60 @@ export async function submitPaymentProof(data: {
   payerName: string;
   payerEmail: string;
 }): Promise<PaymentProofRecord | null> {
+  invalidateServiceCache('payments:');
+  invalidateServiceCache('admin:stats');
   const supabase = getSupabase();
-  const id = `pay-${Date.now()}`;
-  const now = new Date().toISOString();
+  if (!supabase) return null;
 
-  const record: PaymentProofRecord = {
-    id,
-    bookingId: data.bookingId,
-    amount: data.amount,
-    currency: data.currency || 'USD',
-    paymentMethod: data.paymentMethod,
-    transactionReference: data.transactionReference,
-    proofImageUrl: data.proofImageUrl,
-    payerName: data.payerName,
-    payerEmail: data.payerEmail,
-    status: 'pending_review',
-    createdAt: now,
-  };
+  try {
+    const { data: inserted, error } = await supabase
+      .from('payment_records')
+      .insert({
+        booking_id: data.bookingId,
+        amount: data.amount,
+        currency: data.currency || 'USD',
+        payment_method: data.paymentMethod,
+        transaction_reference: data.transactionReference,
+        proof_image_url: data.proofImageUrl,
+        payer_name: data.payerName,
+        payer_email: data.payerEmail,
+        status: 'pending_review',
+      })
+      .select()
+      .single();
 
-  if (supabase) {
-    try {
-      const { data: inserted, error } = await supabase
-        .from('payment_records')
-        .insert({
-          booking_id: data.bookingId,
-          amount: data.amount,
-          currency: data.currency || 'USD',
-          payment_method: data.paymentMethod,
-          transaction_reference: data.transactionReference,
-          proof_image_url: data.proofImageUrl,
-          payer_name: data.payerName,
-          payer_email: data.payerEmail,
-          status: 'pending_review',
-        })
-        .select()
-        .single();
-
-      if (!error && inserted) {
-        return {
-          id: inserted.id,
-          bookingId: inserted.booking_id,
-          amount: Number(inserted.amount),
-          currency: inserted.currency,
-          paymentMethod: inserted.payment_method,
-          transactionReference: inserted.transaction_reference,
-          proofImageUrl: inserted.proof_image_url,
-          payerName: inserted.payer_name,
-          payerEmail: inserted.payer_email,
-          status: inserted.status,
-          createdAt: inserted.created_at,
-        };
-      }
-    } catch (err) {
-      console.warn('Notice: Supabase payment record insert notice:', err);
+    if (!error && inserted) {
+      return {
+        id: inserted.id,
+        bookingId: inserted.booking_id,
+        amount: Number(inserted.amount),
+        currency: inserted.currency,
+        paymentMethod: inserted.payment_method,
+        transactionReference: inserted.transaction_reference,
+        proofImageUrl: inserted.proof_image_url,
+        payerName: inserted.payer_name,
+        payerEmail: inserted.payer_email,
+        status: inserted.status,
+        createdAt: inserted.created_at,
+      };
     }
+  } catch (err) {
+    console.warn('Notice: Supabase payment record insert error:', err);
   }
 
-  // Local storage fallback for seamless client preview
-  if (typeof window !== 'undefined') {
-    try {
-      const existing = JSON.parse(localStorage.getItem('qaaga_payment_records') || '[]');
-      localStorage.setItem('qaaga_payment_records', JSON.stringify([record, ...existing]));
-    } catch {}
-  }
-
-  return record;
+  return null;
 }
 
 export async function getPaymentProofs(bookingId?: string): Promise<PaymentProofRecord[]> {
-  const supabase = getSupabase();
-  if (supabase) {
+  return dedupFetch(`payments:${bookingId || 'all'}`, async () => {
+    const supabase = getSupabase();
+    if (!supabase) return [];
+
     try {
-      let query = supabase.from('payment_records').select('*').order('created_at', { ascending: false });
+      let query = supabase
+        .from('payment_records')
+        .select('*')
+        .order('created_at', { ascending: false });
       if (bookingId) query = query.eq('booking_id', bookingId);
       const { data, error } = await query;
       if (!error && Array.isArray(data)) {
@@ -1048,16 +1243,9 @@ export async function getPaymentProofs(bookingId?: string): Promise<PaymentProof
     } catch (err) {
       console.warn('Notice: Payment records query error:', err);
     }
-  }
 
-  if (typeof window !== 'undefined') {
-    try {
-      const saved = JSON.parse(localStorage.getItem('qaaga_payment_records') || '[]');
-      if (bookingId) return saved.filter((s: any) => s.bookingId === bookingId);
-      return saved;
-    } catch {}
-  }
-  return [];
+    return [];
+  });
 }
 
 export async function updatePaymentProofStatus(
@@ -1065,28 +1253,29 @@ export async function updatePaymentProofStatus(
   status: 'pending_review' | 'verified' | 'rejected',
   notes?: string
 ): Promise<boolean> {
+  invalidateServiceCache('payments:');
+  invalidateServiceCache('admin:stats');
   const supabase = getSupabase();
-  if (supabase) {
-    try {
-      const { error } = await supabase
-        .from('payment_records')
-        .update({
-          status,
-          admin_notes: notes,
-          verified_at: status === 'verified' ? new Date().toISOString() : null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', id);
-      return !error;
-    } catch {
-      return false;
-    }
+  if (!supabase) return false;
+
+  try {
+    const { error } = await supabase
+      .from('payment_records')
+      .update({
+        status,
+        admin_notes: notes,
+        verified_at: status === 'verified' ? new Date().toISOString() : null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id);
+    return !error;
+  } catch {
+    return false;
   }
-  return true;
 }
 
 /* ========================================================================= */
-/* 10. IDENTITY VERIFICATION SYSTEM                                         */
+/* 11. IDENTITY VERIFICATION SYSTEM                                          */
 /* ========================================================================= */
 export interface IdentityVerificationRecord {
   id: string;
@@ -1112,80 +1301,68 @@ export async function submitIdentityVerification(data: {
   selfieUrl?: string;
 }): Promise<IdentityVerificationRecord | null> {
   const cleanEmail = data.userEmail.trim().toLowerCase();
+  invalidateServiceCache(`idv:${cleanEmail}`);
+  invalidateServiceCache('idv:all');
+  invalidateServiceCache('admin:stats');
   const supabase = getSupabase();
+  if (!supabase) return null;
+
   const now = new Date().toISOString();
 
-  const record: IdentityVerificationRecord = {
-    id: `idv-${Date.now()}`,
-    userEmail: cleanEmail,
-    userName: data.userName,
-    documentType: data.documentType,
-    documentFrontUrl: data.documentFrontUrl,
-    documentBackUrl: data.documentBackUrl,
-    selfieUrl: data.selfieUrl,
-    status: 'pending',
-    createdAt: now,
-  };
+  try {
+    const { data: inserted, error } = await supabase
+      .from('identity_verifications')
+      .insert({
+        user_email: cleanEmail,
+        user_name: data.userName,
+        document_type: data.documentType,
+        document_front_url: data.documentFrontUrl,
+        document_back_url: data.documentBackUrl || null,
+        selfie_url: data.selfieUrl || null,
+        status: 'pending',
+      })
+      .select()
+      .single();
 
-  if (supabase) {
-    try {
-      const { data: inserted, error } = await supabase
-        .from('identity_verifications')
-        .insert({
-          user_email: cleanEmail,
-          user_name: data.userName,
-          document_type: data.documentType,
-          document_front_url: data.documentFrontUrl,
-          document_back_url: data.documentBackUrl || null,
-          selfie_url: data.selfieUrl || null,
-          status: 'pending',
-        })
-        .select()
-        .single();
+    if (!error && inserted) {
+      await supabase
+        .from('profiles')
+        .update({ identity_status: 'pending', updated_at: now })
+        .eq('email', cleanEmail);
 
-      if (!error && inserted) {
-        // Also update profiles table identity_status
-        await supabase
-          .from('profiles')
-          .update({ identity_status: 'pending', updated_at: now })
-          .eq('email', cleanEmail);
-
-        return {
-          id: inserted.id,
-          userEmail: inserted.user_email,
-          userName: inserted.user_name,
-          documentType: inserted.document_type,
-          documentFrontUrl: inserted.document_front_url,
-          documentBackUrl: inserted.document_back_url,
-          selfieUrl: inserted.selfie_url,
-          status: inserted.status,
-          createdAt: inserted.created_at,
-        };
-      }
-    } catch (err) {
-      console.warn('Notice: Supabase identity verification submit error:', err);
+      return {
+        id: inserted.id,
+        userEmail: inserted.user_email,
+        userName: inserted.user_name,
+        documentType: inserted.document_type,
+        documentFrontUrl: inserted.document_front_url,
+        documentBackUrl: inserted.document_back_url,
+        selfieUrl: inserted.selfie_url,
+        status: inserted.status,
+        createdAt: inserted.created_at,
+      };
     }
+  } catch (err) {
+    console.warn('Notice: Supabase identity verification submit error:', err);
   }
 
-  // Local storage fallback
-  if (typeof window !== 'undefined') {
-    try {
-      const existing = JSON.parse(localStorage.getItem('qaaga_verifications') || '[]');
-      localStorage.setItem('qaaga_verifications', JSON.stringify([record, ...existing]));
-    } catch {}
-  }
-
-  return record;
+  return null;
 }
 
 export async function getIdentityVerifications(
   userEmail?: string
 ): Promise<IdentityVerificationRecord[]> {
-  const supabase = getSupabase();
-  if (supabase) {
+  const cleanEmail = userEmail ? userEmail.trim().toLowerCase() : 'all';
+  return dedupFetch(`idv:${cleanEmail}`, async () => {
+    const supabase = getSupabase();
+    if (!supabase) return [];
+
     try {
-      let query = supabase.from('identity_verifications').select('*').order('created_at', { ascending: false });
-      if (userEmail) query = query.eq('user_email', userEmail.trim().toLowerCase());
+      let query = supabase
+        .from('identity_verifications')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (userEmail) query = query.eq('user_email', cleanEmail);
       const { data, error } = await query;
       if (!error && Array.isArray(data)) {
         return data.map((v) => ({
@@ -1204,18 +1381,11 @@ export async function getIdentityVerifications(
         }));
       }
     } catch (err) {
-      console.warn('Notice: Identity verifications query fallback:', err);
+      console.warn('Notice: Identity verifications query error:', err);
     }
-  }
 
-  if (typeof window !== 'undefined') {
-    try {
-      const saved = JSON.parse(localStorage.getItem('qaaga_verifications') || '[]');
-      if (userEmail) return saved.filter((s: any) => s.userEmail === userEmail);
-      return saved;
-    } catch {}
-  }
-  return [];
+    return [];
+  });
 }
 
 export async function updateIdentityVerificationStatus(
@@ -1225,43 +1395,45 @@ export async function updateIdentityVerificationStatus(
   rejectionReason?: string,
   reviewedBy: string = 'Super Admin'
 ): Promise<boolean> {
-  const supabase = getSupabase();
   const cleanEmail = userEmail.trim().toLowerCase();
+  invalidateServiceCache(`idv:${cleanEmail}`);
+  invalidateServiceCache('idv:all');
+  invalidateServiceCache(`profile:${cleanEmail}`);
+  invalidateServiceCache('admin:stats');
+  const supabase = getSupabase();
+  if (!supabase) return false;
+
   const now = new Date().toISOString();
 
-  if (supabase) {
-    try {
-      await supabase
-        .from('identity_verifications')
-        .update({
-          status,
-          rejection_reason: rejectionReason || null,
-          reviewed_by: reviewedBy,
-          reviewed_at: now,
-          updated_at: now,
-        })
-        .eq('id', id);
+  try {
+    await supabase
+      .from('identity_verifications')
+      .update({
+        status,
+        rejection_reason: rejectionReason || null,
+        reviewed_by: reviewedBy,
+        reviewed_at: now,
+        updated_at: now,
+      })
+      .eq('id', id);
 
-      await supabase
-        .from('profiles')
-        .update({
-          identity_status: status === 'approved' ? 'verified' : 'rejected',
-          verified: status === 'approved',
-          updated_at: now,
-        })
-        .eq('email', cleanEmail);
+    await supabase
+      .from('profiles')
+      .update({
+        identity_status: status === 'approved' ? 'verified' : 'rejected',
+        verified: status === 'approved',
+        updated_at: now,
+      })
+      .eq('email', cleanEmail);
 
-      return true;
-    } catch {
-      return false;
-    }
+    return true;
+  } catch {
+    return false;
   }
-
-  return true;
 }
 
 /* ========================================================================= */
-/* 11. DYNAMIC CALCULATED ADMIN PLATFORM STATISTICS                          */
+/* 12. REALTIME ADMIN PLATFORM STATISTICS (ZERO HARDCODED CONSTANTS)         */
 /* ========================================================================= */
 export interface AdminPlatformStats {
   totalUsers: number;
@@ -1277,13 +1449,29 @@ export interface AdminPlatformStats {
 }
 
 export async function getAdminPlatformStats(): Promise<AdminPlatformStats> {
-  const supabase = getSupabase();
-  if (supabase) {
+  return dedupFetch('admin:stats', async () => {
+    const supabase = getSupabase();
+    if (!supabase) {
+      return {
+        totalUsers: 0,
+        totalHosts: 0,
+        totalProperties: 0,
+        activeProperties: 0,
+        totalBookings: 0,
+        confirmedBookings: 0,
+        pendingBookings: 0,
+        totalGrossRevenueUsd: 0,
+        pendingVerifications: 0,
+        pendingPayments: 0,
+      };
+    }
+
     try {
       const [
         { count: userCount },
         { count: hostCount },
         { data: props },
+        { data: listingsData },
         { data: allBookings },
         { count: pendingIdCount },
         { count: pendingPayCount },
@@ -1291,63 +1479,75 @@ export async function getAdminPlatformStats(): Promise<AdminPlatformStats> {
         supabase.from('profiles').select('*', { count: 'exact', head: true }),
         supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'host'),
         supabase.from('properties').select('id, status'),
+        supabase.from('listings').select('id, is_active'),
         supabase.from('bookings').select('id, total_usd, status'),
-        supabase.from('identity_verifications').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
-        supabase.from('payment_records').select('*', { count: 'exact', head: true }).eq('status', 'pending_review'),
+        supabase
+          .from('identity_verifications')
+          .select('*', { count: 'exact', head: true })
+          .eq('status', 'pending'),
+        supabase
+          .from('payment_records')
+          .select('*', { count: 'exact', head: true })
+          .eq('status', 'pending_review'),
       ]);
 
       const properties = Array.isArray(props) ? props : [];
+      const listingsRows = Array.isArray(listingsData) ? listingsData : [];
       const bookingsList = Array.isArray(allBookings) ? allBookings : [];
 
-      const activeProps = properties.filter((p) => p.status === 'active').length;
-      const confirmed = bookingsList.filter((b) => b.status === 'Confirmed' || b.status === 'Accepted').length;
+      const totalProps = properties.length + listingsRows.length;
+      const activeProps =
+        properties.filter((p) => p.status === 'active').length +
+        listingsRows.filter((l) => l.is_active !== false).length;
+      const confirmed = bookingsList.filter(
+        (b) => b.status === 'Confirmed' || b.status === 'Accepted'
+      ).length;
       const pending = bookingsList.filter((b) => b.status === 'Pending').length;
       const totalRevenue = bookingsList
         .filter((b) => b.status !== 'Cancelled' && b.status !== 'Rejected')
         .reduce((sum, b) => sum + (Number(b.total_usd) || 0), 0);
 
       return {
-        totalUsers: Math.max(userCount || 0, INITIAL_USERS.length),
+        totalUsers: userCount || 0,
         totalHosts: hostCount || 0,
-        totalProperties: properties.length || INITIAL_LISTINGS.length,
-        activeProperties: activeProps || INITIAL_LISTINGS.length,
-        totalBookings: bookingsList.length || INITIAL_BOOKINGS.length,
-        confirmedBookings: confirmed || INITIAL_BOOKINGS.filter((b) => b.status === 'Confirmed').length,
+        totalProperties: totalProps,
+        activeProperties: activeProps,
+        totalBookings: bookingsList.length,
+        confirmedBookings: confirmed,
         pendingBookings: pending,
-        totalGrossRevenueUsd: totalRevenue || INITIAL_BOOKINGS.reduce((acc, b) => acc + (b.totalUsd || 0), 0),
+        totalGrossRevenueUsd: totalRevenue,
         pendingVerifications: pendingIdCount || 0,
         pendingPayments: pendingPayCount || 0,
       };
     } catch (err) {
-      console.warn('Notice: Calculating dynamic platform stats fallback:', err);
+      console.warn('Notice: Calculating dynamic platform stats error:', err);
+      return {
+        totalUsers: 0,
+        totalHosts: 0,
+        totalProperties: 0,
+        activeProperties: 0,
+        totalBookings: 0,
+        confirmedBookings: 0,
+        pendingBookings: 0,
+        totalGrossRevenueUsd: 0,
+        pendingVerifications: 0,
+        pendingPayments: 0,
+      };
     }
-  }
-
-  // Fallback calculated from base data
-  const totalRevenue = INITIAL_BOOKINGS.reduce((acc, b) => acc + (b.totalUsd || 0), 0);
-  return {
-    totalUsers: INITIAL_USERS.length,
-    totalHosts: INITIAL_USERS.filter((u) => u.role === 'host').length,
-    totalProperties: INITIAL_LISTINGS.length,
-    activeProperties: INITIAL_LISTINGS.length,
-    totalBookings: INITIAL_BOOKINGS.length,
-    confirmedBookings: INITIAL_BOOKINGS.filter((b) => b.status === 'Confirmed').length,
-    pendingBookings: 0,
-    totalGrossRevenueUsd: totalRevenue,
-    pendingVerifications: 0,
-    pendingPayments: 0,
-  };
+  });
 }
 
 /* ========================================================================= */
-/* 12. NOTIFICATIONS MANAGEMENT                                              */
+/* 13. NOTIFICATIONS MANAGEMENT                                              */
 /* ========================================================================= */
 export async function getNotificationsFromDatabase(
   recipientEmail: string
 ): Promise<any[]> {
   const cleanEmail = recipientEmail.trim().toLowerCase();
-  const supabase = getSupabase();
-  if (supabase) {
+  return dedupFetch(`notifications:${cleanEmail}`, async () => {
+    const supabase = getSupabase();
+    if (!supabase || !cleanEmail) return [];
+
     try {
       const { data, error } = await supabase
         .from('notifications')
@@ -1355,22 +1555,25 @@ export async function getNotificationsFromDatabase(
         .eq('recipient_email', cleanEmail)
         .order('created_at', { ascending: false });
 
-      if (!error && Array.isArray(data) && data.length > 0) {
+      if (!error && Array.isArray(data)) {
         return data.map((n) => ({
           id: n.id,
           title: n.title,
           desc: n.message,
-          time: new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          time: new Date(n.created_at).toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
           read: Boolean(n.read),
           link: n.link,
           type: n.type,
         }));
       }
     } catch (err) {
-      console.warn('Notice: Notifications query fallback:', err);
+      console.warn('Notice: Notifications query error:', err);
     }
-  }
-  return [];
+    return [];
+  });
 }
 
 export async function createNotificationInDatabase(
@@ -1380,21 +1583,21 @@ export async function createNotificationInDatabase(
   type: string = 'system',
   link?: string
 ): Promise<boolean> {
+  const cleanEmail = recipientEmail.trim().toLowerCase();
+  invalidateServiceCache(`notifications:${cleanEmail}`);
   const supabase = getSupabase();
-  if (supabase) {
-    try {
-      const { error } = await supabase.from('notifications').insert({
-        recipient_email: recipientEmail.trim().toLowerCase(),
-        title,
-        message,
-        type,
-        link,
-      });
-      return !error;
-    } catch {
-      return false;
-    }
-  }
-  return true;
-}
+  if (!supabase) return false;
 
+  try {
+    const { error } = await supabase.from('notifications').insert({
+      recipient_email: cleanEmail,
+      title,
+      message,
+      type,
+      link,
+    });
+    return !error;
+  } catch {
+    return false;
+  }
+}

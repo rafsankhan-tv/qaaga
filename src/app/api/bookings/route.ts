@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { BookingSchema } from '@/lib/validations';
 import { getSupabase } from '@/lib/supabaseClient';
-import { INITIAL_BOOKINGS } from '@/data/listings';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,15 +9,25 @@ export async function GET(req: NextRequest) {
   const email = searchParams.get('email');
 
   const supabase = getSupabase();
-  if (supabase) {
-    try {
-      let query = supabase.from('bookings').select('*').order('created_at', { ascending: false });
-      if (email) {
-        query = query.eq('guest_email', email);
-      }
-      const { data, error } = await query;
-      if (!error && Array.isArray(data) && data.length > 0) {
-        const bookings = data.map((row: any) => ({
+  if (!supabase) {
+    return NextResponse.json({ bookings: [], count: 0, status: 'error' });
+  }
+
+  try {
+    let query = supabase
+      .from('bookings')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (email) {
+      query = query.eq('guest_email', email.trim().toLowerCase());
+    }
+    const { data, error } = await query;
+    if (error) {
+      return NextResponse.json({ bookings: [], count: 0, status: 'error', error: error.message });
+    }
+
+    const bookings = Array.isArray(data)
+      ? data.map((row: any) => ({
           id: row.id,
           confirmationCode: row.confirmation_code,
           listingId: row.listing_id,
@@ -31,15 +40,22 @@ export async function GET(req: NextRequest) {
           totalUsd: Number(row.total_usd),
           hostName: row.host_name,
           status: row.status,
-        }));
-        return NextResponse.json({ bookings, count: bookings.length });
-      }
-    } catch (err) {
-      console.warn('Notice: Error fetching bookings from Supabase:', err);
-    }
-  }
+        }))
+      : [];
 
-  return NextResponse.json({ bookings: INITIAL_BOOKINGS, count: INITIAL_BOOKINGS.length });
+    return NextResponse.json({
+      bookings,
+      count: bookings.length,
+      status: bookings.length > 0 ? 'ok' : 'empty',
+    });
+  } catch (err: any) {
+    return NextResponse.json({
+      bookings: [],
+      count: 0,
+      status: 'error',
+      error: err?.message || 'Error fetching bookings',
+    });
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -56,36 +72,36 @@ export async function POST(req: NextRequest) {
 
     const b = validated.data;
     const supabase = getSupabase();
+    if (!supabase) {
+      return NextResponse.json({ error: 'Supabase not configured' }, { status: 503 });
+    }
 
-    if (supabase) {
-      try {
-        const { data, error } = await supabase
-          .from('bookings')
-          .insert({
-            id: b.id,
-            confirmation_code: b.confirmationCode,
-            listing_id: b.listingId,
-            guest_email: b.guestEmail,
-            guest_name: b.guestName,
-            title: b.title,
-            area: b.area,
-            image: b.image,
-            check_in_label: b.checkInLabel,
-            nights: b.nights,
-            guests: b.guests,
-            total_usd: b.totalUsd,
-            host_name: b.hostName,
-            status: b.status,
-          })
-          .select()
-          .single();
+    const { data, error } = await supabase
+      .from('bookings')
+      .insert({
+        id: b.id,
+        confirmation_code: b.confirmationCode,
+        listing_id: b.listingId,
+        guest_email: b.guestEmail,
+        guest_name: b.guestName,
+        title: b.title,
+        area: b.area,
+        image: b.image,
+        check_in_label: b.checkInLabel,
+        nights: b.nights,
+        guests: b.guests,
+        total_usd: b.totalUsd,
+        host_name: b.hostName,
+        status: b.status,
+      })
+      .select()
+      .single();
 
-        if (!error && data) {
-          return NextResponse.json({ success: true, booking: b }, { status: 201 });
-        }
-      } catch (dbErr) {
-        console.warn('Notice: Supabase insert booking exception:', dbErr);
-      }
+    if (error || !data) {
+      return NextResponse.json(
+        { error: error?.message || 'Failed to insert booking' },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({ success: true, booking: b }, { status: 201 });
@@ -110,7 +126,7 @@ export async function DELETE(req: NextRequest) {
     try {
       await supabase.from('bookings').update({ status: 'Cancelled' }).eq('id', id);
     } catch {
-      // fallback
+      return NextResponse.json({ error: 'Failed to cancel booking' }, { status: 500 });
     }
   }
 

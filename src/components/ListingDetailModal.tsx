@@ -23,7 +23,7 @@ interface ListingDetailModalProps {
   onAddReview: (rating: number, comment: string) => void;
 }
 
-export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
+export const ListingDetailModal: React.FC<ListingDetailModalProps> = React.memo(({
   listing,
   isSaved,
   reviews,
@@ -124,6 +124,8 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                 <ListingImage
                   src={activePhoto || listing.image}
                   alt={listing.title}
+                  priority={true}
+                  sizes="(max-width: 1023px) 100vw, 560px"
                   className="w-full h-full object-cover scale-[1.03]"
                 />
                 {listing.guestFavorite && (
@@ -140,7 +142,7 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                       key={`${gImg}-${idx}`}
                       type="button"
                       onClick={() => setActivePhoto(gImg)}
-                      className={`w-20 h-14 rounded-xl overflow-hidden border-2 transition-all cursor-pointer ${
+                      className={`relative w-20 h-14 rounded-xl overflow-hidden border-2 transition-transform duration-200 cursor-pointer ${
                         activePhoto === gImg
                           ? 'border-[#C72B62] scale-[1.02]'
                           : 'border-transparent opacity-75 hover:opacity-100'
@@ -149,6 +151,7 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                       <ListingImage
                         src={gImg}
                         alt=""
+                        sizes="80px"
                         className="w-full h-full object-cover"
                       />
                     </button>
@@ -379,4 +382,6 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
       </div>
     </div>
   );
-};
+});
+
+ListingDetailModal.displayName = 'ListingDetailModal';

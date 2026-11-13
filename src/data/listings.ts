@@ -45,7 +45,7 @@ export interface BookingRecord {
   guests: number;
   totalUsd: number;
   hostName: string;
-  status: 'Confirmed' | 'Upcoming';
+  status: 'Pending' | 'Confirmed' | 'Accepted' | 'Rejected' | 'Cancelled' | 'Completed' | 'Upcoming';
 }
 
 export interface HostThread {
@@ -76,7 +76,8 @@ export interface GuestProfile {
   email: string;
   city: string;
   verified: boolean;
-  role?: 'guest' | 'host' | 'admin';
+  role?: 'customer' | 'guest' | 'host' | 'admin';
+  identity_status?: 'unverified' | 'pending' | 'verified' | 'rejected';
   phone?: string;
   avatarUrl?: string;
   bio?: string;

@@ -27,6 +27,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { BrandLogo } from '@/components/BrandLogo';
+import { ListingImage } from '@/components/ListingCard';
 import {
   DEFAULT_BRANDING,
   GuestProfile,
@@ -67,6 +68,7 @@ export default function UserDashboard({
   const [bookings, setBookings] = useState<any[]>([]);
   const [loadingBookings, setLoadingBookings] = useState(true);
   const [payments, setPayments] = useState<PaymentProofRecord[]>([]);
+  const [loadingPayments, setLoadingPayments] = useState(true);
   const [verifications, setVerifications] = useState<IdentityVerificationRecord[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
 
@@ -129,40 +131,44 @@ export default function UserDashboard({
       }
     } catch {}
 
-    // Load remote DB profile
-    getUserProfileFromDatabase(currentEmail).then((p) => {
-      if (p) {
-        setProfile(p);
-        setEditName(p.fullName || '');
-        setEditPhone(p.phone || '');
-        setEditCity(p.city || 'Kuala Lumpur');
-        setEditBio(p.bio || '');
-        setEditAvatarUrl(p.avatarUrl || '');
-      }
-    });
-
-    // Load customer bookings
+    let active = true;
     setLoadingBookings(true);
-    getBookingsFromDatabase(currentEmail).then((res) => {
-      setBookings(res);
-      setLoadingBookings(false);
-    });
+    setLoadingPayments(true);
 
-    // Load payment records
-    getPaymentProofs().then((res) => {
-      const userPays = res.filter((r) => r.payerEmail.toLowerCase() === currentEmail.toLowerCase());
-      setPayments(userPays);
-    });
+    Promise.all([
+      getUserProfileFromDatabase(currentEmail),
+      getBookingsFromDatabase(currentEmail),
+      getPaymentProofs(),
+      getIdentityVerifications(currentEmail),
+      getNotificationsFromDatabase(currentEmail),
+    ])
+      .then(([p, bks, pays, idvs, notifs]) => {
+        if (!active) return;
+        if (p) {
+          setProfile(p);
+          setEditName(p.fullName || '');
+          setEditPhone(p.phone || '');
+          setEditCity(p.city || 'Kuala Lumpur');
+          setEditBio(p.bio || '');
+          setEditAvatarUrl(p.avatarUrl || '');
+        }
+        setBookings(bks || []);
+        const userPays = (pays || []).filter(
+          (r) => r.payerEmail.toLowerCase() === currentEmail.toLowerCase()
+        );
+        setPayments(userPays);
+        setVerifications(idvs || []);
+        setNotifications(notifs || []);
+      })
+      .finally(() => {
+        if (!active) return;
+        setLoadingBookings(false);
+        setLoadingPayments(false);
+      });
 
-    // Load verifications
-    getIdentityVerifications(currentEmail).then((res) => {
-      setVerifications(res);
-    });
-
-    // Load notifications
-    getNotificationsFromDatabase(currentEmail).then((res) => {
-      setNotifications(res);
-    });
+    return () => {
+      active = false;
+    };
   }, []);
 
   // Save Profile Handler
@@ -317,18 +323,20 @@ export default function UserDashboard({
           <div className="flex items-center gap-4">
             <Link
               href="/"
+              prefetch={true}
               className="inline-flex items-center gap-2 text-xs font-bold text-slate-600 hover:text-slate-900 transition-colors"
             >
               <ArrowLeft size={16} />
               <span>Back to Marketplace</span>
             </Link>
             <div className="h-5 w-px bg-slate-200" />
-            <BrandLogo branding={branding} size="sm" />
+            <BrandLogo branding={branding} variant="header" />
           </div>
 
           <div className="flex items-center gap-3">
             <Link
               href="/properties"
+              prefetch={true}
               className="hidden sm:inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-800 transition-colors"
             >
               <Search size={14} />
@@ -339,6 +347,10 @@ export default function UserDashboard({
                 <img
                   src={profile.avatarUrl}
                   alt={profile.fullName}
+                  width={32}
+                  height={32}
+                  decoding="async"
+                  referrerPolicy="no-referrer"
                   className="w-8 h-8 rounded-full object-cover border border-[#C72B62]"
                 />
               ) : (
@@ -367,6 +379,10 @@ export default function UserDashboard({
                 <img
                   src={profile.avatarUrl}
                   alt={profile.fullName}
+                  width={80}
+                  height={80}
+                  decoding="async"
+                  referrerPolicy="no-referrer"
                   className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover border-2 border-white shadow-md"
                 />
               ) : (
@@ -409,14 +425,16 @@ export default function UserDashboard({
           <div className="flex items-center gap-2 flex-wrap">
             <Link
               href="/properties"
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#C72B62] hover:bg-[#ad2253] text-white text-xs font-bold transition-all shadow-sm"
+              prefetch={true}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#C72B62] hover:bg-[#ad2253] text-white text-xs font-bold transition-colors shadow-sm"
             >
               <Search size={14} />
               <span>Book an Apartment</span>
             </Link>
             <Link
               href="/host/dashboard"
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition-all"
+              prefetch={true}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition-colors"
             >
               <Home size={14} />
               <span>Switch to Host</span>
@@ -515,8 +533,23 @@ export default function UserDashboard({
             </div>
 
             {loadingBookings ? (
-              <div className="py-12 text-center text-xs text-slate-400">
-                Loading your reservations from Supabase...
+              <div className="grid grid-cols-1 gap-4">
+                {Array.from({ length: 3 }).map((_, idx) => (
+                  <div
+                    key={idx}
+                    className="bg-white rounded-2xl border border-slate-200 p-5 flex flex-col md:flex-row md:items-center justify-between gap-5"
+                  >
+                    <div className="flex items-start gap-4 flex-1">
+                      <div className="w-24 h-20 sm:w-28 sm:h-24 rounded-xl qaaga-skeleton shrink-0" />
+                      <div className="space-y-2 flex-1">
+                        <div className="h-4 w-28 rounded-md qaaga-skeleton" />
+                        <div className="h-5 w-3/4 rounded-md qaaga-skeleton" />
+                        <div className="h-3.5 w-1/2 rounded-md qaaga-skeleton" />
+                      </div>
+                    </div>
+                    <div className="h-9 w-36 rounded-xl qaaga-skeleton shrink-0" />
+                  </div>
+                ))}
               </div>
             ) : bookings.length === 0 ? (
               <div className="bg-white rounded-2xl p-10 text-center border border-slate-200">
@@ -529,6 +562,7 @@ export default function UserDashboard({
                 </p>
                 <Link
                   href="/properties"
+                  prefetch={true}
                   className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#C72B62] text-white text-xs font-bold shadow-xs hover:bg-[#ad2253]"
                 >
                   <span>Explore Apartments Now</span>
@@ -547,11 +581,14 @@ export default function UserDashboard({
                       className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-5"
                     >
                       <div className="flex items-start gap-4 min-w-0">
-                        <img
-                          src={bk.image || '/assets/kl-ui/kl-1.jpg'}
-                          alt={bk.title}
-                          className="w-24 h-20 sm:w-28 sm:h-24 rounded-xl object-cover shrink-0"
-                        />
+                        <div className="w-24 h-20 sm:w-28 sm:h-24 rounded-xl overflow-hidden shrink-0 relative">
+                          <ListingImage
+                            src={bk.image || '/assets/kl-ui/kl-1.jpg'}
+                            alt={bk.title}
+                            sizes="120px"
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 flex-wrap text-xs">
                             <span
@@ -908,7 +945,13 @@ export default function UserDashboard({
               </p>
             </div>
 
-            {payments.length === 0 ? (
+            {loadingPayments ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {Array.from({ length: 3 }).map((_, idx) => (
+                  <div key={idx} className="h-56 rounded-2xl qaaga-skeleton" />
+                ))}
+              </div>
+            ) : payments.length === 0 ? (
               <div className="bg-white rounded-2xl p-10 text-center border border-slate-200">
                 <CreditCard size={28} className="text-slate-400 mx-auto mb-2" />
                 <h3 className="text-sm font-bold text-slate-800">No payment records yet</h3>
@@ -944,6 +987,10 @@ export default function UserDashboard({
                       <img
                         src={p.proofImageUrl}
                         alt="Payment Slip"
+                        width={400}
+                        height={225}
+                        decoding="async"
+                        referrerPolicy="no-referrer"
                         className="w-full h-full object-cover hover:scale-105 transition-transform"
                       />
                     </div>

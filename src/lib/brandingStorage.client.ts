@@ -156,6 +156,7 @@ export async function persistBrandingEverywhere(
     updatedAt: new Date().toISOString(),
   };
 
+  invalidateBrandingCache();
   writeSyncLocalBranding(stamped);
   await writeIdbBranding(stamped);
 
@@ -194,101 +195,83 @@ export async function persistBrandingEverywhere(
   return stamped;
 }
 
+let brandingReconcilePromise: Promise<SiteBranding> | null = null;
+let brandingReconcileTimestamp = 0;
+let cachedResolvedBranding: SiteBranding | null = null;
+const BRANDING_CACHE_TTL_MS = 15000;
+
+export function invalidateBrandingCache(): void {
+  brandingReconcilePromise = null;
+  brandingReconcileTimestamp = 0;
+  cachedResolvedBranding = null;
+}
+
 export async function reconcileBrandingOnLoad(
   ssrBranding?: SiteBranding
 ): Promise<SiteBranding> {
-  const clientBest = await loadBestClientBranding();
+  const now = Date.now();
+  if (cachedResolvedBranding && now - brandingReconcileTimestamp < BRANDING_CACHE_TTL_MS) {
+    return cachedResolvedBranding;
+  }
 
-  let serverLatest: SiteBranding | null = ssrBranding || null;
-  try {
-    const res = await fetch(`/api/branding?t=${Date.now()}`, {
-      method: 'GET',
-      cache: 'no-store',
-      headers: {
-        'Cache-Control': 'no-cache',
-        Pragma: 'no-cache',
-      },
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (data?.branding) {
-        serverLatest = normalizeClientBranding(data.branding);
+  if (brandingReconcilePromise) {
+    return brandingReconcilePromise;
+  }
+
+  brandingReconcilePromise = (async () => {
+    const clientBest = await loadBestClientBranding();
+
+    let serverLatest: SiteBranding | null = ssrBranding || null;
+    try {
+      const res = await fetch('/api/branding', {
+        method: 'GET',
+        cache: 'no-store',
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.branding) {
+          serverLatest = normalizeClientBranding(data.branding);
+        }
       }
-    }
-  } catch {}
+    } catch {}
 
-  // Check Supabase site_branding table for cloud source of truth
-  let supabaseLatest: SiteBranding | null = null;
-  try {
-    const sbData = await getBrandingFromSupabase();
-    if (sbData) {
-      supabaseLatest = normalizeClientBranding(sbData);
-    }
-  } catch {}
+    // Check Supabase site_branding table for cloud source of truth
+    let supabaseLatest: SiteBranding | null = null;
+    try {
+      const sbData = await getBrandingFromSupabase();
+      if (sbData) {
+        supabaseLatest = normalizeClientBranding(sbData);
+      }
+    } catch {}
 
-  // Reconcile highest revision among client, server, and Supabase
-  const candidates = [clientBest, serverLatest, supabaseLatest].filter(
-    (c): c is SiteBranding => c !== null && c !== undefined
-  );
-
-  if (candidates.length > 0) {
-    const winner = candidates.reduce((best, curr) =>
-      curr.revision > best.revision ? curr : best
+    // Reconcile highest revision among client, server, and Supabase
+    const candidates = [clientBest, serverLatest, supabaseLatest].filter(
+      (c): c is SiteBranding => c !== null && c !== undefined
     );
 
-    if (winner.revision > 0) {
-      writeSyncLocalBranding(winner);
-      await writeIdbBranding(winner);
-      // Ensure server has latest
-      fetch('/api/branding', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        cache: 'no-store',
-        body: JSON.stringify(winner),
-      }).catch(() => {});
-    }
-    return winner;
-  }
+    if (candidates.length > 0) {
+      const winner = candidates.reduce((best, curr) =>
+        curr.revision > best.revision ? curr : best
+      );
 
-  // Case 1: Both client and server exist — pick higher revision, never let default (rev 0) clobber custom (rev > 0)!
-  if (clientBest && serverLatest) {
-    if (clientBest.revision > serverLatest.revision) {
-      // Heal stateless server container with client's newer permanent branding
-      fetch('/api/branding', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        cache: 'no-store',
-        body: JSON.stringify(clientBest),
-      }).catch(() => {});
-      writeSyncLocalBranding(clientBest);
-      await writeIdbBranding(clientBest);
-      return clientBest;
+      if (winner.revision > 0) {
+        writeSyncLocalBranding(winner);
+        await writeIdbBranding(winner);
+      }
+      cachedResolvedBranding = winner;
+      brandingReconcileTimestamp = Date.now();
+      return winner;
     }
 
-    if (serverLatest.revision > 0) {
-      writeSyncLocalBranding(serverLatest);
-      await writeIdbBranding(serverLatest);
-    }
-    return serverLatest;
-  }
+    const fallback = { ...DEFAULT_BRANDING };
+    cachedResolvedBranding = fallback;
+    brandingReconcileTimestamp = Date.now();
+    return fallback;
+  })();
 
-  if (clientBest) {
-    fetch('/api/branding', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      cache: 'no-store',
-      body: JSON.stringify(clientBest),
-    }).catch(() => {});
-    return clientBest;
+  try {
+    return await brandingReconcilePromise;
+  } finally {
+    brandingReconcilePromise = null;
   }
-
-  if (serverLatest) {
-    if (serverLatest.revision > 0) {
-      writeSyncLocalBranding(serverLatest);
-      await writeIdbBranding(serverLatest);
-    }
-    return serverLatest;
-  }
-
-  return { ...DEFAULT_BRANDING };
 }

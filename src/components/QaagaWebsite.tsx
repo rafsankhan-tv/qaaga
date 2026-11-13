@@ -1,17 +1,18 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import dynamic from 'next/dynamic';
+import Link from 'next/link';
 import {
   ArrowRight,
   CalendarCheck2,
   ChevronLeft,
   ChevronRight,
   Globe,
-  Heart,
   Home,
   MessageSquare,
   Plus,
-  RotateCcw,
+  RefreshCw,
   Shield,
   ShieldCheck,
   SlidersHorizontal,
@@ -25,24 +26,18 @@ import {
   CurrencyCode,
   DATE_OPTIONS,
   DEFAULT_BRANDING,
-  DEFAULT_REVIEWS,
   GuestProfile,
   HostThread,
-  INITIAL_BOOKINGS,
-  INITIAL_LISTINGS,
-  INITIAL_NOTIFICATIONS,
-  INITIAL_THREADS,
   ListingReview,
   QaagaCategory,
   QaagaListing,
   SiteBranding,
   STORAGE_KEYS,
 } from '@/data/listings';
-import { AdminPanelModal } from './AdminPanelModal';
 import { BrandLogo } from './BrandLogo';
 import { HeaderSearch } from './HeaderSearch';
 import { ListingCard } from './ListingCard';
-import { ListingDetailModal } from './ListingDetailModal';
+import { CarouselSectionSkeleton, SearchGridSkeleton } from './Skeletons';
 import {
   loadBestClientBranding,
   persistBrandingEverywhere,
@@ -51,22 +46,13 @@ import {
 } from '@/lib/brandingStorage.client';
 import { smoothScrollTo } from './SmoothScrollProvider';
 import {
-  CollectionExplorerModal,
-  HelpCenterModal,
-  HostStudioModal,
-  MessagesInboxModal,
-  ProfileModal,
-  TripsModal,
-} from './PlatformModals';
-import { AuthModal } from './AuthModal';
-import { UserProfileModal } from './UserProfileModal';
-import {
   cancelBookingInDatabase,
   deleteListingFromDatabase,
-  getBookingsFromDatabase,
-  getListingsFromDatabase,
+  FetchStatus,
+  fetchBookingsWithStatus,
+  fetchListingsWithStatus,
+  fetchThreadsWithStatus,
   getReviewsFromDatabase,
-  getThreadsFromDatabase,
   insertBookingToDatabase,
   insertListingToDatabase,
   insertReviewToDatabase,
@@ -74,6 +60,43 @@ import {
   sendMessageToDatabase,
   subscribeToSupabaseTable,
 } from '@/lib/supabaseService';
+
+const AdminPanelModal = dynamic(
+  () => import('./AdminPanelModal').then((m) => m.AdminPanelModal),
+  { ssr: false }
+);
+const ListingDetailModal = dynamic(
+  () => import('./ListingDetailModal').then((m) => m.ListingDetailModal),
+  { ssr: false }
+);
+const CollectionExplorerModal = dynamic(
+  () => import('./PlatformModals').then((m) => m.CollectionExplorerModal),
+  { ssr: false }
+);
+const HelpCenterModal = dynamic(
+  () => import('./PlatformModals').then((m) => m.HelpCenterModal),
+  { ssr: false }
+);
+const HostStudioModal = dynamic(
+  () => import('./PlatformModals').then((m) => m.HostStudioModal),
+  { ssr: false }
+);
+const MessagesInboxModal = dynamic(
+  () => import('./PlatformModals').then((m) => m.MessagesInboxModal),
+  { ssr: false }
+);
+const TripsModal = dynamic(
+  () => import('./PlatformModals').then((m) => m.TripsModal),
+  { ssr: false }
+);
+const AuthModal = dynamic(
+  () => import('./AuthModal').then((m) => m.AuthModal),
+  { ssr: false }
+);
+const UserProfileModal = dynamic(
+  () => import('./UserProfileModal').then((m) => m.UserProfileModal),
+  { ssr: false }
+);
 
 type SortOption = 'recommended' | 'price-asc' | 'price-desc' | 'rating';
 
@@ -163,28 +186,27 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
   const [searchSubmitted, setSearchSubmitted] = useState<boolean>(false);
 
   /* ======================================================================= */
-  /* PERSISTENT MARKETPLACE DATA STATE                                       */
+  /* PERSISTENT MARKETPLACE DATA STATE (REAL SUPABASE, ZERO MOCKS)           */
   /* ======================================================================= */
-  const [customListings, setCustomListings] = useState<QaagaListing[]>([]);
-  const [wishlistIds, setWishlistIds] = useState<string[]>(() =>
-    INITIAL_LISTINGS.filter((item) => item.inInitialWishlist).map((item) => item.id)
-  );
-  const [recentlyViewedIds, setRecentlyViewedIds] = useState<string[]>(() =>
-    INITIAL_LISTINGS.filter((item) => item.inInitialRecent).map((item) => item.id)
-  );
+  const [dbListings, setDbListings] = useState<QaagaListing[]>([]);
+  const [isLoadingListings, setIsLoadingListings] = useState<boolean>(true);
+  const [listingsStatus, setListingsStatus] = useState<FetchStatus>('ok');
+  const [listingsError, setListingsError] = useState<string | null>(null);
+  const [wishlistIds, setWishlistIds] = useState<string[]>([]);
+  const [recentlyViewedIds, setRecentlyViewedIds] = useState<string[]>([]);
   const [userToggledHearts, setUserToggledHearts] = useState<Record<string, boolean>>({});
 
-  const [bookings, setBookings] = useState<BookingRecord[]>(INITIAL_BOOKINGS);
-  const [threads, setThreads] = useState<HostThread[]>(INITIAL_THREADS);
-  const [activeThreadId, setActiveThreadId] = useState<string>(INITIAL_THREADS[0].id);
-  const [notifications, setNotifications] =
-    useState<AppNotification[]>(INITIAL_NOTIFICATIONS);
+  const [bookings, setBookings] = useState<BookingRecord[]>([]);
+  const [threads, setThreads] = useState<HostThread[]>([]);
+  const [activeThreadId, setActiveThreadId] = useState<string>('');
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [currency, setCurrency] = useState<CurrencyCode>('USD');
   const [profile, setProfile] = useState<GuestProfile>({
-    fullName: 'Amina Rahman',
-    email: 'amina@qaaga.com',
+    fullName: 'Guest User',
+    email: '',
     city: 'Kuala Lumpur',
-    verified: true,
+    verified: false,
+    role: 'guest',
   });
   const [reviewsByListing, setReviewsByListing] = useState<
     Record<string, ListingReview[]>
@@ -196,12 +218,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
   const [isNotifOpen, setIsNotifOpen] = useState<boolean>(false);
   const [isAccountOpen, setIsAccountOpen] = useState<boolean>(false);
 
-  const [selectedListing, setSelectedListing] = useState<QaagaListing | null>(() => {
-    if (initialListingId) {
-      return INITIAL_LISTINGS.find((item) => item.id === initialListingId) || null;
-    }
-    return null;
-  });
+  const [selectedListing, setSelectedListing] = useState<QaagaListing | null>(null);
   const [bookingSuccessCode, setBookingSuccessCode] = useState<string | null>(null);
 
   const [branding, setBranding] = useState<SiteBranding>(initialBranding);
@@ -278,7 +295,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
       const savedCustom = localStorage.getItem(STORAGE_KEYS.customListings);
       if (savedCustom) {
         const parsed = JSON.parse(savedCustom);
-        if (Array.isArray(parsed)) setCustomListings(parsed);
+        if (Array.isArray(parsed) && parsed.length > 0) setDbListings(parsed);
       }
       const savedCurrency = localStorage.getItem(STORAGE_KEYS.currency) as CurrencyCode | null;
       if (savedCurrency && CURRENCY_CONFIG[savedCurrency]) {
@@ -301,12 +318,22 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
     }
 
     let cancelled = false;
-    reconcileBrandingOnLoad(initialBranding).then((resolved) => {
-      if (!cancelled) {
-        setBranding(resolved);
-        brandingRef.current = resolved;
-      }
-    });
+    let idleId: number | undefined;
+    let timerId: ReturnType<typeof setTimeout> | undefined;
+    const syncBranding = () => {
+      reconcileBrandingOnLoad(initialBranding).then((resolved) => {
+        if (!cancelled) {
+          setBranding(resolved);
+          brandingRef.current = resolved;
+        }
+      });
+    };
+    const win = typeof window !== 'undefined' ? (window as any) : null;
+    if (win && typeof win.requestIdleCallback === 'function') {
+      idleId = win.requestIdleCallback(syncBranding, { timeout: 1500 });
+    } else if (typeof globalThis !== 'undefined') {
+      timerId = globalThis.setTimeout(syncBranding, 200);
+    }
 
     const syncBrandingFromEvent = (evt: Event) => {
       const custom = evt as CustomEvent<SiteBranding | undefined>;
@@ -327,47 +354,67 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
     window.addEventListener('storage', syncBrandingFromEvent);
     return () => {
       cancelled = true;
+      if (idleId !== undefined && typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
+        (window as any).cancelIdleCallback(idleId);
+      }
+      if (timerId !== undefined && typeof window !== 'undefined') {
+        window.clearTimeout(timerId);
+      }
       window.removeEventListener('qaaga-branding-updated', syncBrandingFromEvent);
       window.removeEventListener('storage', syncBrandingFromEvent);
     };
   }, [initialBranding]);
 
+  const loadListingsFromSupabase = useCallback(async () => {
+    setIsLoadingListings(true);
+    setListingsError(null);
+    const res = await fetchListingsWithStatus();
+    setListingsStatus(res.status);
+    if (res.status === 'error') {
+      setListingsError(res.error || 'Unable to load properties from Supabase.');
+    } else {
+      setDbListings(res.data);
+    }
+    setIsLoadingListings(false);
+  }, []);
+
   // Supabase Database Hydration & Realtime Subscriptions
   useEffect(() => {
     let active = true;
 
-    // 1. Fetch remote listings
-    getListingsFromDatabase().then((remoteListings) => {
+    // 1. Fetch remote listings from Supabase
+    setIsLoadingListings(true);
+    fetchListingsWithStatus().then((res) => {
       if (!active) return;
-      if (remoteListings && remoteListings.length > 0) {
-        const custom = remoteListings.filter(
-          (i) => i.id.startsWith('host-') || !INITIAL_LISTINGS.some((init) => init.id === i.id)
-        );
-        if (custom.length > 0) {
-          setCustomListings(custom);
-        }
+      setListingsStatus(res.status);
+      if (res.status === 'error') {
+        setListingsError(res.error || 'Unable to load properties from Supabase.');
+      } else {
+        setDbListings(res.data);
       }
+      setIsLoadingListings(false);
     });
 
-    // 2. Fetch remote bookings
-    getBookingsFromDatabase(profile.email).then((remoteBookings) => {
+    // 2. Fetch remote bookings when user email exists
+    fetchBookingsWithStatus(profile.email || undefined).then((res) => {
       if (!active) return;
-      if (remoteBookings && remoteBookings.length > 0) {
-        setBookings(remoteBookings);
+      if (res.status === 'ok') {
+        setBookings(res.data);
       }
     });
 
     // 3. Fetch remote inbox threads
-    getThreadsFromDatabase().then((remoteThreads) => {
+    fetchThreadsWithStatus().then((res) => {
       if (!active) return;
-      if (remoteThreads && remoteThreads.length > 0) {
-        setThreads(remoteThreads);
+      if (res.status === 'ok' && res.data.length > 0) {
+        setThreads(res.data);
+        setActiveThreadId((prev) => prev || res.data[0].id);
       }
     });
 
     // 4. Supabase Realtime Channels
     const unsubListings = subscribeToSupabaseTable('listings', (payload) => {
-      if (payload.eventType === 'INSERT') {
+      if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
         const item = payload.new;
         if (item) {
           const mapped: QaagaListing = {
@@ -381,8 +428,8 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
             rating: String(item.rating || '5.0'),
             reviewsCount: Number(item.reviews_count) || 0,
             guestFavorite: Boolean(item.guest_favorite),
-            image: item.image,
-            gallery: Array.isArray(item.gallery) ? item.gallery : [item.image],
+            image: item.image || '/assets/kl-ui/kl-1.jpg',
+            gallery: Array.isArray(item.gallery) ? item.gallery : [item.image || '/assets/kl-ui/kl-1.jpg'],
             maxGuests: Number(item.max_guests) || 2,
             bedrooms: item.bedrooms || '1 bedroom',
             hostName: item.host_name || 'Host',
@@ -391,12 +438,13 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
             description: item.description || '',
             inPopularKL: Boolean(item.in_popular_kl),
           };
-          setCustomListings((prev) => [mapped, ...prev.filter((i) => i.id !== mapped.id)]);
+          setDbListings((prev) => [mapped, ...prev.filter((i) => i.id !== mapped.id)]);
+          setListingsStatus('ok');
         }
       } else if (payload.eventType === 'DELETE') {
         const delId = String(payload.old?.id);
         if (delId) {
-          setCustomListings((prev) => prev.filter((i) => i.id !== delId));
+          setDbListings((prev) => prev.filter((i) => i.id !== delId));
         }
       }
     });
@@ -471,9 +519,9 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
   useEffect(() => {
     if (!hydrated) return;
     try {
-      localStorage.setItem(STORAGE_KEYS.customListings, JSON.stringify(customListings));
+      localStorage.setItem(STORAGE_KEYS.customListings, JSON.stringify(dbListings));
     } catch {}
-  }, [customListings, hydrated]);
+  }, [dbListings, hydrated]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -570,9 +618,10 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
   /* ======================================================================= */
   /* COMPUTED DATA & PRICE FORMATTER                                         */
   /* ======================================================================= */
-  const allListings = useMemo(
-    () => [...customListings, ...INITIAL_LISTINGS],
-    [customListings]
+  const allListings = useMemo(() => dbListings, [dbListings]);
+  const customListings = useMemo(
+    () => dbListings.filter((i) => i.id.startsWith('host-')),
+    [dbListings]
   );
 
   // Handle Browser Back & Forward Buttons (popstate)
@@ -930,64 +979,65 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
     smoothScrollTo('#qaaga-listings-canvas', { offset: -90, duration: 1.1 });
   };
 
-  const handleToggleWishlist = (e: React.MouseEvent, item: QaagaListing) => {
-    e.stopPropagation();
-    const currentlySaved = wishlistIds.includes(item.id);
-    setUserToggledHearts((prev) => ({ ...prev, [item.id]: true }));
+  const handleToggleWishlist = useCallback(
+    (e: React.MouseEvent, item: QaagaListing) => {
+      e.stopPropagation();
+      const currentlySaved = wishlistIds.includes(item.id);
+      setUserToggledHearts((prev) => ({ ...prev, [item.id]: true }));
 
-    if (currentlySaved) {
-      setWishlistIds((prev) => prev.filter((id) => id !== item.id));
-      showToast({
-        message: `Removed "${item.title}" from Wishlist`,
-        undoLabel: 'Undo',
-        onUndo: () => {
-          setWishlistIds((prev) =>
-            prev.includes(item.id) ? prev : [item.id, ...prev]
-          );
-          setToast(null);
-        },
-      });
-    } else {
-      setWishlistIds((prev) => [item.id, ...prev.filter((id) => id !== item.id)]);
-      setNotifications((prev) => [
-        {
-          id: `notif-${Date.now()}`,
-          title: `Added to Wishlist · ${item.title}`,
-          body: `Saved ${item.subType} in ${item.area} to your favorites wishlist.`,
-          time: 'Just now',
-          unread: true,
-          actionType: 'wishlist',
-        },
-        ...prev,
+      if (currentlySaved) {
+        setWishlistIds((prev) => prev.filter((id) => id !== item.id));
+        showToast({
+          message: `Removed "${item.title}" from Wishlist`,
+          undoLabel: 'Undo',
+          onUndo: () => {
+            setWishlistIds((prev) =>
+              prev.includes(item.id) ? prev : [item.id, ...prev]
+            );
+            setToast(null);
+          },
+        });
+      } else {
+        setWishlistIds((prev) => [item.id, ...prev.filter((id) => id !== item.id)]);
+        setNotifications((prev) => [
+          {
+            id: `notif-${Date.now()}`,
+            title: `Added to Wishlist · ${item.title}`,
+            body: `Saved ${item.subType} in ${item.area} to your favorites wishlist.`,
+            time: 'Just now',
+            unread: true,
+            actionType: 'wishlist',
+          },
+          ...prev,
+        ]);
+        showToast({
+          message: `Saved "${item.title}" to Wishlist`,
+          undoLabel: 'Undo',
+          onUndo: () => {
+            setWishlistIds((prev) => prev.filter((id) => id !== item.id));
+            setToast(null);
+          },
+        });
+      }
+    },
+    [wishlistIds, showToast]
+  );
+
+  const handleOpenListing = useCallback(
+    (item: QaagaListing) => {
+      setBookingSuccessCode(null);
+      setSelectedListing(item);
+      setRecentlyViewedIds((prev) => [
+        item.id,
+        ...prev.filter((existing) => existing !== item.id),
       ]);
-      showToast({
-        message: `Saved "${item.title}" to Wishlist`,
-        undoLabel: 'Undo',
-        onUndo: () => {
-          setWishlistIds((prev) => prev.filter((id) => id !== item.id));
-          setToast(null);
-        },
+      getReviewsFromDatabase(item.id).then((revs) => {
+        setReviewsByListing((prev) => ({ ...prev, [item.id]: revs }));
       });
-    }
-  };
-
-  const handleRestoreInitialWishlist = () => {
-    const initialIds = INITIAL_LISTINGS.filter((i) => i.inInitialWishlist).map(
-      (i) => i.id
-    );
-    setWishlistIds(initialIds);
-    showToast({ message: 'Restored all 6 Kuala Lumpur Wishlist homes' });
-  };
-
-  const handleOpenListing = (item: QaagaListing) => {
-    setBookingSuccessCode(null);
-    setSelectedListing(item);
-    setRecentlyViewedIds((prev) => [
-      item.id,
-      ...prev.filter((existing) => existing !== item.id),
-    ]);
-    navigateTo(`/rooms/${item.id}`, { listingId: item.id });
-  };
+      navigateTo(`/rooms/${item.id}`, { listingId: item.id });
+    },
+    [navigateTo]
+  );
 
   const handleConfirmBooking = (nights: number, guestsCount: number) => {
     if (!selectedListing) return;
@@ -1156,7 +1206,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
       inPopularKL: true,
     };
 
-    setCustomListings((prev) => [newItem, ...prev]);
+    setDbListings((prev) => [newItem, ...prev]);
     setRecentlyViewedIds((prev) => [newItem.id, ...prev]);
     insertListingToDatabase(newItem).catch((err) =>
       console.warn('Listing sync notice:', err)
@@ -1170,7 +1220,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
   };
 
   const handleDeleteCustomListing = (id: string) => {
-    setCustomListings((prev) => prev.filter((item) => item.id !== id));
+    setDbListings((prev) => prev.filter((item) => item.id !== id));
     setWishlistIds((prev) => prev.filter((wId) => wId !== id));
     setRecentlyViewedIds((prev) => prev.filter((rId) => rId !== id));
     deleteListingFromDatabase(id).catch((err) =>
@@ -1183,17 +1233,17 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
     if (!selectedListing) return;
     const rev: ListingReview = {
       id: `rev-${Date.now()}`,
-      author: profile.fullName,
-      date: 'November 2026',
+      author: profile.fullName || 'Verified Guest',
+      date: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
       rating,
       comment,
     };
     setReviewsByListing((prev) => ({
       ...prev,
-      [selectedListing.id]: [rev, ...(prev[selectedListing.id] || DEFAULT_REVIEWS[selectedListing.id] || [])],
+      [selectedListing.id]: [rev, ...(prev[selectedListing.id] || [])],
     }));
     insertReviewToDatabase(selectedListing.id, {
-      author: profile.fullName,
+      author: profile.fullName || 'Verified Guest',
       rating,
       comment,
     }).catch((err) => console.warn('Review sync notice:', err));
@@ -1351,29 +1401,32 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
               </button>
             </div>
 
-            {filteredSearchListings.length === 0 ? (
+            {isLoadingListings ? (
+              <SearchGridSkeleton count={12} />
+            ) : filteredSearchListings.length === 0 ? (
               <div className="py-14 px-6 rounded-3xl border border-slate-200 text-center space-y-3">
                 <p className="text-base font-bold text-slate-900">
                   No exact matches found for those filters
                 </p>
                 <p className="text-xs text-slate-500 max-w-md mx-auto">
                   Try searching Bukit Bintang, Kampung Bahru, KLCC, Mont Kiara, or reset
-                  guest counts to explore all Kuala Lumpur stays and experiences.
+                  guest counts to explore all available stays and experiences.
                 </p>
                 <button
                   type="button"
                   onClick={handleResetHome}
                   className="px-5 py-2.5 rounded-full bg-[#C72B62] hover:bg-[#ad2253] text-white text-xs font-semibold cursor-pointer"
                 >
-                  Show all Kuala Lumpur listings
+                  Show all listings
                 </button>
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 2xl:grid-cols-7 min-[1920px]:grid-cols-8 min-[2560px]:grid-cols-10 gap-x-5 gap-y-7">
-                {filteredSearchListings.map((item) => (
+                {filteredSearchListings.map((item, idx) => (
                   <ListingCard
                     key={`search-${item.id}`}
                     item={item}
+                    priority={idx < 6}
                     isSaved={wishlistIds.includes(item.id)}
                     isUserToggled={Boolean(userToggledHearts[item.id])}
                     formattedPrice={formatPrice(item.twoNightPriceUsd)}
@@ -1388,299 +1441,330 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
         )}
 
         {/* ----------------------------------------------------------------- */}
-        {/* CASE B: DEFAULT "ALL" HOME CANVAS MATCHING TARGET SCREENSHOT 1:1  */}
+        {/* CASE B: DEFAULT "ALL" HOME CANVAS                                 */}
         {/* ----------------------------------------------------------------- */}
         {activeCategory === 'all' && !showFilteredSearchCanvas && (
           <>
-            {/* ROW 1: Recently viewed */}
-            <section
-              aria-labelledby="heading-recently-viewed"
-              className="group/recent space-y-3.5"
-            >
-              <div className="flex items-center justify-between gap-4">
-                <h2
-                  id="heading-recently-viewed"
-                  className="text-[20px] sm:text-[22px] font-bold text-slate-950 tracking-[-0.02em]"
-                >
-                  Recently viewed
-                </h2>
-
-                <div className="hidden sm:flex items-center gap-2 opacity-0 group-hover/recent:opacity-100 focus-within:opacity-100 transition-opacity">
+            {isLoadingListings ? (
+              <div className="space-y-9 sm:space-y-11">
+                <CarouselSectionSkeleton titleWidth="w-44" count={8} variant="recent" />
+                <CarouselSectionSkeleton titleWidth="w-36" count={6} variant="wishlist" />
+                <CarouselSectionSkeleton titleWidth="w-64" count={6} variant="wishlist" />
+              </div>
+            ) : allListings.length === 0 ? (
+              <section className="py-16 px-6 rounded-3xl border border-slate-200 bg-slate-50/60 text-center space-y-3">
+                <p className="text-lg font-bold text-slate-900">
+                  {listingsStatus === 'error'
+                    ? 'Unable to connect to live Supabase inventory'
+                    : 'No published listings in Supabase yet'}
+                </p>
+                <p className="text-xs sm:text-sm text-slate-500 max-w-md mx-auto">
+                  {listingsError ||
+                    'Listings published by hosts or synced to Supabase will appear here automatically in real time.'}
+                </p>
+                <div className="flex items-center justify-center gap-3 pt-2">
                   <button
                     type="button"
-                    aria-label="Scroll recently viewed left"
-                    onClick={() => scrollCarousel(recentCarouselRef, 'left')}
-                    className="w-8 h-8 rounded-full border border-slate-200 bg-white hover:border-slate-400 text-slate-700 flex items-center justify-center transition-colors cursor-pointer"
+                    onClick={loadListingsFromSupabase}
+                    className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-full bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold cursor-pointer"
                   >
-                    <ChevronLeft size={16} />
+                    <RefreshCw size={13} />
+                    <span>Retry Sync</span>
                   </button>
                   <button
                     type="button"
-                    aria-label="Scroll recently viewed right"
-                    onClick={() => scrollCarousel(recentCarouselRef, 'right')}
-                    className="w-8 h-8 rounded-full border border-slate-200 bg-white hover:border-slate-400 text-slate-700 flex items-center justify-center transition-colors cursor-pointer"
+                    onClick={() => {
+                      setIsHostModalOpen(true);
+                      navigateTo('/host');
+                    }}
+                    className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-full bg-[#C72B62] hover:bg-[#ad2253] text-white text-xs font-semibold cursor-pointer"
                   >
-                    <ChevronRight size={16} />
+                    <Plus size={14} />
+                    <span>Publish First Listing</span>
                   </button>
                 </div>
-              </div>
-
-              <div
-                ref={recentCarouselRef}
-                data-lenis-prevent
-                className="flex gap-3 sm:gap-3.5 lg:gap-4 overflow-x-auto scrollbar-none snap-x snap-mandatory scroll-smooth pb-1"
-              >
-                {recentlyViewedListings.map((item) => (
-                  <ListingCard
-                    key={`recent-${item.id}`}
-                    item={item}
-                    isSaved={wishlistIds.includes(item.id)}
-                    isUserToggled={Boolean(userToggledHearts[item.id])}
-                    formattedPrice={formatPrice(item.twoNightPriceUsd)}
-                    activeNights={activeNights}
-                    carouselItem={true}
-                    variant="recent"
-                    onOpen={handleOpenListing}
-                    onToggleWishlist={handleToggleWishlist}
-                  />
-                ))}
-              </div>
-            </section>
-
-            {/* ROW 2: Wishlist */}
-            <section aria-labelledby="heading-wishlist" className="space-y-3.5">
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <h2
-                    id="heading-wishlist"
-                    className="text-[20px] sm:text-[22px] font-bold text-slate-950 tracking-[-0.02em]"
+              </section>
+            ) : (
+              <>
+                {/* ROW 1: Recently viewed */}
+                {recentlyViewedListings.length > 0 && (
+                  <section
+                    aria-labelledby="heading-recently-viewed"
+                    className="group/recent space-y-3.5"
                   >
-                    Wishlist
-                  </h2>
-                  {wishlistListings.length < 6 && (
-                    <button
-                      type="button"
-                      onClick={handleRestoreInitialWishlist}
-                      className="inline-flex items-center gap-1 text-xs font-semibold text-[#C72B62] hover:underline cursor-pointer"
-                    >
-                      <RotateCcw size={12} />
-                      <span>Restore all 6</span>
-                    </button>
-                  )}
-                </div>
+                    <div className="flex items-center justify-between gap-4">
+                      <h2
+                        id="heading-recently-viewed"
+                        className="text-[20px] sm:text-[22px] font-bold text-slate-950 tracking-[-0.02em]"
+                      >
+                        Recently viewed
+                      </h2>
 
-                {wishlistListings.length > 6 && (
-                  <div className="hidden sm:flex items-center gap-2">
-                    <button
-                      type="button"
-                      aria-label="Scroll wishlist left"
-                      onClick={() => scrollCarousel(wishlistCarouselRef, 'left')}
-                      className="w-8 h-8 rounded-full border border-slate-200 bg-white hover:border-slate-400 text-slate-700 flex items-center justify-center transition-colors cursor-pointer"
+                      <div className="hidden sm:flex items-center gap-2 opacity-0 group-hover/recent:opacity-100 focus-within:opacity-100 transition-opacity">
+                        <button
+                          type="button"
+                          aria-label="Scroll recently viewed left"
+                          onClick={() => scrollCarousel(recentCarouselRef, 'left')}
+                          className="w-8 h-8 rounded-full border border-slate-200 bg-white hover:border-slate-400 text-slate-700 flex items-center justify-center transition-colors cursor-pointer"
+                        >
+                          <ChevronLeft size={16} />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="Scroll recently viewed right"
+                          onClick={() => scrollCarousel(recentCarouselRef, 'right')}
+                          className="w-8 h-8 rounded-full border border-slate-200 bg-white hover:border-slate-400 text-slate-700 flex items-center justify-center transition-colors cursor-pointer"
+                        >
+                          <ChevronRight size={16} />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div
+                      ref={recentCarouselRef}
+                      data-lenis-prevent
+                      className="carousel-scroll flex gap-3 sm:gap-3.5 lg:gap-4 overflow-x-auto scrollbar-none snap-x snap-mandatory scroll-smooth pb-1"
                     >
-                      <ChevronLeft size={16} />
-                    </button>
-                    <button
-                      type="button"
-                      aria-label="Scroll wishlist right"
-                      onClick={() => scrollCarousel(wishlistCarouselRef, 'right')}
-                      className="w-8 h-8 rounded-full border border-slate-200 bg-white hover:border-slate-400 text-slate-700 flex items-center justify-center transition-colors cursor-pointer"
-                    >
-                      <ChevronRight size={16} />
-                    </button>
-                  </div>
+                      {recentlyViewedListings.map((item, idx) => (
+                        <ListingCard
+                          key={`recent-${item.id}`}
+                          item={item}
+                          priority={idx < 5}
+                          isSaved={wishlistIds.includes(item.id)}
+                          isUserToggled={Boolean(userToggledHearts[item.id])}
+                          formattedPrice={formatPrice(item.twoNightPriceUsd)}
+                          activeNights={activeNights}
+                          carouselItem={true}
+                          variant="recent"
+                          onOpen={handleOpenListing}
+                          onToggleWishlist={handleToggleWishlist}
+                        />
+                      ))}
+                    </div>
+                  </section>
                 )}
-              </div>
 
-              {wishlistListings.length === 0 ? (
-                <div className="py-10 px-6 rounded-3xl border border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
-                  <div>
-                    <p className="text-sm font-bold text-slate-900">
-                      Your Wishlist is currently empty
-                    </p>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Tap the heart icon on any Kuala Lumpur home to save it right here.
-                    </p>
+                {/* ROW 2: Wishlist */}
+                <section aria-labelledby="heading-wishlist" className="space-y-3.5">
+                  <div className="flex items-center justify-between gap-4">
+                    <h2
+                      id="heading-wishlist"
+                      className="text-[20px] sm:text-[22px] font-bold text-slate-950 tracking-[-0.02em]"
+                    >
+                      Wishlist
+                    </h2>
+
+                    {wishlistListings.length > 6 && (
+                      <div className="hidden sm:flex items-center gap-2">
+                        <button
+                          type="button"
+                          aria-label="Scroll wishlist left"
+                          onClick={() => scrollCarousel(wishlistCarouselRef, 'left')}
+                          className="w-8 h-8 rounded-full border border-slate-200 bg-white hover:border-slate-400 text-slate-700 flex items-center justify-center transition-colors cursor-pointer"
+                        >
+                          <ChevronLeft size={16} />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="Scroll wishlist right"
+                          onClick={() => scrollCarousel(wishlistCarouselRef, 'right')}
+                          className="w-8 h-8 rounded-full border border-slate-200 bg-white hover:border-slate-400 text-slate-700 flex items-center justify-center transition-colors cursor-pointer"
+                        >
+                          <ChevronRight size={16} />
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleRestoreInitialWishlist}
-                    className="px-4 py-2 rounded-full bg-[#C72B62] hover:bg-[#ad2253] text-white text-xs font-semibold cursor-pointer"
-                  >
-                    Restore default Wishlist
-                  </button>
-                </div>
-              ) : (
-                <div
-                  ref={wishlistCarouselRef}
-                  data-lenis-prevent
-                  className="flex gap-3.5 sm:gap-4 overflow-x-auto scrollbar-none snap-x snap-mandatory scroll-smooth pb-1"
-                >
-                  {wishlistListings.map((item) => (
-                    <ListingCard
-                      key={`wish-${item.id}`}
-                      item={item}
-                      isSaved={true}
-                      isUserToggled={Boolean(userToggledHearts[item.id])}
-                      formattedPrice={formatPrice(item.twoNightPriceUsd)}
-                      activeNights={activeNights}
-                      carouselItem={true}
-                      variant="wishlist"
-                      onOpen={handleOpenListing}
-                      onToggleWishlist={handleToggleWishlist}
-                    />
-                  ))}
-                </div>
-              )}
-            </section>
 
-            {/* ROW 3: Popular homes in Kuala Lumpur → + Subtitle + < > Controls */}
-            <section aria-labelledby="heading-popular-kl" className="space-y-3.5">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setExplorerOnlyFavorites(false);
-                      setExplorerSort('recommended');
-                      setExplorerCollection({
-                        mode: 'popular-kl',
-                        title: 'Popular homes in Kuala Lumpur',
-                      });
-                    }}
-                    className="group inline-flex items-center gap-2 text-left cursor-pointer"
-                  >
-                    <h2
-                      id="heading-popular-kl"
-                      className="text-[20px] sm:text-[22px] font-bold text-slate-950 tracking-[-0.02em] group-hover:text-[#C72B62] transition-colors"
+                  {wishlistListings.length === 0 ? (
+                    <div className="py-8 px-6 rounded-3xl border border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
+                      <div>
+                        <p className="text-sm font-bold text-slate-900">
+                          Your Wishlist is currently empty
+                        </p>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          Tap the heart icon on any home to save it to your wishlist.
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div
+                      ref={wishlistCarouselRef}
+                      data-lenis-prevent
+                      className="carousel-scroll flex gap-3.5 sm:gap-4 overflow-x-auto scrollbar-none snap-x snap-mandatory scroll-smooth pb-1"
                     >
-                      Popular homes in Kuala Lumpur
-                    </h2>
-                    <span className="w-7 h-7 rounded-full bg-slate-100 group-hover:bg-[#C72B62] group-hover:text-white text-slate-800 flex items-center justify-center transition-colors shrink-0">
-                      <ArrowRight size={15} strokeWidth={2.3} />
-                    </span>
-                  </button>
-                  <p className="text-[13px] sm:text-[13.5px] text-slate-500 mt-0.5">
-                    Malaysian capital with skyline views
-                  </p>
-                </div>
+                      {wishlistListings.map((item) => (
+                        <ListingCard
+                          key={`wish-${item.id}`}
+                          item={item}
+                          isSaved={true}
+                          isUserToggled={Boolean(userToggledHearts[item.id])}
+                          formattedPrice={formatPrice(item.twoNightPriceUsd)}
+                          activeNights={activeNights}
+                          carouselItem={true}
+                          variant="wishlist"
+                          onOpen={handleOpenListing}
+                          onToggleWishlist={handleToggleWishlist}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </section>
 
-                <div className="flex items-center gap-2 shrink-0 pt-0.5">
-                  <button
-                    type="button"
-                    aria-label="Previous popular homes"
-                    onClick={() => scrollCarousel(popularCarouselRef, 'left')}
-                    className="w-8 h-8 rounded-full border border-slate-200 bg-slate-50/80 hover:bg-white hover:border-slate-400 text-slate-600 flex items-center justify-center transition-colors cursor-pointer"
-                  >
-                    <ChevronLeft size={16} />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label="Next popular homes"
-                    onClick={() => scrollCarousel(popularCarouselRef, 'right')}
-                    className="w-8 h-8 rounded-full border border-slate-200 bg-white hover:border-slate-400 text-slate-800 flex items-center justify-center transition-colors cursor-pointer"
-                  >
-                    <ChevronRight size={16} />
-                  </button>
-                </div>
-              </div>
+                {/* ROW 3: Popular homes in Kuala Lumpur */}
+                {popularKLListings.length > 0 && (
+                  <section aria-labelledby="heading-popular-kl" className="space-y-3.5">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setExplorerOnlyFavorites(false);
+                            setExplorerSort('recommended');
+                            setExplorerCollection({
+                              mode: 'popular-kl',
+                              title: 'Popular homes in Kuala Lumpur',
+                            });
+                          }}
+                          className="group inline-flex items-center gap-2 text-left cursor-pointer"
+                        >
+                          <h2
+                            id="heading-popular-kl"
+                            className="text-[20px] sm:text-[22px] font-bold text-slate-950 tracking-[-0.02em] group-hover:text-[#C72B62] transition-colors"
+                          >
+                            Popular homes in Kuala Lumpur
+                          </h2>
+                          <span className="w-7 h-7 rounded-full bg-slate-100 group-hover:bg-[#C72B62] group-hover:text-white text-slate-800 flex items-center justify-center transition-colors shrink-0">
+                            <ArrowRight size={15} strokeWidth={2.3} />
+                          </span>
+                        </button>
+                        <p className="text-[13px] sm:text-[13.5px] text-slate-500 mt-0.5">
+                          Malaysian capital with skyline views
+                        </p>
+                      </div>
 
-              <div
-                ref={popularCarouselRef}
-                data-lenis-prevent
-                className="flex gap-3.5 sm:gap-4 overflow-x-auto scrollbar-none snap-x snap-mandatory scroll-smooth pb-1"
-              >
-                {popularKLListings.map((item) => (
-                  <ListingCard
-                    key={`popular-${item.id}`}
-                    item={item}
-                    isSaved={wishlistIds.includes(item.id)}
-                    isUserToggled={Boolean(userToggledHearts[item.id])}
-                    formattedPrice={formatPrice(item.twoNightPriceUsd)}
-                    activeNights={activeNights}
-                    carouselItem={true}
-                    variant="wishlist"
-                    onOpen={handleOpenListing}
-                    onToggleWishlist={handleToggleWishlist}
-                  />
-                ))}
-              </div>
-            </section>
+                      <div className="flex items-center gap-2 shrink-0 pt-0.5">
+                        <button
+                          type="button"
+                          aria-label="Previous popular homes"
+                          onClick={() => scrollCarousel(popularCarouselRef, 'left')}
+                          className="w-8 h-8 rounded-full border border-slate-200 bg-slate-50/80 hover:bg-white hover:border-slate-400 text-slate-600 flex items-center justify-center transition-colors cursor-pointer"
+                        >
+                          <ChevronLeft size={16} />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="Next popular homes"
+                          onClick={() => scrollCarousel(popularCarouselRef, 'right')}
+                          className="w-8 h-8 rounded-full border border-slate-200 bg-white hover:border-slate-400 text-slate-800 flex items-center justify-center transition-colors cursor-pointer"
+                        >
+                          <ChevronRight size={16} />
+                        </button>
+                      </div>
+                    </div>
 
-            {/* ROW 4 (Below the fold): Experiences & Hospitality Services in KL */}
-            <section
-              aria-labelledby="heading-experiences-services"
-              className="pt-2 space-y-3.5"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setExplorerOnlyFavorites(false);
-                      setExplorerSort('recommended');
-                      setExplorerCollection({
-                        mode: 'experiences-services',
-                        title: 'Experiences & services in Kuala Lumpur',
-                      });
-                    }}
-                    className="group inline-flex items-center gap-2 text-left cursor-pointer"
-                  >
-                    <h2
-                      id="heading-experiences-services"
-                      className="text-[20px] sm:text-[22px] font-bold text-slate-950 tracking-[-0.02em] group-hover:text-[#C72B62] transition-colors"
+                    <div
+                      ref={popularCarouselRef}
+                      data-lenis-prevent
+                      className="carousel-scroll flex gap-3.5 sm:gap-4 overflow-x-auto scrollbar-none snap-x snap-mandatory scroll-smooth pb-1"
                     >
-                      Experiences & services in Kuala Lumpur
-                    </h2>
-                    <span className="w-7 h-7 rounded-full bg-slate-100 group-hover:bg-[#C72B62] group-hover:text-white text-slate-800 flex items-center justify-center transition-colors shrink-0">
-                      <ArrowRight size={15} strokeWidth={2.3} />
-                    </span>
-                  </button>
-                  <p className="text-[13px] sm:text-[13.5px] text-slate-500 mt-0.5">
-                    Local night-market tours, private chefs, airport chauffeurs & spa care
-                  </p>
-                </div>
+                      {popularKLListings.map((item) => (
+                        <ListingCard
+                          key={`popular-${item.id}`}
+                          item={item}
+                          isSaved={wishlistIds.includes(item.id)}
+                          isUserToggled={Boolean(userToggledHearts[item.id])}
+                          formattedPrice={formatPrice(item.twoNightPriceUsd)}
+                          activeNights={activeNights}
+                          carouselItem={true}
+                          variant="wishlist"
+                          onOpen={handleOpenListing}
+                          onToggleWishlist={handleToggleWishlist}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                )}
 
-                <div className="flex items-center gap-2 shrink-0 pt-0.5">
-                  <button
-                    type="button"
-                    aria-label="Previous experiences and services"
-                    onClick={() => scrollCarousel(curatedCarouselRef, 'left')}
-                    className="w-8 h-8 rounded-full border border-slate-200 bg-slate-50/80 hover:bg-white hover:border-slate-400 text-slate-600 flex items-center justify-center transition-colors cursor-pointer"
+                {/* ROW 4 (Below the fold): Experiences & Hospitality Services in KL */}
+                {curatedExperiencesAndServices.length > 0 && (
+                  <section
+                    aria-labelledby="heading-experiences-services"
+                    className="pt-2 space-y-3.5"
                   >
-                    <ChevronLeft size={16} />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label="Next experiences and services"
-                    onClick={() => scrollCarousel(curatedCarouselRef, 'right')}
-                    className="w-8 h-8 rounded-full border border-slate-200 bg-white hover:border-slate-400 text-slate-800 flex items-center justify-center transition-colors cursor-pointer"
-                  >
-                    <ChevronRight size={16} />
-                  </button>
-                </div>
-              </div>
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setExplorerOnlyFavorites(false);
+                            setExplorerSort('recommended');
+                            setExplorerCollection({
+                              mode: 'experiences-services',
+                              title: 'Experiences & services in Kuala Lumpur',
+                            });
+                          }}
+                          className="group inline-flex items-center gap-2 text-left cursor-pointer"
+                        >
+                          <h2
+                            id="heading-experiences-services"
+                            className="text-[20px] sm:text-[22px] font-bold text-slate-950 tracking-[-0.02em] group-hover:text-[#C72B62] transition-colors"
+                          >
+                            Experiences & services in Kuala Lumpur
+                          </h2>
+                          <span className="w-7 h-7 rounded-full bg-slate-100 group-hover:bg-[#C72B62] group-hover:text-white text-slate-800 flex items-center justify-center transition-colors shrink-0">
+                            <ArrowRight size={15} strokeWidth={2.3} />
+                          </span>
+                        </button>
+                        <p className="text-[13px] sm:text-[13.5px] text-slate-500 mt-0.5">
+                          Local night-market tours, private chefs, airport chauffeurs & spa care
+                        </p>
+                      </div>
 
-              <div
-                ref={curatedCarouselRef}
-                data-lenis-prevent
-                className="flex gap-3.5 sm:gap-4 overflow-x-auto scrollbar-none snap-x snap-mandatory scroll-smooth pb-1"
-              >
-                {curatedExperiencesAndServices.map((item) => (
-                  <ListingCard
-                    key={`curated-${item.id}`}
-                    item={item}
-                    isSaved={wishlistIds.includes(item.id)}
-                    isUserToggled={Boolean(userToggledHearts[item.id])}
-                    formattedPrice={formatPrice(item.twoNightPriceUsd)}
-                    activeNights={activeNights}
-                    carouselItem={true}
-                    variant="wishlist"
-                    onOpen={handleOpenListing}
-                    onToggleWishlist={handleToggleWishlist}
-                  />
-                ))}
-              </div>
-            </section>
+                      <div className="flex items-center gap-2 shrink-0 pt-0.5">
+                        <button
+                          type="button"
+                          aria-label="Previous experiences and services"
+                          onClick={() => scrollCarousel(curatedCarouselRef, 'left')}
+                          className="w-8 h-8 rounded-full border border-slate-200 bg-slate-50/80 hover:bg-white hover:border-slate-400 text-slate-600 flex items-center justify-center transition-colors cursor-pointer"
+                        >
+                          <ChevronLeft size={16} />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="Next experiences and services"
+                          onClick={() => scrollCarousel(curatedCarouselRef, 'right')}
+                          className="w-8 h-8 rounded-full border border-slate-200 bg-white hover:border-slate-400 text-slate-800 flex items-center justify-center transition-colors cursor-pointer"
+                        >
+                          <ChevronRight size={16} />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div
+                      ref={curatedCarouselRef}
+                      data-lenis-prevent
+                      className="carousel-scroll flex gap-3.5 sm:gap-4 overflow-x-auto scrollbar-none snap-x snap-mandatory scroll-smooth pb-1"
+                    >
+                      {curatedExperiencesAndServices.map((item) => (
+                        <ListingCard
+                          key={`curated-${item.id}`}
+                          item={item}
+                          isSaved={wishlistIds.includes(item.id)}
+                          isUserToggled={Boolean(userToggledHearts[item.id])}
+                          formattedPrice={formatPrice(item.twoNightPriceUsd)}
+                          activeNights={activeNights}
+                          carouselItem={true}
+                          variant="wishlist"
+                          onOpen={handleOpenListing}
+                          onToggleWishlist={handleToggleWishlist}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                )}
+              </>
+            )}
           </>
         )}
 
@@ -1749,7 +1833,9 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
               })}
             </div>
 
-            {categoryListings.length === 0 ? (
+            {isLoadingListings ? (
+              <SearchGridSkeleton count={12} />
+            ) : categoryListings.length === 0 ? (
               <div className="py-12 px-6 rounded-3xl border border-slate-200 text-center space-y-3">
                 <p className="text-sm font-bold text-slate-900">
                   No listings match this filter combination
@@ -1767,10 +1853,11 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 2xl:grid-cols-7 min-[1920px]:grid-cols-8 min-[2560px]:grid-cols-10 gap-x-5 gap-y-7">
-                {categoryListings.map((item) => (
+                {categoryListings.map((item, idx) => (
                   <ListingCard
                     key={`cat-${item.id}`}
                     item={item}
+                    priority={idx < 6}
                     isSaved={wishlistIds.includes(item.id)}
                     isUserToggled={Boolean(userToggledHearts[item.id])}
                     formattedPrice={formatPrice(item.twoNightPriceUsd)}
@@ -1833,6 +1920,15 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
               <p className="font-bold text-slate-900">Your Account</p>
               <ul className="space-y-1.5">
                 <li>
+                  <Link
+                    href="/user/dashboard"
+                    prefetch={true}
+                    className="hover:text-[#C72B62] hover:underline"
+                  >
+                    Customer Dashboard
+                  </Link>
+                </li>
+                <li>
                   <button
                     type="button"
                     onClick={() => setIsTripsOpen(true)}
@@ -1861,15 +1957,6 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
                     Saved Wishlist ({wishlistIds.length})
                   </button>
                 </li>
-                <li>
-                  <button
-                    type="button"
-                    onClick={() => setIsProfileOpen(true)}
-                    className="hover:text-[#C72B62] hover:underline cursor-pointer"
-                  >
-                    Guest Profile
-                  </button>
-                </li>
               </ul>
             </div>
 
@@ -1877,13 +1964,22 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
               <p className="font-bold text-slate-900">Hosting & Support</p>
               <ul className="space-y-1.5">
                 <li>
-                  <button
-                    type="button"
-                    onClick={() => setIsHostModalOpen(true)}
-                    className="hover:text-[#C72B62] hover:underline cursor-pointer"
+                  <Link
+                    href="/host/dashboard"
+                    prefetch={true}
+                    className="hover:text-[#C72B62] hover:underline"
                   >
-                    Become a host on qaaga.com
-                  </button>
+                    Host Dashboard & Studio
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/properties"
+                    prefetch={true}
+                    className="hover:text-[#C72B62] hover:underline"
+                  >
+                    Browse All Properties
+                  </Link>
                 </li>
                 <li>
                   <button
@@ -1896,23 +1992,14 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
                   </button>
                 </li>
                 <li>
-                  <button
-                    type="button"
-                    onClick={() => setIsHelpOpen(true)}
-                    className="hover:text-[#C72B62] hover:underline cursor-pointer"
-                  >
-                    24/7 Guest Help Center
-                  </button>
-                </li>
-                <li>
-                  <button
-                    type="button"
-                    onClick={() => setIsAdminOpen(true)}
-                    className="inline-flex items-center gap-1 font-semibold text-slate-800 hover:text-[#C72B62] hover:underline cursor-pointer"
+                  <Link
+                    href="/admin/dashboard"
+                    prefetch={true}
+                    className="inline-flex items-center gap-1 font-semibold text-slate-800 hover:text-[#C72B62] hover:underline"
                   >
                     <Shield size={13} className="text-[#C72B62]" />
                     <span>Admin Panel (Logo & Site)</span>
-                  </button>
+                  </Link>
                 </li>
               </ul>
             </div>
@@ -2090,7 +2177,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
         <ListingDetailModal
           listing={selectedListing}
           isSaved={wishlistIds.includes(selectedListing.id)}
-          reviews={reviewsByListing[selectedListing.id] || DEFAULT_REVIEWS}
+          reviews={reviewsByListing[selectedListing.id] || []}
           initialNights={activeNights}
           initialGuests={Math.max(1, totalGuests || 2)}
           dateRangeLabel={selectedDates.display || 'Nov 14 – Nov 16'}
@@ -2275,28 +2362,30 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
       )}
 
       {/* Supabase Email OTP / Social Login Modal */}
-      <AuthModal
-        isOpen={isAuthModalOpen}
-        onClose={() => {
-          setIsAuthModalOpen(false);
-          navigateTo('/');
-        }}
-        branding={branding}
-        profile={profile}
-        onUpdateProfile={(updated) => {
-          setProfile(updated);
-          try {
-            localStorage.setItem(STORAGE_KEYS.profile, JSON.stringify(updated));
-          } catch {
-            // ignore
-          }
-        }}
-        onOpenAdminModal={() => {
-          setIsAdminOpen(true);
-          navigateTo('/admin');
-        }}
-        onShowToast={showToast}
-      />
+      {isAuthModalOpen && (
+        <AuthModal
+          isOpen={isAuthModalOpen}
+          onClose={() => {
+            setIsAuthModalOpen(false);
+            navigateTo('/');
+          }}
+          branding={branding}
+          profile={profile}
+          onUpdateProfile={(updated) => {
+            setProfile(updated);
+            try {
+              localStorage.setItem(STORAGE_KEYS.profile, JSON.stringify(updated));
+            } catch {
+              // ignore
+            }
+          }}
+          onOpenAdminModal={() => {
+            setIsAdminOpen(true);
+            navigateTo('/admin');
+          }}
+          onShowToast={showToast}
+        />
+      )}
     </div>
   );
 };

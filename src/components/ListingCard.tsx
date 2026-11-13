@@ -1,25 +1,41 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { motion } from 'motion/react';
 import { Building2, Heart, Star } from 'lucide-react';
 import { QaagaListing } from '@/data/listings';
 
-export const ListingImage: React.FC<{
+interface ListingImageProps {
   src: string;
   alt: string;
   className?: string;
-}> = ({ src, alt, className = '' }) => {
+  sizes?: string;
+  priority?: boolean;
+}
+
+const DEFAULT_CARD_SIZES =
+  '(max-width: 499px) 50vw, (max-width: 767px) 33vw, (max-width: 1023px) 25vw, (max-width: 1279px) 20vw, 17vw';
+
+export const ListingImage: React.FC<ListingImageProps> = React.memo(({
+  src,
+  alt,
+  className = '',
+  sizes = DEFAULT_CARD_SIZES,
+  priority = false,
+}) => {
   const [failed, setFailed] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     setFailed(false);
+    setLoaded(false);
   }, [src]);
 
-  if (failed) {
+  if (!src || failed) {
     return (
       <div
-        className={`bg-gradient-to-br from-slate-100 via-pink-50/40 to-slate-200 flex flex-col items-center justify-center text-slate-500 p-4 ${className}`}
+        className={`w-full h-full bg-gradient-to-br from-slate-100 via-pink-50/40 to-slate-200 flex flex-col items-center justify-center text-slate-500 p-4 ${className}`}
       >
         <Building2 size={26} className="text-[#C72B62] mb-1.5" />
         <span className="text-xs font-medium text-center line-clamp-1">{alt}</span>
@@ -27,16 +43,49 @@ export const ListingImage: React.FC<{
     );
   }
 
+  const isInlineUri = src.startsWith('data:') || src.startsWith('blob:');
+
+  if (isInlineUri) {
+    return (
+      <img
+        src={src}
+        alt={alt}
+        referrerPolicy="no-referrer"
+        decoding="async"
+        loading={priority ? 'eager' : 'lazy'}
+        onLoad={() => setLoaded(true)}
+        onError={() => setFailed(true)}
+        className={`${className} transition-opacity duration-300 ${loaded ? 'opacity-100' : 'opacity-0'}`}
+      />
+    );
+  }
+
   return (
-    <img
-      src={src}
-      alt={alt}
-      referrerPolicy="no-referrer"
-      onError={() => setFailed(true)}
-      className={className}
-    />
+    <div className="relative w-full h-full overflow-hidden">
+      {!loaded && (
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 qaaga-skeleton pointer-events-none"
+        />
+      )}
+      <Image
+        src={src}
+        alt={alt}
+        fill
+        sizes={sizes}
+        priority={priority}
+        loading={priority ? 'eager' : 'lazy'}
+        quality={82}
+        referrerPolicy="no-referrer"
+        onLoad={() => setLoaded(true)}
+        onError={() => setFailed(true)}
+        className={`${className} transition-opacity duration-300 ${loaded ? 'opacity-100' : 'opacity-0'}`}
+      />
+    </div>
   );
-};
+});
+
+ListingImage.displayName = 'ListingImage';
 
 interface ListingCardProps {
   item: QaagaListing;
@@ -48,11 +97,12 @@ interface ListingCardProps {
   variant?: 'recent' | 'wishlist' | 'default';
   cardWidthClass?: string;
   vividSavedState?: boolean;
+  priority?: boolean;
   onOpen: (item: QaagaListing) => void;
   onToggleWishlist: (e: React.MouseEvent, item: QaagaListing) => void;
 }
 
-export const ListingCard: React.FC<ListingCardProps> = ({
+export const ListingCard: React.FC<ListingCardProps> = React.memo(({
   item,
   isSaved,
   isUserToggled,
@@ -62,6 +112,7 @@ export const ListingCard: React.FC<ListingCardProps> = ({
   variant = 'default',
   cardWidthClass,
   vividSavedState = false,
+  priority = false,
   onOpen,
   onToggleWishlist,
 }) => {
@@ -89,7 +140,7 @@ export const ListingCard: React.FC<ListingCardProps> = ({
 
   return (
     <article
-      className={`group relative flex flex-col text-left rounded-[16px] sm:rounded-[20px] transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-1 ${responsiveWidthClass}`}
+      className={`group relative flex flex-col text-left rounded-[16px] sm:rounded-[20px] transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-1 ${responsiveWidthClass}`}
     >
       {/* Rounded Square Photo Frame */}
       <div className="relative w-full aspect-[1.05/1] rounded-[16px] sm:rounded-[20px] overflow-hidden bg-slate-100 shadow-[0_2px_8px_rgba(0,0,0,0.04)] group-hover:shadow-[0_8px_20px_rgba(0,0,0,0.1)] transition-shadow duration-300">
@@ -97,11 +148,13 @@ export const ListingCard: React.FC<ListingCardProps> = ({
           type="button"
           aria-label={`View details for ${item.title}`}
           onClick={() => onOpen(item)}
-          className="block w-full h-full cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#C72B62]"
+          className="block relative w-full h-full cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#C72B62]"
         >
           <ListingImage
             src={item.image}
             alt={item.title}
+            priority={priority}
+            sizes={variant === 'recent' ? '(max-width: 640px) 32vw, 14vw' : DEFAULT_CARD_SIZES}
             className="w-full h-full object-cover object-center scale-[1.02] group-hover:scale-[1.08] transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
           />
         </button>
@@ -178,4 +231,6 @@ export const ListingCard: React.FC<ListingCardProps> = ({
       </div>
     </article>
   );
-};
+});
+
+ListingCard.displayName = 'ListingCard';

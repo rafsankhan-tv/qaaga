@@ -1,9 +1,16 @@
 @import "tailwindcss";
 
+:root {
+  --qaaga-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --qaaga-dur-fast: 150ms;
+  --qaaga-dur-base: 280ms;
+}
+
 html,
 body {
   width: 100%;
   min-height: 100%;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -42,6 +49,45 @@ html.lenis body {
   scrollbar-width: none;
 }
 
+/* Native GPU-accelerated horizontal carousel scrolling */
+.carousel-scroll {
+  scroll-behavior: smooth;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x mandatory;
+}
+
+/* Compositor-only skeleton shimmer (transform, never background-position) */
+@keyframes qaaga-shimmer {
+  0% {
+    transform: translate3d(-100%, 0, 0);
+  }
+  100% {
+    transform: translate3d(100%, 0, 0);
+  }
+}
+
+.qaaga-skeleton {
+  position: relative;
+  overflow: hidden;
+  background-color: #f1f5f9;
+}
+
+.qaaga-skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translate3d(-100%, 0, 0);
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.55) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  animation: qaaga-shimmer 1.35s var(--qaaga-ease) infinite;
+  will-change: transform;
+}
+
 .search-button {
   background: linear-gradient(
     to right,
@@ -54,7 +100,7 @@ html.lenis body {
   box-shadow:
     0 3px 12px rgba(0, 0, 0, 0.10),
     0 1px 2px rgba(0, 0, 0, 0.08);
-  transition: all 0.2s ease;
+  transition: transform 0.18s var(--qaaga-ease), opacity 0.18s var(--qaaga-ease), box-shadow 0.18s var(--qaaga-ease);
 }
 
 .search-button:hover {
@@ -67,4 +113,24 @@ html.lenis body {
     #BD1E59 75%,
     #BD1E59 100%
   );
+}
+
+/* Respect prefers-reduced-motion globally */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto !important;
+  }
+  .carousel-scroll {
+    scroll-behavior: auto !important;
+  }
+  .qaaga-skeleton::after {
+    animation: none !important;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

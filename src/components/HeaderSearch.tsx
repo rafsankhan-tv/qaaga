@@ -1,18 +1,17 @@
 'use client';
 
 import React, { useRef, useEffect, useState } from 'react';
+import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Bell,
   CalendarCheck2,
-  ChevronLeft,
-  ChevronRight,
   Heart,
   HelpCircle,
-  MapPin,
+  LayoutDashboard,
   Menu,
   MessageSquare,
-  Minus,
   Plus,
   Search,
   Shield,
@@ -27,15 +26,27 @@ import {
   CurrencyCode,
   DATE_OPTIONS,
   GuestProfile,
-  KL_DESTINATIONS,
   QaagaCategory,
   SiteBranding,
 } from '@/data/listings';
 import { BrandLogo } from './BrandLogo';
-import { SearchLocationPanel } from './SearchLocationPanel';
-import { SearchCalendar } from './SearchCalendar';
-import { SearchGuestSelector } from './SearchGuestSelector';
-import { MobileSearchModal } from './MobileSearchModal';
+
+const SearchLocationPanel = dynamic(
+  () => import('./SearchLocationPanel').then((m) => m.SearchLocationPanel),
+  { ssr: false }
+);
+const SearchCalendar = dynamic(
+  () => import('./SearchCalendar').then((m) => m.SearchCalendar),
+  { ssr: false }
+);
+const SearchGuestSelector = dynamic(
+  () => import('./SearchGuestSelector').then((m) => m.SearchGuestSelector),
+  { ssr: false }
+);
+const MobileSearchModal = dynamic(
+  () => import('./MobileSearchModal').then((m) => m.MobileSearchModal),
+  { ssr: false }
+);
 
 interface HeaderSearchProps {
   branding: SiteBranding;
@@ -101,7 +112,7 @@ interface HeaderSearchProps {
   onOpenAuthModal: () => void;
 }
 
-export const HeaderSearch: React.FC<HeaderSearchProps> = ({
+export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
   branding,
   activeCategory,
   onSelectCategory,
@@ -328,14 +339,14 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
 
   return (
     <div
-      className={`sticky top-0 z-50 bg-white/98 backdrop-blur-md w-full transition-all duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+      className={`sticky top-0 z-50 bg-white/98 backdrop-blur-md w-full transition-[box-shadow,border-color] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
         shouldCollapse
           ? 'border-b border-slate-200/90 shadow-[0_4px_20px_rgba(15,23,42,0.06)]'
           : 'border-b border-slate-200/60 shadow-none'
       }`}
     >
       <div
-        className={`w-full px-3 sm:px-6 lg:px-10 xl:px-12 2xl:px-16 transition-all duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+        className={`w-full px-3 sm:px-6 lg:px-10 xl:px-12 2xl:px-16 ${
           shouldCollapse
             ? 'py-2 sm:py-2.5 space-y-0'
             : 'pt-3 sm:pt-4 pb-3 sm:pb-4 space-y-2.5 sm:space-y-4'
@@ -369,7 +380,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
             {/* Desktop Category Tabs: Shown at top on md+ */}
             <nav
               aria-label="Listing categories"
-              className={`hidden md:flex items-center justify-center gap-4 sm:gap-7 lg:gap-10 overflow-x-auto scrollbar-none px-0.5 transition-all duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+              className={`hidden md:flex items-center justify-center gap-4 sm:gap-7 lg:gap-10 overflow-x-auto scrollbar-none px-0.5 transition-[opacity,transform] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
                 shouldCollapse
                   ? 'opacity-0 scale-95 pointer-events-none -translate-y-2 absolute invisible'
                   : 'opacity-100 scale-100 pointer-events-auto translate-y-0 visible'
@@ -382,7 +393,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
                     key={tab.id}
                     type="button"
                     onClick={() => onSelectCategory(tab.id)}
-                    className={`relative flex items-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0 transition-all duration-300 cursor-pointer pb-2.5 pt-1 ${
+                    className={`relative flex items-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0 transition-colors duration-200 cursor-pointer pb-2.5 pt-1 ${
                       isActive
                         ? 'text-slate-950 font-semibold'
                         : 'text-slate-500 hover:text-slate-800 font-semibold'
@@ -391,9 +402,12 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
                     <img
                       src={tab.iconSrc}
                       alt=""
+                      width={36}
+                      height={36}
+                      decoding="async"
                       aria-hidden="true"
                       referrerPolicy="no-referrer"
-                      className={`w-6 h-6 min-[410px]:w-7 min-[410px]:h-7 sm:w-9 sm:h-9 object-contain transition-all duration-300 ${
+                      className={`w-6 h-6 min-[410px]:w-7 min-[410px]:h-7 sm:w-9 sm:h-9 object-contain transition-transform duration-200 ${
                         isActive ? 'scale-105' : 'opacity-95 hover:opacity-100'
                       }`}
                     />
@@ -411,7 +425,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
 
             {/* Compact Search Pill + Adjacent '+' Button: Shown on scroll on all screen sizes */}
             <div
-              className={`flex items-center gap-1.5 sm:gap-2.5 transition-all duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] max-w-full ${
+              className={`flex items-center gap-1.5 sm:gap-2.5 transition-[opacity,transform] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] max-w-full ${
                 shouldCollapse
                   ? 'opacity-100 scale-100 pointer-events-auto translate-y-0 visible'
                   : 'opacity-0 scale-95 pointer-events-none translate-y-2 absolute invisible'
@@ -422,12 +436,15 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
                 data-testid="compact-search-pill"
                 aria-label="Search destination, dates, guests"
                 onClick={() => handleOpenSearchModal('where')}
-                className="inline-flex items-center gap-1.5 sm:gap-2.5 bg-white border border-slate-300/90 hover:border-slate-400 rounded-full pl-2 sm:pl-3.5 pr-1 sm:pr-1.5 py-1 sm:py-1.5 shadow-[0_2px_8px_rgba(15,23,42,0.08)] hover:shadow-[0_4px_14px_rgba(15,23,42,0.14)] transition-all cursor-pointer group min-w-0"
+                className="inline-flex items-center gap-1.5 sm:gap-2.5 bg-white border border-slate-300/90 hover:border-slate-400 rounded-full pl-2 sm:pl-3.5 pr-1 sm:pr-1.5 py-1 sm:py-1.5 shadow-[0_2px_8px_rgba(15,23,42,0.08)] hover:shadow-[0_4px_14px_rgba(15,23,42,0.14)] transition-shadow cursor-pointer group min-w-0"
               >
                 {/* Stay / Category Logo beside Where */}
                 <img
                   src={displayCategoryIcon}
                   alt="Stay"
+                  width={24}
+                  height={24}
+                  decoding="async"
                   aria-hidden="true"
                   referrerPolicy="no-referrer"
                   className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6 object-contain shrink-0"
@@ -451,7 +468,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
 
                 {/* Gradient Search Button */}
                 <span
-                  className="search-button w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center shrink-0 ml-0.5 sm:ml-1 transition-all duration-200 ease-out group-hover:scale-105"
+                  className="search-button w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center shrink-0 ml-0.5 sm:ml-1 transition-transform duration-200 ease-out group-hover:scale-105"
                   style={{ borderRadius: '32px' }}
                 >
                   <Search size={14} className="text-white" strokeWidth={2.5} />
@@ -468,7 +485,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
                   color: '#FFFFFF',
                   borderRadius: '100px',
                 }}
-                className="flex w-7 h-7 sm:w-8 sm:h-8 border-0 border-none items-center justify-center text-white active:scale-95 transition-all shrink-0 cursor-pointer shadow-[0_2px_8px_rgba(233,29,88,0.32)] hover:brightness-90 hover:scale-105"
+                className="flex w-7 h-7 sm:w-8 sm:h-8 border-0 border-none items-center justify-center text-white active:scale-95 transition-transform shrink-0 cursor-pointer shadow-[0_2px_8px_rgba(233,29,88,0.32)] hover:brightness-90 hover:scale-105"
               >
                 <Plus size={16} strokeWidth={2.6} className="text-white" />
               </button>
@@ -821,6 +838,31 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
                     <Plus size={15} strokeWidth={2.4} />
                   </button>
 
+                  <div className="pt-1 mt-1 border-t border-slate-100 space-y-0.5">
+                    <Link
+                      href="/user/dashboard"
+                      prefetch={true}
+                      onClick={onCloseMenus}
+                      className="w-full flex items-center justify-between px-3 py-2 rounded-xl hover:bg-slate-50 font-medium text-slate-700"
+                    >
+                      <span className="inline-flex items-center gap-2">
+                        <LayoutDashboard size={14} className="text-[#C72B62]" />
+                        <span>Customer Dashboard</span>
+                      </span>
+                    </Link>
+                    <Link
+                      href="/host/dashboard"
+                      prefetch={true}
+                      onClick={onCloseMenus}
+                      className="w-full flex items-center justify-between px-3 py-2 rounded-xl hover:bg-slate-50 font-medium text-slate-700"
+                    >
+                      <span className="inline-flex items-center gap-2">
+                        <LayoutDashboard size={14} className="text-slate-600" />
+                        <span>Host Dashboard</span>
+                      </span>
+                    </Link>
+                  </div>
+
                   <button
                     type="button"
                     onClick={() => {
@@ -884,19 +926,11 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
         {/* ================================================================= */}
         {/* ROW 2: Search Section (Mobile Dedicated Card & Categories + Desktop 3-Segment) */}
         {/* ================================================================= */}
-        <div
-          ref={searchRef}
-          style={{
-            transitionProperty: 'max-height, opacity, transform, margin, padding',
-            transitionDuration: '350ms',
-            transitionTimingFunction: 'cubic-bezier(0.16, 1, 0.3, 1)',
-          }}
-          className={`relative flex flex-col items-center justify-center gap-2 sm:gap-3.5 w-full ${
-            shouldCollapse
-              ? 'max-h-0 opacity-0 -translate-y-3 scale-95 pointer-events-none mt-0 mb-0 py-0 overflow-hidden'
-              : 'max-h-[240px] md:max-h-[140px] opacity-100 translate-y-0 scale-100 pointer-events-auto mt-2 sm:mt-4 mb-0 overflow-visible'
-          }`}
-        >
+        {!shouldCollapse && (
+          <div
+            ref={searchRef}
+            className="relative flex flex-col items-center justify-center gap-2 sm:gap-3.5 w-full mt-2 sm:mt-4 mb-0 overflow-visible"
+          >
           {/* MOBILE ONLY (md:hidden): Dedicated Full-Width Search Card + Adjacent '+' Button */}
           <div className="md:hidden w-full space-y-2.5">
             {/* Mobile Search Bar + Adjacent '+' Button */}
@@ -905,7 +939,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
               <button
                 type="button"
                 onClick={() => handleOpenSearchModal('where')}
-                className="flex-1 min-w-0 flex items-center justify-between bg-white border border-slate-300/90 rounded-full px-3.5 py-2 shadow-[0_2px_10px_rgba(15,23,42,0.08)] hover:shadow-[0_4px_16px_rgba(15,23,42,0.12)] transition-all cursor-pointer text-left active:scale-[0.99]"
+                className="flex-1 min-w-0 flex items-center justify-between bg-white border border-slate-300/90 rounded-full px-3.5 py-2 shadow-[0_2px_10px_rgba(15,23,42,0.08)] hover:shadow-[0_4px_16px_rgba(15,23,42,0.12)] transition-[box-shadow,transform] cursor-pointer text-left active:scale-[0.99]"
               >
                 <div className="flex items-center gap-2.5 min-w-0 flex-1">
                   <span className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center shrink-0">
@@ -942,7 +976,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
                   color: '#FFFFFF',
                   borderRadius: '100px',
                 }}
-                className="w-10 h-10 flex border-0 border-none text-white items-center justify-center active:scale-95 transition-all shrink-0 cursor-pointer shadow-[0_2px_8px_rgba(233,29,88,0.32)] hover:brightness-90"
+                className="w-10 h-10 flex border-0 border-none text-white items-center justify-center active:scale-95 transition-transform shrink-0 cursor-pointer shadow-[0_2px_8px_rgba(233,29,88,0.32)] hover:brightness-90"
               >
                 <Plus size={18} strokeWidth={2.6} className="text-white" />
               </button>
@@ -960,7 +994,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
                     key={tab.id}
                     type="button"
                     onClick={() => onSelectCategory(tab.id)}
-                    className={`relative flex items-center gap-1.5 whitespace-nowrap shrink-0 transition-all duration-200 cursor-pointer pb-2 pt-1 ${
+                    className={`relative flex items-center gap-1.5 whitespace-nowrap shrink-0 transition-colors duration-200 cursor-pointer pb-2 pt-1 ${
                       isActive
                         ? 'text-slate-950 font-bold'
                         : 'text-slate-500 hover:text-slate-800 font-semibold'
@@ -969,9 +1003,12 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
                     <img
                       src={tab.iconSrc}
                       alt=""
+                      width={24}
+                      height={24}
+                      decoding="async"
                       aria-hidden="true"
                       referrerPolicy="no-referrer"
-                      className={`w-5 h-5 min-[380px]:w-6 min-[380px]:h-6 object-contain transition-all ${
+                      className={`w-5 h-5 min-[380px]:w-6 min-[380px]:h-6 object-contain transition-transform duration-200 ${
                         isActive ? 'scale-110' : 'opacity-85'
                       }`}
                     />
@@ -990,11 +1027,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
           {/* DESKTOP ONLY (hidden md:flex): Centered 3-Segment Search Pill + Adjacent '+' Button */}
           <div className="hidden md:flex items-center justify-center gap-2 sm:gap-3.5 w-full">
             <div
-              className={`w-full rounded-full bg-white border border-slate-300/90 shadow-[0_3px_14px_rgba(15,23,42,0.05)] flex items-center transition-all duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-                shouldCollapse
-                  ? 'max-w-[680px] sm:max-w-[720px] min-h-[46px] sm:min-h-[50px] pl-3.5 sm:pl-5 pr-1 sm:pr-1.5 py-0.5 sm:py-1'
-                  : 'max-w-[850px] min-h-[58px] sm:min-h-[66px] pl-4 sm:pl-7 pr-1.5 sm:pr-2.5 py-1.5'
-              }`}
+              className="w-full rounded-full bg-white border border-slate-300/90 shadow-[0_3px_14px_rgba(15,23,42,0.05)] flex items-center max-w-[850px] min-h-[58px] sm:min-h-[66px] pl-4 sm:pl-7 pr-1.5 sm:pr-2.5 py-1.5"
             >
             {/* Segment 1: Where */}
             <div
@@ -1269,7 +1302,8 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
               </motion.div>
             )}
           </AnimatePresence>
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Mobile Dedicated Search Bottom Sheet / Modal */}
@@ -1315,4 +1349,6 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = ({
       />
     </div>
   );
-};
+});
+
+HeaderSearch.displayName = 'HeaderSearch';

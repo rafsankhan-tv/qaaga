@@ -1,9 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { INITIAL_LISTINGS, QaagaListing } from '@/data/listings';
+import { QaagaListing } from '@/data/listings';
 import { ListingSchema } from '@/lib/validations';
 import { getSupabase } from '@/lib/supabaseClient';
 
 export const dynamic = 'force-dynamic';
+
+function mapListingRow(row: any): QaagaListing {
+  return {
+    id: String(row.id),
+    title: row.title || 'Untitled Listing',
+    area: row.area || 'Kuala Lumpur',
+    city: row.city || 'Kuala Lumpur',
+    subType: row.sub_type || row.property_type || 'Apartment',
+    category: row.category || 'stay',
+    twoNightPriceUsd:
+      Number(row.two_night_price_usd) ||
+      (Number(row.price_daily) ? Number(row.price_daily) * 2 : 120),
+    rating: String(row.rating || '5.0'),
+    reviewsCount: Number(row.reviews_count) || 0,
+    guestFavorite: Boolean(row.guest_favorite ?? row.is_featured),
+    image: row.image || '/assets/kl-ui/kl-1.jpg',
+    gallery:
+      Array.isArray(row.gallery) && row.gallery.length > 0
+        ? row.gallery
+        : [row.image || '/assets/kl-ui/kl-1.jpg'],
+    maxGuests: Number(row.max_guests) || 2,
+    bedrooms: row.bedrooms || '1 bedroom',
+    hostName: row.host_name || 'Host',
+    hostYears: Number(row.host_years) || 1,
+    amenities: Array.isArray(row.amenities) ? row.amenities : [],
+    description: row.description || '',
+    inPopularKL: Boolean(row.in_popular_kl),
+  };
+}
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -11,44 +40,54 @@ export async function GET(req: NextRequest) {
   const q = searchParams.get('q')?.toLowerCase().trim();
   const sort = searchParams.get('sort');
 
-  let items: QaagaListing[] = INITIAL_LISTINGS;
-
-  // Attempt Supabase DB fetch
   const supabase = getSupabase();
-  if (supabase) {
-    try {
-      const { data, error } = await supabase
-        .from('listings')
-        .select('*')
-        .eq('is_active', true)
-        .order('created_at', { ascending: false });
+  if (!supabase) {
+    return NextResponse.json(
+      { listings: [], total: 0, status: 'error', error: 'Supabase not configured' },
+      { status: 200 }
+    );
+  }
 
-      if (!error && Array.isArray(data) && data.length > 0) {
-        items = data.map((row: any) => ({
-          id: String(row.id),
-          title: row.title,
-          area: row.area,
-          city: row.city || 'Kuala Lumpur',
-          subType: row.sub_type || 'Apartment',
-          category: row.category,
-          twoNightPriceUsd: Number(row.two_night_price_usd) || 120,
-          rating: String(row.rating || '5.0'),
-          reviewsCount: Number(row.reviews_count) || 0,
-          guestFavorite: Boolean(row.guest_favorite),
-          image: row.image,
-          gallery: Array.isArray(row.gallery) && row.gallery.length > 0 ? row.gallery : [row.image],
-          maxGuests: Number(row.max_guests) || 2,
-          bedrooms: row.bedrooms || '1 bedroom',
-          hostName: row.host_name || 'Host',
-          hostYears: Number(row.host_years) || 1,
-          amenities: Array.isArray(row.amenities) ? row.amenities : [],
-          description: row.description || '',
-          inPopularKL: Boolean(row.in_popular_kl),
-        }));
+  let items: QaagaListing[] = [];
+  let status: 'ok' | 'empty' | 'error' = 'empty';
+
+  try {
+    const [listingsRes, propsRes] = await Promise.all([
+      supabase.from('listings').select('*').order('created_at', { ascending: false }),
+      supabase
+        .from('properties')
+        .select('*')
+        .eq('status', 'active')
+        .order('created_at', { ascending: false }),
+    ]);
+
+    const merged = new Map<string, QaagaListing>();
+
+    if (!listingsRes.error && Array.isArray(listingsRes.data)) {
+      for (const row of listingsRes.data) {
+        if (row.is_active === false) continue;
+        const mapped = mapListingRow(row);
+        merged.set(mapped.id, mapped);
       }
-    } catch {
-      // Fallback to in-memory items
     }
+
+    if (!propsRes.error && Array.isArray(propsRes.data)) {
+      for (const row of propsRes.data) {
+        const mapped = mapListingRow(row);
+        if (!merged.has(mapped.id)) {
+          merged.set(mapped.id, mapped);
+        }
+      }
+    }
+
+    if (listingsRes.error && propsRes.error) {
+      status = 'error';
+    } else {
+      items = Array.from(merged.values());
+      status = items.length > 0 ? 'ok' : 'empty';
+    }
+  } catch {
+    status = 'error';
   }
 
   if (category && category !== 'all') {
@@ -72,7 +111,14 @@ export async function GET(req: NextRequest) {
     items.sort((a, b) => parseFloat(b.rating) - parseFloat(a.rating));
   }
 
-  return NextResponse.json({ listings: items, total: items.length });
+  return NextResponse.json(
+    { listings: items, total: items.length, status },
+    {
+      headers: {
+        'Cache-Control': 'public, s-maxage=15, stale-while-revalidate=60',
+      },
+    }
+  );
 }
 
 export async function POST(req: NextRequest) {
@@ -90,42 +136,43 @@ export async function POST(req: NextRequest) {
     const listing = validated.data;
     const supabase = getSupabase();
 
-    if (supabase) {
-      try {
-        const { data, error } = await supabase
-          .from('listings')
-          .insert({
-            id: listing.id,
-            title: listing.title,
-            area: listing.area,
-            city: listing.city,
-            sub_type: listing.subType,
-            category: listing.category,
-            two_night_price_usd: listing.twoNightPriceUsd,
-            rating: listing.rating,
-            reviews_count: listing.reviewsCount,
-            guest_favorite: listing.guestFavorite,
-            image: listing.image,
-            gallery: listing.gallery,
-            max_guests: listing.maxGuests,
-            bedrooms: listing.bedrooms,
-            host_name: listing.hostName,
-            host_years: listing.hostYears,
-            amenities: listing.amenities,
-            description: listing.description,
-          })
-          .select()
-          .single();
-
-        if (!error && data) {
-          return NextResponse.json({ success: true, listing }, { status: 201 });
-        }
-      } catch (dbErr) {
-        console.warn('Supabase DB listing insert error:', dbErr);
-      }
+    if (!supabase) {
+      return NextResponse.json({ error: 'Supabase not configured' }, { status: 503 });
     }
 
-    return NextResponse.json({ success: true, listing }, { status: 201 });
+    const { data, error } = await supabase
+      .from('listings')
+      .insert({
+        id: listing.id,
+        title: listing.title,
+        area: listing.area,
+        city: listing.city,
+        sub_type: listing.subType,
+        category: listing.category,
+        two_night_price_usd: listing.twoNightPriceUsd,
+        rating: listing.rating,
+        reviews_count: listing.reviewsCount,
+        guest_favorite: listing.guestFavorite,
+        image: listing.image,
+        gallery: listing.gallery,
+        max_guests: listing.maxGuests,
+        bedrooms: listing.bedrooms,
+        host_name: listing.hostName,
+        host_years: listing.hostYears,
+        amenities: listing.amenities,
+        description: listing.description,
+      })
+      .select()
+      .single();
+
+    if (error || !data) {
+      return NextResponse.json(
+        { error: error?.message || 'Failed to save listing in Supabase' },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ success: true, listing: mapListingRow(data) }, { status: 201 });
   } catch (err: any) {
     return NextResponse.json(
       { error: err?.message || 'Failed to create listing' },

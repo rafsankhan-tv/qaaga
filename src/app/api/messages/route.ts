@@ -1,21 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { MessageSchema } from '@/lib/validations';
 import { getSupabase } from '@/lib/supabaseClient';
-import { INITIAL_THREADS } from '@/data/listings';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
   const supabase = getSupabase();
-  if (supabase) {
-    try {
-      const { data, error } = await supabase
-        .from('threads')
-        .select('*, messages(*)')
-        .order('updated_at', { ascending: false });
+  if (!supabase) {
+    return NextResponse.json({ threads: [], status: 'error' });
+  }
 
-      if (!error && Array.isArray(data) && data.length > 0) {
-        const threads = data.map((t: any) => ({
+  try {
+    const { data, error } = await supabase
+      .from('threads')
+      .select('*, messages(*)')
+      .order('updated_at', { ascending: false });
+
+    if (error) {
+      return NextResponse.json({ threads: [], status: 'error', error: error.message });
+    }
+
+    const threads = Array.isArray(data)
+      ? data.map((t: any) => ({
           id: t.id,
           hostName: t.host_name,
           listingTitle: t.listing_title,
@@ -29,15 +35,13 @@ export async function GET() {
                 time: m.time,
               }))
             : [],
-        }));
-        return NextResponse.json({ threads });
-      }
-    } catch {
-      // fallback
-    }
-  }
+        }))
+      : [];
 
-  return NextResponse.json({ threads: INITIAL_THREADS });
+    return NextResponse.json({ threads, status: threads.length > 0 ? 'ok' : 'empty' });
+  } catch (err: any) {
+    return NextResponse.json({ threads: [], status: 'error', error: err?.message });
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -54,27 +58,24 @@ export async function POST(req: NextRequest) {
 
     const { threadId, sender, text, time } = validated.data;
     const supabase = getSupabase();
-
-    if (supabase) {
-      try {
-        await supabase.from('messages').insert({
-          thread_id: threadId,
-          sender,
-          text,
-          time,
-        });
-
-        await supabase
-          .from('threads')
-          .update({
-            last_message: text,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', threadId);
-      } catch (dbErr) {
-        console.warn('Notice: Supabase message insert exception:', dbErr);
-      }
+    if (!supabase) {
+      return NextResponse.json({ error: 'Supabase not configured' }, { status: 503 });
     }
+
+    await supabase.from('messages').insert({
+      thread_id: threadId,
+      sender,
+      text,
+      time,
+    });
+
+    await supabase
+      .from('threads')
+      .update({
+        last_message: text,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', threadId);
 
     return NextResponse.json({
       success: true,

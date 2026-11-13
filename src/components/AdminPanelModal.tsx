@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import Link from 'next/link';
 import {
   Activity,
   ArrowLeft,
@@ -32,7 +33,6 @@ import {
   DEFAULT_FAVICON_URL,
   DEFAULT_SITE_LOGO_URL,
   GuestProfile,
-  INITIAL_USERS,
   LogoSizePreset,
   QaagaListing,
   SiteBranding,
@@ -46,11 +46,12 @@ import {
   SupabaseTestResult,
 } from '@/lib/supabaseClient';
 import {
+  AdminPlatformStats,
+  getAdminPlatformStats,
   getAllUsersFromDatabase,
   updateUserRoleInDatabase,
   uploadBrandingAssetToSupabase,
   saveBrandingToSupabase,
-  getBrandingFromSupabase,
 } from '@/lib/supabaseService';
 
 interface AdminPanelProps {
@@ -244,7 +245,7 @@ function processLogoCanvas(
   });
 }
 
-export const AdminPanelModal: React.FC<AdminPanelProps> = ({
+const AdminPanelModalInner: React.FC<AdminPanelProps> = ({
   branding,
   onUpdateBranding,
   onRemoveLogo,
@@ -261,7 +262,10 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
   const [activeTab, setActiveTab] = useState<
     'overview' | 'users' | 'database' | 'branding' | 'listings' | 'bookings'
   >('overview');
-  const [users, setUsers] = useState<GuestProfile[]>(INITIAL_USERS);
+  const [users, setUsers] = useState<GuestProfile[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState<boolean>(true);
+  const [platformStats, setPlatformStats] = useState<AdminPlatformStats | null>(null);
+  const [loadingStats, setLoadingStats] = useState<boolean>(true);
   const [userSearch, setUserSearch] = useState<string>('');
   const [userRoleFilter, setUserRoleFilter] = useState<'all' | 'guest' | 'host' | 'admin'>('all');
   const [supabaseUrl, setSupabaseUrl] = useState<string>('');
@@ -295,19 +299,34 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
     setAltText(branding.altText);
     setFallbackText(branding.fallbackText);
     setFallbackDomain(branding.fallbackDomain);
+  }, [branding]);
 
-    // Load users & Supabase status
-    getAllUsersFromDatabase().then((dbUsers) => {
-      if (dbUsers && dbUsers.length > 0) {
-        setUsers(dbUsers);
-      }
-    });
+  useEffect(() => {
+    let mounted = true;
+    setLoadingUsers(true);
+    setLoadingStats(true);
+
+    Promise.all([getAllUsersFromDatabase(), getAdminPlatformStats(), testSupabaseConnection()])
+      .then(([dbUsers, stats, conn]) => {
+        if (!mounted) return;
+        setUsers(dbUsers || []);
+        setPlatformStats(stats);
+        setTestResult(conn);
+      })
+      .finally(() => {
+        if (!mounted) return;
+        setLoadingUsers(false);
+        setLoadingStats(false);
+      });
 
     const cfg = getSupabaseConfig();
     setSupabaseUrl(cfg.url);
     setSupabaseKey(cfg.key);
-    testSupabaseConnection().then(setTestResult);
-  }, [branding]);
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const flashBanner = (msg: string) => {
     setStatusBanner(msg);
@@ -600,22 +619,24 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
 
         <div className="flex items-center gap-2">
           {standalone ? (
-            <a
+            <Link
               href="/"
+              prefetch={true}
               className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition-colors"
             >
               <ArrowLeft size={14} />
               <span>Back to Website</span>
-            </a>
+            </Link>
           ) : (
             <>
-              <a
+              <Link
                 href="/admin"
+                prefetch={true}
                 className="hidden sm:inline-flex items-center gap-1 px-3 py-1.5 rounded-full border border-slate-300 hover:border-slate-900 text-xs font-semibold text-slate-700 transition-colors"
               >
                 <span>Open /admin</span>
                 <ExternalLink size={12} />
-              </a>
+              </Link>
               <button
                 type="button"
                 aria-label="Close admin panel"
@@ -752,27 +773,53 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
                     <TrendingUp size={16} />
                   </span>
                 </div>
-                <p className="text-xl sm:text-2xl font-bold text-slate-900 mt-2">
-                  ${bookings.reduce((sum, b) => sum + (b.totalUsd || 0), 0) + 12450}
-                </p>
-                <p className="text-[11px] text-emerald-600 font-medium mt-1">
-                  +18% from last month
-                </p>
+                {loadingStats ? (
+                  <div className="mt-2 space-y-2">
+                    <div className="h-7 w-24 rounded-md qaaga-skeleton" />
+                    <div className="h-3 w-28 rounded-md qaaga-skeleton" />
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-xl sm:text-2xl font-bold text-slate-900 mt-2">
+                      ${platformStats
+                        ? platformStats.totalGrossRevenueUsd
+                        : bookings
+                            .filter((b) => b.status !== 'Cancelled' && b.status !== 'Rejected')
+                            .reduce((sum, b) => sum + (b.totalUsd || 0), 0)}
+                    </p>
+                    <p className="text-[11px] text-emerald-600 font-medium mt-1">
+                      {platformStats?.confirmedBookings ??
+                        bookings.filter((b) => b.status === 'Confirmed' || b.status === 'Accepted').length}{' '}
+                      confirmed bookings
+                    </p>
+                  </>
+                )}
               </div>
 
               <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-slate-500">Active Bookings</span>
+                  <span className="text-xs font-semibold text-slate-500">Total Bookings</span>
                   <span className="p-2 rounded-xl bg-[#C72B62]/10 text-[#C72B62]">
                     <CalendarCheck2 size={16} />
                   </span>
                 </div>
-                <p className="text-xl sm:text-2xl font-bold text-slate-900 mt-2">
-                  {bookings.length + 8}
-                </p>
-                <p className="text-[11px] text-slate-500 font-medium mt-1">
-                  {bookings.length} custom guest reservations
-                </p>
+                {loadingStats ? (
+                  <div className="mt-2 space-y-2">
+                    <div className="h-7 w-16 rounded-md qaaga-skeleton" />
+                    <div className="h-3 w-28 rounded-md qaaga-skeleton" />
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-xl sm:text-2xl font-bold text-slate-900 mt-2">
+                      {platformStats ? platformStats.totalBookings : bookings.length}
+                    </p>
+                    <p className="text-[11px] text-slate-500 font-medium mt-1">
+                      {platformStats?.pendingBookings ??
+                        bookings.filter((b) => b.status === 'Pending').length}{' '}
+                      pending approval
+                    </p>
+                  </>
+                )}
               </div>
 
               <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs">
@@ -782,12 +829,22 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
                     <LayoutGrid size={16} />
                   </span>
                 </div>
-                <p className="text-xl sm:text-2xl font-bold text-slate-900 mt-2">
-                  {allListings.length}
-                </p>
-                <p className="text-[11px] text-indigo-600 font-medium mt-1">
-                  {customListings.length} hosted by users
-                </p>
+                {loadingStats ? (
+                  <div className="mt-2 space-y-2">
+                    <div className="h-7 w-16 rounded-md qaaga-skeleton" />
+                    <div className="h-3 w-28 rounded-md qaaga-skeleton" />
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-xl sm:text-2xl font-bold text-slate-900 mt-2">
+                      {platformStats ? platformStats.totalProperties : allListings.length}
+                    </p>
+                    <p className="text-[11px] text-indigo-600 font-medium mt-1">
+                      {platformStats ? platformStats.activeProperties : allListings.length} active ·{' '}
+                      {customListings.length} hosted
+                    </p>
+                  </>
+                )}
               </div>
 
               <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs">
@@ -797,12 +854,22 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
                     <Users size={16} />
                   </span>
                 </div>
-                <p className="text-xl sm:text-2xl font-bold text-slate-900 mt-2">
-                  {users.length}
-                </p>
-                <p className="text-[11px] text-violet-600 font-medium mt-1">
-                  {users.filter((u) => u.role === 'admin').length} Admins · {users.filter((u) => u.role === 'host').length} Hosts
-                </p>
+                {loadingStats ? (
+                  <div className="mt-2 space-y-2">
+                    <div className="h-7 w-16 rounded-md qaaga-skeleton" />
+                    <div className="h-3 w-28 rounded-md qaaga-skeleton" />
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-xl sm:text-2xl font-bold text-slate-900 mt-2">
+                      {platformStats ? platformStats.totalUsers : users.length}
+                    </p>
+                    <p className="text-[11px] text-violet-600 font-medium mt-1">
+                      {users.filter((u) => u.role === 'admin').length} Admins ·{' '}
+                      {platformStats?.totalHosts ?? users.filter((u) => u.role === 'host').length} Hosts
+                    </p>
+                  </>
+                )}
               </div>
             </div>
 
@@ -854,7 +921,7 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
                 <button
                   type="button"
                   onClick={() => setActiveTab('users')}
-                  className="p-4 rounded-2xl bg-white border border-slate-200 hover:border-slate-300 text-left transition-all cursor-pointer group shadow-2xs hover:shadow-xs"
+                  className="p-4 rounded-2xl bg-white border border-slate-200 hover:border-slate-300 text-left transition-colors cursor-pointer group shadow-2xs hover:shadow-xs"
                 >
                   <div className="w-9 h-9 rounded-xl bg-[#C72B62]/10 text-[#C72B62] flex items-center justify-center mb-2.5 group-hover:scale-105 transition-transform">
                     <Users size={18} />
@@ -868,7 +935,7 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
                 <button
                   type="button"
                   onClick={() => setActiveTab('branding')}
-                  className="p-4 rounded-2xl bg-white border border-slate-200 hover:border-slate-300 text-left transition-all cursor-pointer group shadow-2xs hover:shadow-xs"
+                  className="p-4 rounded-2xl bg-white border border-slate-200 hover:border-slate-300 text-left transition-colors cursor-pointer group shadow-2xs hover:shadow-xs"
                 >
                   <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-2.5 group-hover:scale-105 transition-transform">
                     <ImagePlus size={18} />
@@ -882,7 +949,7 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
                 <button
                   type="button"
                   onClick={() => setActiveTab('listings')}
-                  className="p-4 rounded-2xl bg-white border border-slate-200 hover:border-slate-300 text-left transition-all cursor-pointer group shadow-2xs hover:shadow-xs"
+                  className="p-4 rounded-2xl bg-white border border-slate-200 hover:border-slate-300 text-left transition-colors cursor-pointer group shadow-2xs hover:shadow-xs"
                 >
                   <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-2.5 group-hover:scale-105 transition-transform">
                     <LayoutGrid size={18} />
@@ -952,30 +1019,49 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {users
-                      .filter((u) => {
-                        const matchesSearch =
-                          u.fullName.toLowerCase().includes(userSearch.toLowerCase()) ||
-                          u.email.toLowerCase().includes(userSearch.toLowerCase());
-                        const matchesRole =
-                          userRoleFilter === 'all' || u.role === userRoleFilter;
-                        return matchesSearch && matchesRole;
-                      })
-                      .map((u) => (
-                        <tr key={u.email} className="hover:bg-slate-50/70 transition-colors">
-                          <td className="p-3.5">
-                            <div className="flex items-center gap-3">
-                              {u.avatarUrl ? (
-                                <img
-                                  src={u.avatarUrl}
-                                  alt={u.fullName}
-                                  className="w-9 h-9 rounded-full object-cover border border-slate-200 shrink-0"
-                                />
-                              ) : (
-                                <div className="w-9 h-9 rounded-full bg-[#C72B62] text-white flex items-center justify-center font-bold text-xs uppercase shrink-0">
-                                  {u.fullName.charAt(0) || 'U'}
-                                </div>
-                              )}
+                    {loadingUsers ? (
+                      Array.from({ length: 4 }).map((_, idx) => (
+                        <tr key={idx}>
+                          <td className="p-3.5" colSpan={5}>
+                            <div className="h-9 w-full rounded-xl qaaga-skeleton" />
+                          </td>
+                        </tr>
+                      ))
+                    ) : users.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="p-8 text-center text-xs text-slate-500">
+                          No registered user profiles returned from Supabase yet.
+                        </td>
+                      </tr>
+                    ) : (
+                      users
+                        .filter((u) => {
+                          const matchesSearch =
+                            u.fullName.toLowerCase().includes(userSearch.toLowerCase()) ||
+                            u.email.toLowerCase().includes(userSearch.toLowerCase());
+                          const matchesRole =
+                            userRoleFilter === 'all' || u.role === userRoleFilter;
+                          return matchesSearch && matchesRole;
+                        })
+                        .map((u) => (
+                          <tr key={u.email} className="hover:bg-slate-50/70 transition-colors">
+                            <td className="p-3.5">
+                              <div className="flex items-center gap-3">
+                                {u.avatarUrl ? (
+                                  <img
+                                    src={u.avatarUrl}
+                                    alt={u.fullName}
+                                    width={36}
+                                    height={36}
+                                    decoding="async"
+                                    referrerPolicy="no-referrer"
+                                    className="w-9 h-9 rounded-full object-cover border border-slate-200 shrink-0"
+                                  />
+                                ) : (
+                                  <div className="w-9 h-9 rounded-full bg-[#C72B62] text-white flex items-center justify-center font-bold text-xs uppercase shrink-0">
+                                    {u.fullName.charAt(0) || 'U'}
+                                  </div>
+                                )}
                               <div className="min-w-0">
                                 <p className="font-bold text-slate-900 flex items-center gap-1.5">
                                   <span>{u.fullName}</span>
@@ -1049,8 +1135,9 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
                               </button>
                             </div>
                           </td>
-                        </tr>
-                      ))}
+                          </tr>
+                        ))
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -1161,12 +1248,12 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
               </h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {[
-                  { name: 'profiles', records: `${users.length} profiles`, desc: 'User accounts, emails, roles, & avatar' },
-                  { name: 'listings', records: `${allListings.length} stays`, desc: 'Properties, amenities, images, & pricing' },
-                  { name: 'bookings', records: `${bookings.length} reservations`, desc: 'Guest dates, codes, & payment total' },
-                  { name: 'reviews', records: '24 reviews', desc: 'Ratings, guest comments, & badges' },
-                  { name: 'threads', records: '3 chats', desc: 'Realtime messaging with hosts' },
-                  { name: 'site_branding', records: '1 record', desc: 'Custom logos, alt text, & domain' },
+                  { name: 'profiles', records: `${platformStats?.totalUsers ?? users.length} profiles`, desc: 'User accounts, emails, roles, & avatar' },
+                  { name: 'listings', records: `${platformStats?.totalProperties ?? allListings.length} stays`, desc: 'Properties, amenities, images, & pricing' },
+                  { name: 'bookings', records: `${platformStats?.totalBookings ?? bookings.length} reservations`, desc: 'Guest dates, codes, & payment total' },
+                  { name: 'reviews', records: 'Live table', desc: 'Ratings, guest comments, & badges' },
+                  { name: 'threads', records: 'Live table', desc: 'Realtime messaging with hosts' },
+                  { name: 'site_branding', records: 'Active config', desc: 'Custom logos, alt text, & domain' },
                 ].map((tbl) => (
                   <div key={tbl.name} className="p-3 rounded-xl border border-slate-100 bg-slate-50/70">
                     <div className="flex items-center justify-between">
@@ -1647,6 +1734,9 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
                         <img
                           src={branding.faviconUrl}
                           alt="Favicon preview"
+                          width={16}
+                          height={16}
+                          decoding="async"
                           referrerPolicy="no-referrer"
                           className="w-4 h-4 object-contain mix-blend-multiply shrink-0"
                         />
@@ -1666,6 +1756,9 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
                         <img
                           src={branding.faviconUrl}
                           alt="Active favicon"
+                          width={40}
+                          height={40}
+                          decoding="async"
                           referrerPolicy="no-referrer"
                           className="w-full h-full object-contain mix-blend-multiply"
                         />
@@ -1880,4 +1973,5 @@ export const AdminPanelModal: React.FC<AdminPanelProps> = ({
   );
 };
 
+export const AdminPanelModal = React.memo(AdminPanelModalInner);
 export { DEFAULT_BRANDING };
