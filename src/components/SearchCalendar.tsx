@@ -414,6 +414,9 @@ export const SearchCalendar: React.FC<SearchCalendarProps> = ({
               <button
                 key={p.id}
                 type="button"
+                data-testid={`calendar-preset-${p.id}`}
+                data-check-in={p.checkIn}
+                data-check-out={p.checkOut}
                 onClick={() => handleApplyPreset(p)}
                 className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all cursor-pointer ${
                   isActive
