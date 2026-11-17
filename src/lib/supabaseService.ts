@@ -148,59 +148,25 @@ function mapModelToDbListing(model: QaagaListing): Record<string, any> {
 /* 1. LISTINGS DATABASE OPERATIONS (REAL SUPABASE, ZERO FAKE FALLBACKS)      */
 /* ========================================================================= */
 export async function fetchListingsWithStatus(): Promise<ServiceResult<QaagaListing[]>> {
-  return dedupFetch('listings:all', async () => {
-    const supabase = getSupabase();
-    if (!supabase) {
-      return { data: [], status: 'error', error: 'Supabase client is not configured.' };
-    }
+  const supabase = getSupabase();
+  if (!supabase) return { data: [], status: 'error', error: 'Supabase client is not configured.' };
 
+  const { data: userData } = await supabase.auth.getUser();
+  const cacheKey = 'listings:' + (userData.user?.id || 'anonymous');
+
+  return dedupFetch(cacheKey, async () => {
     try {
-      const [listingsRes, propsRes] = await Promise.all([
-        supabase.from('listings').select('*').order('created_at', { ascending: false }),
-        supabase
-          .from('properties')
-          .select('*')
-          .order('created_at', { ascending: false }),
-      ]);
+      const { data, error } = await supabase
+        .from('properties')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-      const mergedMap = new Map<string, QaagaListing>();
+      if (error) return { data: [], status: 'error', error: error.message };
 
-      if (!listingsRes.error && Array.isArray(listingsRes.data)) {
-        for (const row of listingsRes.data) {
-          if (row.is_active === false) continue;
-          const mapped = mapDbListingToModel(row);
-          mergedMap.set(mapped.id, mapped);
-        }
-      }
-
-      if (!propsRes.error && Array.isArray(propsRes.data)) {
-        for (const row of propsRes.data) {
-          const mapped = mapDbListingToModel(row);
-          if (!mergedMap.has(mapped.id)) {
-            mergedMap.set(mapped.id, mapped);
-          }
-        }
-      }
-
-      if (listingsRes.error && propsRes.error) {
-        return {
-          data: [],
-          status: 'error',
-          error: listingsRes.error.message || propsRes.error.message,
-        };
-      }
-
-      const items = Array.from(mergedMap.values());
-      return {
-        data: items,
-        status: items.length > 0 ? 'ok' : 'empty',
-      };
+      const items = Array.isArray(data) ? data.map(mapDbListingToModel) : [];
+      return { data: items, status: items.length ? 'ok' : 'empty' };
     } catch (err: any) {
-      return {
-        data: [],
-        status: 'error',
-        error: err?.message || 'Unable to reach Supabase listings table.',
-      };
+      return { data: [], status: 'error', error: err?.message || 'Unable to reach Supabase properties.' };
     }
   });
 }
@@ -302,46 +268,48 @@ export async function deleteListingFromDatabase(id: string): Promise<boolean> {
 export async function fetchBookingsWithStatus(
   guestEmail?: string
 ): Promise<ServiceResult<BookingRecord[]>> {
-  const cacheKey = `bookings:${guestEmail ? guestEmail.trim().toLowerCase() : 'all'}`;
-  return dedupFetch(cacheKey, async () => {
-    const supabase = getSupabase();
-    if (!supabase) {
-      return { data: [], status: 'error', error: 'Supabase client unavailable.' };
-    }
+  const supabase = getSupabase();
+  if (!supabase) return { data: [], status: 'error', error: 'Supabase client unavailable.' };
 
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  const accountEmail = authData.user?.email?.trim().toLowerCase();
+  const requestedEmail = guestEmail?.trim().toLowerCase();
+  if (authError || !accountEmail || (requestedEmail && requestedEmail !== accountEmail)) {
+    return { data: [], status: 'error', error: 'Booking records are available only to their signed-in customer.' };
+  }
+
+  const cacheKey = 'bookings:' + (authData.user?.id || accountEmail);
+  return dedupFetch(cacheKey, async () => {
     try {
-      let query = supabase
+      const { data, error } = await supabase
         .from('bookings')
         .select('*')
+        .eq('customer_email', accountEmail)
         .order('created_at', { ascending: false });
-      if (guestEmail && guestEmail.trim()) {
-        query = query.eq('guest_email', guestEmail.trim().toLowerCase());
-      }
-      const { data, error } = await query;
-      if (error) {
-        return { data: [], status: 'error', error: error.message };
-      }
-      if (!Array.isArray(data) || data.length === 0) {
-        return { data: [], status: 'empty' };
-      }
+
+      if (error) return { data: [], status: 'error', error: error.message };
+      if (!Array.isArray(data) || !data.length) return { data: [], status: 'empty' };
 
       const mapped: BookingRecord[] = data.map((row: any) => ({
         id: row.id,
         confirmationCode: row.confirmation_code,
-        listingId: row.listing_id || row.property_id,
-        title: row.title,
-        area: row.area,
+        listingId: row.property_id,
+        checkInDate: row.check_in,
+        checkOutDate: row.check_out,
+        title: row.title || 'Property booking',
+        area: row.area || '',
         image: row.image || '',
-        checkInLabel: row.check_in_label,
+        checkInLabel: row.check_in_label || [row.check_in, row.check_out].filter(Boolean).join(' – '),
         nights: Number(row.nights) || 0,
         guests: Number(row.guests) || 1,
         totalUsd: Number(row.total_usd) || 0,
         hostName: row.host_name || 'Host',
         status: row.status || 'Pending',
       }));
+
       return { data: mapped, status: 'ok' };
     } catch (err: any) {
-      return { data: [], status: 'error', error: err?.message || 'Failed to fetch bookings.' };
+      return { data: [], status: 'error', error: err?.message || 'Unable to load your bookings.' };
     }
   });
 }
@@ -362,72 +330,53 @@ export async function insertBookingToDatabase(
   invalidateServiceCache('bookings:');
   invalidateServiceCache('host_bookings:');
   invalidateServiceCache('admin:stats');
+
   const supabase = getSupabase();
   if (!supabase) throw new Error('Supabase is not configured.');
 
   const { data: authData, error: authError } = await supabase.auth.getUser();
-  const authenticatedEmail = authData.user?.email?.trim().toLowerCase();
-  const normalizedGuestEmail = guestEmail.trim().toLowerCase();
-  const normalizedHostEmail = hostEmail.trim().toLowerCase();
-
-  if (authError || !authenticatedEmail || authenticatedEmail !== normalizedGuestEmail) {
+  const currentEmail = authData.user?.email?.trim().toLowerCase();
+  if (authError || !currentEmail || currentEmail !== guestEmail.trim().toLowerCase()) {
     throw new Error('Please sign in with your verified email before booking.');
   }
-  if (!normalizedHostEmail || !booking.checkInDate || !booking.checkOutDate) {
-    throw new Error('A valid host and check-in/check-out date are required.');
+  if (!authData.user.email_confirmed_at) throw new Error('Verify your email before booking.');
+  if (!hostEmail.trim() || !booking.checkInDate || !booking.checkOutDate) {
+    throw new Error('A valid property and check-in/check-out date are required.');
   }
 
-  const checkIn = new Date(booking.checkInDate);
-  const checkOut = new Date(booking.checkOutDate);
-  if (
-    Number.isNaN(checkIn.getTime()) ||
-    Number.isNaN(checkOut.getTime()) ||
-    checkOut <= checkIn
-  ) {
-    throw new Error('The selected booking dates are invalid.');
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  const accessToken = sessionData.session?.access_token;
+  if (sessionError || !accessToken) throw new Error('Your login session has expired. Please sign in again.');
+
+  const response = await fetch('/api/bookings', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer ' + accessToken,
+    },
+    body: JSON.stringify({
+      listingId: booking.listingId,
+      checkInDate: booking.checkInDate,
+      checkOutDate: booking.checkOutDate,
+      guests: booking.guests,
+    }),
+  });
+
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || !result?.success || !result?.booking) {
+    throw new Error(result?.error || 'Your booking request could not be saved.');
   }
 
-  const payload = {
-    id: booking.id,
-    confirmation_code: booking.confirmationCode,
-    property_id: booking.listingId,
-    listing_id: booking.listingId,
-    customer_email: authenticatedEmail,
-    guest_email: authenticatedEmail,
-    customer_name: guestName.trim(),
-    guest_name: guestName.trim(),
-    title: booking.title,
-    area: booking.area,
-    image: booking.image,
-    host_email: normalizedHostEmail,
-    host_name: booking.hostName,
-    check_in: booking.checkInDate,
-    check_out: booking.checkOutDate,
-    check_in_label: booking.checkInLabel,
-    nights: booking.nights,
-    guests: booking.guests,
-    adults: booking.guests,
-    total_usd: booking.totalUsd,
-    currency: 'USD',
-    status: 'Pending',
-  };
-
-  const { data, error } = await supabase
-    .from('bookings')
-    .insert(payload)
-    .select()
-    .single();
-
-  if (error || !data) {
-    throw new Error(error?.message || 'Your booking request could not be saved.');
-  }
-
+  const saved = result.booking;
   return {
     ...booking,
-    id: data.id,
-    status: data.status,
-    checkInDate: data.check_in,
-    checkOutDate: data.check_out,
+    id: saved.id,
+    confirmationCode: saved.confirmationCode || booking.confirmationCode,
+    checkInDate: saved.checkInDate || booking.checkInDate,
+    checkOutDate: saved.checkOutDate || booking.checkOutDate,
+    nights: Number(saved.nights) || booking.nights,
+    totalUsd: Number(saved.totalUsd) || booking.totalUsd,
+    status: saved.status || 'Pending',
   };
 }
 
@@ -1750,36 +1699,31 @@ export async function getAdminPlatformStats(): Promise<AdminPlatformStats> {
 export async function getNotificationsFromDatabase(
   recipientEmail: string
 ): Promise<any[]> {
-  const cleanEmail = recipientEmail.trim().toLowerCase();
-  return dedupFetch(`notifications:${cleanEmail}`, async () => {
-    const supabase = getSupabase();
-    if (!supabase || !cleanEmail) return [];
+  const supabase = getSupabase();
+  if (!supabase) return [];
 
-    try {
-      const { data, error } = await supabase
-        .from('notifications')
-        .select('*')
-        .eq('recipient_email', cleanEmail)
-        .order('created_at', { ascending: false });
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  const currentEmail = authData.user?.email?.trim().toLowerCase();
+  const requestedEmail = recipientEmail.trim().toLowerCase();
+  if (authError || !currentEmail || currentEmail !== requestedEmail) return [];
 
-      if (!error && Array.isArray(data)) {
-        return data.map((n) => ({
-          id: n.id,
-          title: n.title,
-          desc: n.message,
-          time: new Date(n.created_at).toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit',
-          }),
-          read: Boolean(n.read),
-          link: n.link,
-          type: n.type,
-        }));
-      }
-    } catch (err) {
-      console.warn('Notice: Notifications query error:', err);
-    }
-    return [];
+  return dedupFetch('notifications:' + (authData.user?.id || currentEmail), async () => {
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('recipient_email', currentEmail)
+      .order('created_at', { ascending: false });
+
+    if (error || !Array.isArray(data)) return [];
+    return data.map((n) => ({
+      id: n.id,
+      title: n.title,
+      desc: n.message,
+      time: new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      read: Boolean(n.read),
+      link: n.link,
+      type: n.type,
+    }));
   });
 }
 
