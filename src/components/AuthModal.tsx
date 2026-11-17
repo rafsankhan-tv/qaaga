@@ -524,42 +524,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         {/* STEP 2: OTP Verification Screen */}
         {step === 'otp' && (
           <div className="space-y-4 pt-2 text-center">
-            {emailOrPhone.trim().toLowerCase() === 'rafsankhan.tv@gmail.com' && (
-              <div className="p-3.5 rounded-2xl bg-gradient-to-r from-amber-50 via-rose-50 to-pink-50 border border-amber-300 text-xs text-left flex items-start gap-3 shadow-2xs">
-                <span className="w-8 h-8 rounded-xl bg-[#C72B62] text-white flex items-center justify-center font-bold text-sm shrink-0 shadow-xs">
-                  👑
-                </span>
-                <div>
-                  <p className="font-bold text-slate-900 text-xs">
-                    Super Admin Account: rafsankhan.tv@gmail.com
-                  </p>
-                  <p className="text-[11px] text-slate-600 mt-0.5 leading-relaxed">
-                    OTP ভেরিফাই হওয়ার সাথে সাথে <strong>Admin Dashboard</strong> সরাসরি খুলে যাবে। অ্যাডমিন প্যানেল থেকে লিস্টিং, ব্র্যান্ডিং, ইউজার এবং সমস্ত ফাংশন Add, Edit ও Remove করতে পারবেন।
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* OTP Hint Card */}
-            <button
-              type="button"
-              onClick={() => {
-                const digits = generatedCode.split('');
-                setOtpDigits(digits);
-                handleVerifyOtp(generatedCode);
-              }}
-              className="w-full p-2.5 rounded-xl bg-[#C72B62]/[0.08] border border-[#C72B62]/25 text-xs text-slate-700 hover:bg-[#C72B62]/[0.14] transition-colors cursor-pointer text-center"
-              title="Click to auto-fill verification code"
-            >
-              <span className="font-bold text-[#C72B62]">Your 6-digit OTP code: </span>
-              <span className="font-mono font-bold tracking-widest text-slate-950 text-sm ml-1 bg-white px-2 py-0.5 rounded border border-slate-200 shadow-2xs">
-                {generatedCode}
-              </span>
-              <span className="block text-[10px] text-slate-500 mt-0.5">
-                (Click to auto-fill & verify instantly)
-              </span>
-            </button>
-
             {/* 6 Digit Input Boxes */}
             <div className="flex items-center justify-center gap-2 sm:gap-2.5">
               {otpDigits.map((digit, idx) => (
