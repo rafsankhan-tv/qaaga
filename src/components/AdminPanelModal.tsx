@@ -530,11 +530,7 @@ const AdminPanelModalInner: React.FC<AdminPanelProps> = ({
       );
 
 
-      flashBanner(
-        sbResult.storageType === 'supabase-storage'
-          ? `Favicon "${file.name}" uploaded to Supabase Storage & browser tab updated!`
-          : `Favicon "${file.name}" uploaded & saved to Supabase permanently!`
-      );
+      flashBanner(`Favicon "${file.name}" uploaded and saved.`);
     } catch {
       flashBanner('Could not process that favicon file. Please try another image.');
     } finally {
@@ -1358,10 +1354,6 @@ const AdminPanelModalInner: React.FC<AdminPanelProps> = ({
                       disabled={isProcessing}
                       onClick={async () => {
                         await onRemoveLogo();
-                        await saveBrandingToSupabase({
-                          ...latestBrandingRef.current,
-                          logoUrl: null,
-                        });
                         flashBanner('Logo removed & synced to Supabase!');
                       }}
                       className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-rose-300 bg-rose-50/70 hover:bg-rose-100 text-rose-700 text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50"
@@ -1377,10 +1369,6 @@ const AdminPanelModalInner: React.FC<AdminPanelProps> = ({
                       disabled={isProcessing}
                       onClick={async () => {
                         await onRestoreDefaultLogo();
-                        await saveBrandingToSupabase({
-                          ...latestBrandingRef.current,
-                          logoUrl: DEFAULT_SITE_LOGO_URL,
-                        });
                         flashBanner('Restored official qaaga.com logo & synced to Supabase!');
                       }}
                       className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-300 hover:border-slate-900 bg-white text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
@@ -1518,11 +1506,7 @@ const AdminPanelModalInner: React.FC<AdminPanelProps> = ({
                               { size: opt.id },
                               `Logo size set to ${opt.label}`
                             );
-                            await saveBrandingToSupabase({
-                              ...latestBrandingRef.current,
-                              size: opt.id,
-                            });
-                          }}
+                            }}
                           className={`py-2 px-2.5 rounded-xl border text-left transition-colors cursor-pointer ${
                             active
                               ? 'border-[#C72B62] bg-[#C72B62]/[0.07] text-[#C72B62]'
@@ -1554,11 +1538,7 @@ const AdminPanelModalInner: React.FC<AdminPanelProps> = ({
                       onChange={async (e) => {
                         const nextVal = e.target.checked;
                         await commitBrandingPatch({ blendMultiply: nextVal });
-                        await saveBrandingToSupabase({
-                          ...latestBrandingRef.current,
-                          blendMultiply: nextVal,
-                        });
-                      }}
+                        }}
                       className="w-4 h-4 accent-[#C72B62] cursor-pointer"
                     />
                   </div>
@@ -1579,11 +1559,7 @@ const AdminPanelModalInner: React.FC<AdminPanelProps> = ({
                       onChange={async (e) => {
                         const nextVal = e.target.checked;
                         await commitBrandingPatch({ showTextWhenRemoved: nextVal });
-                        await saveBrandingToSupabase({
-                          ...latestBrandingRef.current,
-                          showTextWhenRemoved: nextVal,
-                        });
-                      }}
+                        }}
                       className="w-4 h-4 accent-[#C72B62] cursor-pointer"
                     />
                   </div>
