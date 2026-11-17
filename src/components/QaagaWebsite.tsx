@@ -650,13 +650,14 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
 
   const handleUpdateBranding = useCallback(
     async (next: SiteBranding, toastMsg?: string) => {
-      setBranding(next);
-      brandingRef.current = next;
-      const saved = await persistBrandingEverywhere(next);
-      setBranding(saved);
-      brandingRef.current = saved;
-      if (toastMsg) {
-        showToast({ message: toastMsg });
+      try {
+        const saved = await persistBrandingEverywhere(next);
+        setBranding(saved);
+        brandingRef.current = saved;
+        if (toastMsg) showToast({ message: toastMsg });
+      } catch (error: any) {
+        showToast({ message: error?.message || 'Branding could not be saved.' });
+        throw error;
       }
     },
     [showToast]
@@ -667,29 +668,31 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
       ...brandingRef.current,
       logoUrl: null,
     };
-    setBranding(removed);
-    brandingRef.current = removed;
-    const savedRemoved = await persistBrandingEverywhere(removed);
-    setBranding(savedRemoved);
-    brandingRef.current = savedRemoved;
+    try {
+      const savedRemoved = await persistBrandingEverywhere(removed);
+      setBranding(savedRemoved);
+      brandingRef.current = savedRemoved;
 
-    showToast({
-      message: 'Logo removed permanently',
-      undoLabel: 'Restore',
-      onUndo: () => {
-        const restored: SiteBranding = {
-          ...brandingRef.current,
-          logoUrl: DEFAULT_BRANDING.logoUrl,
-        };
-        setBranding(restored);
-        brandingRef.current = restored;
-        persistBrandingEverywhere(restored).then((saved) => {
-          setBranding(saved);
-          brandingRef.current = saved;
-        });
-        setToast(null);
-      },
-    });
+      showToast({
+        message: 'Logo removed permanently',
+        undoLabel: 'Restore',
+        onUndo: () => {
+          const restored: SiteBranding = {
+            ...brandingRef.current,
+            logoUrl: DEFAULT_BRANDING.logoUrl,
+          };
+          persistBrandingEverywhere(restored).then((saved) => {
+            setBranding(saved);
+            brandingRef.current = saved;
+            setToast(null);
+          }).catch((error: any) => {
+            showToast({ message: error?.message || 'Logo restore failed.' });
+          });
+        },
+      });
+    } catch (error: any) {
+      showToast({ message: error?.message || 'Logo could not be removed.' });
+    }
   }, [showToast]);
 
   const handleRestoreDefaultLogo = useCallback(async () => {
@@ -697,13 +700,16 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
       ...brandingRef.current,
       logoUrl: DEFAULT_BRANDING.logoUrl,
     };
-    setBranding(restored);
-    brandingRef.current = restored;
-    const saved = await persistBrandingEverywhere(restored);
-    setBranding(saved);
-    brandingRef.current = saved;
-    showToast({ message: 'Restored official qaaga.com logo' });
+    try {
+      const saved = await persistBrandingEverywhere(restored);
+      setBranding(saved);
+      brandingRef.current = saved;
+      showToast({ message: 'Restored official qaaga.com logo' });
+    } catch (error: any) {
+      showToast({ message: error?.message || 'Default logo could not be restored.' });
+    }
   }, [showToast]);
+
 
   /* ======================================================================= */
   /* COMPUTED DATA & PRICE FORMATTER                                         */
@@ -2410,12 +2416,16 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
         <TripsModal
           bookings={bookings}
           formatPrice={formatPrice}
-          onCancelBooking={(id) => {
-            setBookings((prev) => prev.filter((b) => b.id !== id));
-            cancelBookingInDatabase(id).catch((err) =>
-              console.warn('Cancel booking sync notice:', err)
-            );
-            showToast({ message: 'Reservation cancelled' });
+          onCancelBooking={async (id) => {
+            const saved = await updateBookingStatus(id, 'Cancelled', 'Cancelled by administrator');
+            if (!saved) {
+              showToast({ message: 'Reservation could not be cancelled.' });
+              return;
+            }
+            setBookings((prev) => prev.map((booking) =>
+              booking.id === id ? { ...booking, status: 'Cancelled' } : booking
+            ));
+            showToast({ message: 'Reservation cancelled.' });
           }}
           onOpenListingById={(listingId) => {
             const match = allListings.find((item) => item.id === listingId);
