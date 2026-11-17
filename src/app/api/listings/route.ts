@@ -1,182 +1,136 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { QaagaListing } from '@/data/listings';
-import { ListingSchema } from '@/lib/validations';
-import { getSupabase } from '@/lib/supabaseClient';
+import { z } from 'zod';
+import { createPublicServerSupabase, requireAuthenticatedSupabase } from '@/lib/supabaseServer';
 
 export const dynamic = 'force-dynamic';
 
-function mapListingRow(row: any): QaagaListing {
+const ListingInputSchema = z.object({
+  title: z.string().min(3).max(120),
+  description: z.string().max(5000).optional().default(''),
+  area: z.string().min(2).max(120),
+  city: z.string().min(2).max(80).default('Dhaka'),
+  propertyType: z.enum(['Apartment', 'Studio', 'Private Room', 'Sky Condo', 'Villa', 'Suite', 'Penthouse']).default('Apartment'),
+  category: z.enum(['stay', 'experiences', 'services']).default('stay'),
+  pricePerNight: z.number().positive().max(100000),
+  maxGuests: z.number().int().min(1).max(30).default(2),
+  bedrooms: z.string().max(80).default('1 bedroom'),
+  image: z.string().url(),
+  gallery: z.array(z.string().url()).max(20).default([]),
+  amenities: z.array(z.string().max(80)).max(50).default([]),
+});
+
+function mapProperty(row: any) {
   return {
     id: String(row.id),
-    title: row.title || 'Untitled Listing',
-    area: row.area || 'Kuala Lumpur',
-    city: row.city || 'Kuala Lumpur',
-    subType: row.sub_type || row.property_type || 'Apartment',
+    hostEmail: row.host_email,
+    title: row.title,
+    area: row.area,
+    city: row.city || 'Dhaka',
+    subType: row.property_type || 'Apartment',
     category: row.category || 'stay',
-    twoNightPriceUsd:
-      Number(row.two_night_price_usd) ||
-      (Number(row.price_daily) ? Number(row.price_daily) * 2 : 120),
-    rating: String(row.rating || '5.0'),
-    reviewsCount: Number(row.reviews_count) || 0,
-    guestFavorite: Boolean(row.guest_favorite ?? row.is_featured),
-    image: row.image || '/assets/kl-ui/kl-1.jpg',
-    gallery:
-      Array.isArray(row.gallery) && row.gallery.length > 0
-        ? row.gallery
-        : [row.image || '/assets/kl-ui/kl-1.jpg'],
-    maxGuests: Number(row.max_guests) || 2,
+    twoNightPriceUsd: Number(row.two_night_price_usd || 0),
+    rating: String(row.rating || 0),
+    reviewsCount: Number(row.reviews_count || 0),
+    guestFavorite: Boolean(row.guest_favorite),
+    image: row.image,
+    gallery: Array.isArray(row.gallery) ? row.gallery : [],
+    maxGuests: Number(row.max_guests || 2),
     bedrooms: row.bedrooms || '1 bedroom',
     hostName: row.host_name || 'Host',
-    hostYears: Number(row.host_years) || 1,
+    hostYears: 0,
     amenities: Array.isArray(row.amenities) ? row.amenities : [],
     description: row.description || '',
-    inPopularKL: Boolean(row.in_popular_kl),
+    inPopularKL: false,
+    status: row.status,
   };
 }
 
 export async function GET(req: NextRequest) {
+  const supabase = createPublicServerSupabase();
+  if (!supabase) {
+    return NextResponse.json({ listings: [], total: 0, status: 'error', error: 'Supabase is not configured.' }, { status: 503 });
+  }
+
   const { searchParams } = new URL(req.url);
   const category = searchParams.get('category');
-  const q = searchParams.get('q')?.toLowerCase().trim();
+  const query = searchParams.get('q')?.trim().toLowerCase();
   const sort = searchParams.get('sort');
 
-  const supabase = getSupabase();
-  if (!supabase) {
-    return NextResponse.json(
-      { listings: [], total: 0, status: 'error', error: 'Supabase not configured' },
-      { status: 200 }
-    );
+  const { data, error } = await supabase
+    .from('properties')
+    .select('*')
+    .eq('status', 'active')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    return NextResponse.json({ listings: [], total: 0, status: 'error', error: 'Unable to load published listings.' }, { status: 502 });
   }
 
-  let items: QaagaListing[] = [];
-  let status: 'ok' | 'empty' | 'error' = 'empty';
-
-  try {
-    const [listingsRes, propsRes] = await Promise.all([
-      supabase.from('listings').select('*').order('created_at', { ascending: false }),
-      supabase
-        .from('properties')
-        .select('*')
-        .eq('status', 'active')
-        .order('created_at', { ascending: false }),
-    ]);
-
-    const merged = new Map<string, QaagaListing>();
-
-    if (!listingsRes.error && Array.isArray(listingsRes.data)) {
-      for (const row of listingsRes.data) {
-        if (row.is_active === false) continue;
-        const mapped = mapListingRow(row);
-        merged.set(mapped.id, mapped);
-      }
-    }
-
-    if (!propsRes.error && Array.isArray(propsRes.data)) {
-      for (const row of propsRes.data) {
-        const mapped = mapListingRow(row);
-        if (!merged.has(mapped.id)) {
-          merged.set(mapped.id, mapped);
-        }
-      }
-    }
-
-    if (listingsRes.error && propsRes.error) {
-      status = 'error';
-    } else {
-      items = Array.from(merged.values());
-      status = items.length > 0 ? 'ok' : 'empty';
-    }
-  } catch {
-    status = 'error';
-  }
-
-  if (category && category !== 'all') {
-    items = items.filter((item) => item.category === category);
-  }
-
-  if (q) {
-    items = items.filter(
-      (item) =>
-        item.title.toLowerCase().includes(q) ||
-        item.area.toLowerCase().includes(q) ||
-        item.city.toLowerCase().includes(q)
-    );
-  }
-
-  if (sort === 'price-asc') {
-    items.sort((a, b) => a.twoNightPriceUsd - b.twoNightPriceUsd);
-  } else if (sort === 'price-desc') {
-    items.sort((a, b) => b.twoNightPriceUsd - a.twoNightPriceUsd);
-  } else if (sort === 'rating') {
-    items.sort((a, b) => parseFloat(b.rating) - parseFloat(a.rating));
-  }
+  let listings = (data || []).map(mapProperty);
+  if (category && category !== 'all') listings = listings.filter((item) => item.category === category);
+  if (query) listings = listings.filter((item) =>
+    item.title.toLowerCase().includes(query) ||
+    item.area.toLowerCase().includes(query) ||
+    item.city.toLowerCase().includes(query)
+  );
+  if (sort === 'price-asc') listings.sort((a, b) => a.twoNightPriceUsd - b.twoNightPriceUsd);
+  if (sort === 'price-desc') listings.sort((a, b) => b.twoNightPriceUsd - a.twoNightPriceUsd);
+  if (sort === 'rating') listings.sort((a, b) => Number(b.rating) - Number(a.rating));
 
   return NextResponse.json(
-    { listings: items, total: items.length, status },
-    {
-      headers: {
-        'Cache-Control': 'public, s-maxage=15, stale-while-revalidate=60',
-      },
-    }
+    { listings, total: listings.length, status: listings.length ? 'ok' : 'empty' },
+    { headers: { 'Cache-Control': 'public, s-maxage=15, stale-while-revalidate=60' } }
   );
 }
 
 export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json();
-    const validated = ListingSchema.safeParse(body);
+  const auth = await requireAuthenticatedSupabase(req);
+  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
-    if (!validated.success) {
-      return NextResponse.json(
-        { error: 'Validation failed', details: validated.error.format() },
-        { status: 400 }
-      );
-    }
+  const parsed = ListingInputSchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ error: 'Invalid listing details.', details: parsed.error.flatten() }, { status: 400 });
 
-    const listing = validated.data;
-    const supabase = getSupabase();
+  const { data: profile } = await auth.supabase
+    .from('profiles')
+    .select('full_name,status')
+    .eq('email', auth.user.email!.toLowerCase())
+    .maybeSingle();
 
-    if (!supabase) {
-      return NextResponse.json({ error: 'Supabase not configured' }, { status: 503 });
-    }
-
-    const { data, error } = await supabase
-      .from('listings')
-      .insert({
-        id: listing.id,
-        title: listing.title,
-        area: listing.area,
-        city: listing.city,
-        sub_type: listing.subType,
-        category: listing.category,
-        two_night_price_usd: listing.twoNightPriceUsd,
-        rating: listing.rating,
-        reviews_count: listing.reviewsCount,
-        guest_favorite: listing.guestFavorite,
-        image: listing.image,
-        gallery: listing.gallery,
-        max_guests: listing.maxGuests,
-        bedrooms: listing.bedrooms,
-        host_name: listing.hostName,
-        host_years: listing.hostYears,
-        amenities: listing.amenities,
-        description: listing.description,
-      })
-      .select()
-      .single();
-
-    if (error || !data) {
-      return NextResponse.json(
-        { error: error?.message || 'Failed to save listing in Supabase' },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json({ success: true, listing: mapListingRow(data) }, { status: 201 });
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: err?.message || 'Failed to create listing' },
-      { status: 500 }
-    );
+  if (profile?.status === 'suspended') {
+    return NextResponse.json({ error: 'This account cannot publish listings.' }, { status: 403 });
   }
+
+  const input = parsed.data;
+  const id = crypto.randomUUID();
+  const payload = {
+    id,
+    host_email: auth.user.email!.toLowerCase(),
+    host_name: profile?.full_name || auth.user.user_metadata?.full_name || auth.user.email!.split('@')[0],
+    title: input.title,
+    description: input.description,
+    property_type: input.propertyType,
+    room_type: input.propertyType === 'Private Room' ? 'Private room' : 'Entire place',
+    category: input.category,
+    city: input.city,
+    area: input.area,
+    two_night_price_usd: input.pricePerNight * 2,
+    price_daily: input.pricePerNight,
+    currency: 'USD',
+    max_guests: input.maxGuests,
+    bedrooms: input.bedrooms,
+    rating: 0,
+    reviews_count: 0,
+    guest_favorite: false,
+    in_popular_kl: false,
+    is_featured: false,
+    status: 'pending_approval',
+    image: input.image,
+    gallery: input.gallery.length ? input.gallery : [input.image],
+    amenities: input.amenities,
+  };
+
+  const { data, error } = await auth.supabase.from('properties').insert(payload).select().single();
+  if (error || !data) return NextResponse.json({ error: 'Listing could not be submitted.' }, { status: 502 });
+
+  return NextResponse.json({ success: true, listing: mapProperty(data) }, { status: 201 });
 }
