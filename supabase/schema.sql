@@ -2,7 +2,6 @@
 -- QAAGA.COM FULL PRODUCTION DATABASE SCHEMA
 -- Single Source of Truth for Furnished Apartment & Room Rentals
 -- Compatible with Supabase PostgreSQL, RLS, Realtime & Storage
--- Super Admin: rafsankhan.tv@gmail.com
 -- =========================================================================
 
 -- Enable required extensions
@@ -17,11 +16,11 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     email TEXT UNIQUE NOT NULL,
     full_name TEXT NOT NULL DEFAULT 'Member',
     phone TEXT,
-    city TEXT DEFAULT 'Kuala Lumpur',
-    country TEXT DEFAULT 'Malaysia',
+    city TEXT DEFAULT 'Dhaka',
+    country TEXT DEFAULT 'Bangladesh',
     avatar_url TEXT,
     bio TEXT,
-    role TEXT NOT NULL CHECK (role IN ('customer', 'guest', 'host', 'admin')) DEFAULT 'customer',
+    role TEXT NOT NULL CHECK (role IN ('customer', 'guest', 'host', 'admin')) DEFAULT 'guest',
     status TEXT NOT NULL CHECK (status IN ('active', 'suspended', 'pending')) DEFAULT 'active',
     verified BOOLEAN DEFAULT false,
     identity_status TEXT NOT NULL CHECK (identity_status IN ('unverified', 'pending', 'verified', 'rejected')) DEFAULT 'unverified',
@@ -67,11 +66,11 @@ CREATE TABLE IF NOT EXISTS public.properties (
     property_type TEXT NOT NULL DEFAULT 'Apartment' CHECK (property_type IN ('Apartment', 'Studio', 'Private Room', 'Sky Condo', 'Villa', 'Suite', 'Penthouse')),
     room_type TEXT DEFAULT 'Entire place' CHECK (room_type IN ('Entire place', 'Private room', 'Shared room')),
     category TEXT NOT NULL DEFAULT 'stay' CHECK (category IN ('stay', 'experiences', 'services')),
-    city TEXT NOT NULL DEFAULT 'Kuala Lumpur',
-    area TEXT NOT NULL DEFAULT 'Bukit Bintang',
+    city TEXT NOT NULL DEFAULT 'Dhaka',
+    area TEXT NOT NULL DEFAULT 'Dhaka',
     address TEXT,
-    latitude DOUBLE PRECISION DEFAULT 3.1466,
-    longitude DOUBLE PRECISION DEFAULT 101.7115,
+    latitude DOUBLE PRECISION,
+    longitude DOUBLE PRECISION,
     two_night_price_usd NUMERIC(10, 2) NOT NULL DEFAULT 120.00,
     price_daily NUMERIC(10, 2) NOT NULL DEFAULT 60.00,
     price_weekly NUMERIC(10, 2) DEFAULT 380.00,
@@ -82,10 +81,10 @@ CREATE TABLE IF NOT EXISTS public.properties (
     bathrooms INTEGER NOT NULL DEFAULT 1,
     beds INTEGER NOT NULL DEFAULT 1,
     square_feet INTEGER DEFAULT 650,
-    rating NUMERIC(3, 2) DEFAULT 5.00,
+    rating NUMERIC(3, 2) DEFAULT 0.00,
     reviews_count INTEGER DEFAULT 0,
     guest_favorite BOOLEAN DEFAULT false,
-    in_popular_kl BOOLEAN DEFAULT true,
+    in_popular_kl BOOLEAN DEFAULT false,
     is_featured BOOLEAN DEFAULT false,
     status TEXT NOT NULL CHECK (status IN ('active', 'inactive', 'pending_approval', 'rejected')) DEFAULT 'pending_approval',
     image TEXT NOT NULL,
@@ -209,9 +208,9 @@ CREATE TABLE IF NOT EXISTS public.threads (
     host_name TEXT NOT NULL,
     listing_title TEXT NOT NULL,
     listing_image TEXT NOT NULL,
-    property_id TEXT REFERENCES public.properties(id) ON DELETE SET NULL,
-    host_email TEXT,
-    guest_email TEXT,
+    property_id TEXT NOT NULL REFERENCES public.properties(id) ON DELETE CASCADE,
+    host_email TEXT NOT NULL,
+    guest_email TEXT NOT NULL,
     unread BOOLEAN DEFAULT false,
     last_message TEXT,
     created_at TIMESTAMPTZ DEFAULT TIMEZONE('utc', NOW()),
@@ -377,10 +376,38 @@ CREATE POLICY "properties_insert_own_pending" ON public.properties
 CREATE POLICY "properties_update_own_or_admin" ON public.properties
   FOR UPDATE
   USING (host_email = public.current_user_email() OR public.is_platform_admin())
-  WITH CHECK (
-    (host_email = public.current_user_email() AND status <> 'active')
-    OR public.is_platform_admin()
-  );
+  WITH CHECK (host_email = public.current_user_email() OR public.is_platform_admin());
+
+CREATE OR REPLACE FUNCTION public.guard_property_owner_changes()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = ''
+AS $
+BEGIN
+  IF public.is_platform_admin() THEN
+    RETURN NEW;
+  END IF;
+
+  IF NEW.host_email <> OLD.host_email THEN
+    RAISE EXCEPTION 'A property host cannot be changed by the host account';
+  END IF;
+  IF NEW.status IN ('active', 'rejected') AND NEW.status <> OLD.status THEN
+    RAISE EXCEPTION 'Only a trusted administrator can approve or reject a listing';
+  END IF;
+
+  NEW.rating := OLD.rating;
+  NEW.reviews_count := OLD.reviews_count;
+  NEW.guest_favorite := OLD.guest_favorite;
+  NEW.is_featured := OLD.is_featured;
+  NEW.in_popular_kl := OLD.in_popular_kl;
+  RETURN NEW;
+END;
+$;
+
+DROP TRIGGER IF EXISTS trg_guard_property_owner_changes ON public.properties;
+CREATE TRIGGER trg_guard_property_owner_changes
+  BEFORE UPDATE ON public.properties
+  FOR EACH ROW EXECUTE FUNCTION public.guard_property_owner_changes();
 CREATE POLICY "properties_delete_own_or_admin" ON public.properties
   FOR DELETE USING (host_email = public.current_user_email() OR public.is_platform_admin());
 
