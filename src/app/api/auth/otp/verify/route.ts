@@ -1,72 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabase } from '@/lib/supabaseClient';
-import { otpStore } from '../send/route';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
   try {
-    const { email, code } = await req.json();
+    const body = await req.json();
+    const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
+    const code = typeof body?.code === 'string' ? body.code.trim() : '';
 
-    if (!email || !code) {
-      return NextResponse.json({ error: 'Email and verification code are required' }, { status: 400 });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !/^\d{6}$/.test(code)) {
+      return NextResponse.json({ error: 'A valid email and six-digit code are required.' }, { status: 400 });
     }
 
-    const cleanEmail = email.trim().toLowerCase();
-    const cleanCode = String(code).trim();
-
-    // 1. Check Supabase Native verifyOtp
     const supabase = getSupabase();
-    let verified = false;
-    let authUser: any = null;
-
-    if (supabase) {
-      try {
-        const { data, error } = await supabase.auth.verifyOtp({
-          email: cleanEmail,
-          token: cleanCode,
-          type: 'email',
-        });
-        if (!error && data?.user) {
-          verified = true;
-          authUser = data.user;
-        }
-      } catch {
-        // Fallback to in-memory check
-      }
+    if (!supabase) {
+      return NextResponse.json({ error: 'Authentication service is not configured.' }, { status: 503 });
     }
 
-    // 2. Check in-memory store or developer master code 123456
-    const cached = otpStore.get(cleanEmail);
-    if (!verified) {
-      if (cleanCode === '123456') {
-        verified = true;
-      } else if (cached && cached.code === cleanCode && Date.now() < cached.expiresAt) {
-        verified = true;
-      }
+    const { data, error } = await supabase.auth.verifyOtp({
+      email,
+      token: code,
+      type: 'email',
+    });
+
+    if (error || !data.user) {
+      return NextResponse.json({ error: 'Invalid or expired verification code.' }, { status: 401 });
     }
 
-    if (!verified) {
-      return NextResponse.json({ error: 'Invalid or expired verification code' }, { status: 400 });
-    }
-
-    // Clear used OTP
-    otpStore.delete(cleanEmail);
-
-    const isAdmin = cleanEmail === 'rafsankhan.tv@gmail.com';
-
+    // Do not infer admin privileges from an email address or return a client-controlled role.
     return NextResponse.json({
       success: true,
-      email: cleanEmail,
       verified: true,
-      isAdmin,
-      role: isAdmin ? 'admin' : 'guest',
-      user: authUser,
-      message: isAdmin
-        ? 'Super Admin verified successfully. Admin dashboard access granted.'
-        : 'Email verified successfully',
+      user: { id: data.user.id, email: data.user.email },
+      session: data.session,
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err?.message || 'Verification error' }, { status: 500 });
+  } catch {
+    return NextResponse.json({ error: 'Unable to verify this code.' }, { status: 400 });
   }
 }
