@@ -1,108 +1,94 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { ReviewSchema } from '@/lib/validations';
-import { getSupabase } from '@/lib/supabaseClient';
+import { z } from 'zod';
+import { createPublicServerSupabase, requireAuthenticatedSupabase } from '@/lib/supabaseServer';
 
 export const dynamic = 'force-dynamic';
 
+const CreateReviewSchema = z.object({
+  listingId: z.string().min(1),
+  rating: z.number().int().min(1).max(5),
+  comment: z.string().trim().min(4).max(1000),
+});
+
 export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const listingId = searchParams.get('listingId');
+  const listingId = new URL(req.url).searchParams.get('listingId');
+  if (!listingId) return NextResponse.json({ error: 'Missing listingId.' }, { status: 400 });
 
-  if (!listingId) {
-    return NextResponse.json({ error: 'Missing listingId' }, { status: 400 });
-  }
+  const supabase = createPublicServerSupabase();
+  if (!supabase) return NextResponse.json({ error: 'Supabase is not configured.' }, { status: 503 });
 
-  const supabase = getSupabase();
-  if (!supabase) {
-    return NextResponse.json({ reviews: [], status: 'error' });
-  }
+  const { data, error } = await supabase
+    .from('reviews')
+    .select('*')
+    .eq('listing_id', listingId)
+    .order('created_at', { ascending: false });
 
-  try {
-    const { data, error } = await supabase
-      .from('reviews')
-      .select('*')
-      .eq('listing_id', listingId)
-      .order('created_at', { ascending: false });
+  if (error) return NextResponse.json({ error: 'Unable to load reviews.' }, { status: 502 });
 
-    if (error) {
-      return NextResponse.json({ reviews: [], status: 'error', error: error.message });
-    }
+  const reviews = (data || []).map((r: any) => ({
+    id: String(r.id),
+    author: r.author,
+    date: new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+    rating: Number(r.rating),
+    comment: r.comment,
+  }));
 
-    const reviews = Array.isArray(data)
-      ? data.map((r: any) => ({
-          id: String(r.id),
-          author: r.author,
-          date: new Date(r.created_at).toLocaleDateString('en-US', {
-            month: 'short',
-            year: 'numeric',
-          }),
-          rating: Number(r.rating),
-          comment: r.comment,
-        }))
-      : [];
-
-    return NextResponse.json({ reviews, status: reviews.length > 0 ? 'ok' : 'empty' });
-  } catch (err: any) {
-    return NextResponse.json({ reviews: [], status: 'error', error: err?.message });
-  }
+  return NextResponse.json({ reviews, status: reviews.length ? 'ok' : 'empty' });
 }
 
 export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json();
-    const validated = ReviewSchema.safeParse(body);
+  const auth = await requireAuthenticatedSupabase(req);
+  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
-    if (!validated.success) {
-      return NextResponse.json(
-        { error: 'Invalid review payload', details: validated.error.format() },
-        { status: 400 }
-      );
-    }
+  const parsed = CreateReviewSchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ error: 'Invalid review payload.' }, { status: 400 });
 
-    const { listingId, author, rating, comment } = validated.data;
-    const supabase = getSupabase();
-    if (!supabase) {
-      return NextResponse.json({ error: 'Supabase not configured' }, { status: 503 });
-    }
+  const { listingId, rating, comment } = parsed.data;
+  const email = auth.user.email!.toLowerCase();
 
-    const { data, error } = await supabase
-      .from('reviews')
-      .insert({
-        listing_id: listingId,
-        author,
-        rating,
-        comment,
-      })
-      .select()
-      .single();
+  const { data: booking, error: bookingError } = await auth.supabase
+    .from('bookings')
+    .select('id')
+    .eq('property_id', listingId)
+    .eq('customer_email', email)
+    .eq('status', 'Completed')
+    .limit(1)
+    .maybeSingle();
 
-    if (error || !data) {
-      return NextResponse.json(
-        { error: error?.message || 'Failed to save review' },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json(
-      {
-        success: true,
-        review: {
-          id: String(data.id),
-          author: data.author,
-          date: new Date(data.created_at).toLocaleDateString('en-US', {
-            month: 'short',
-            year: 'numeric',
-          }),
-          rating: Number(data.rating),
-          comment: data.comment,
-        },
-      },
-      { status: 201 }
-    );
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: err?.message || 'Failed to submit review' },
-      { status: 500 }
-    );
+  if (bookingError || !booking) {
+    return NextResponse.json({ error: 'A completed stay is required before reviewing this listing.' }, { status: 403 });
   }
+
+  const profile = await auth.supabase
+    .from('profiles')
+    .select('full_name')
+    .eq('email', email)
+    .maybeSingle();
+
+  const author = profile.data?.full_name || String(auth.user.user_metadata?.full_name || email.split('@')[0]);
+  const { data, error } = await auth.supabase
+    .from('reviews')
+    .insert({
+      property_id: listingId,
+      listing_id: listingId,
+      author,
+      author_email: email,
+      rating,
+      comment,
+    })
+    .select()
+    .single();
+
+  if (error || !data) return NextResponse.json({ error: 'Review could not be saved.' }, { status: 502 });
+
+  return NextResponse.json({
+    success: true,
+    review: {
+      id: String(data.id),
+      author: data.author,
+      date: new Date(data.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+      rating: Number(data.rating),
+      comment: data.comment,
+    },
+  }, { status: 201 });
 }
