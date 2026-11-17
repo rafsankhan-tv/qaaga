@@ -1540,6 +1540,20 @@ export async function submitIdentityVerification(data: {
     throw new Error('Identity verification request could not be submitted.');
   }
 
+  const { error: profileStatusError } = await supabase
+    .from('profiles')
+    .update({
+      identity_status: 'pending',
+      updated_at: new Date().toISOString(),
+    })
+    .eq('email', cleanEmail);
+
+  if (profileStatusError) {
+    // The verification request exists and remains pending in its own record.
+    // Do not claim the profile summary has changed when the database rejected it.
+    console.warn('Could not update the profile identity status summary:', profileStatusError.message);
+  }
+
   return {
     id: inserted.id,
     userEmail: inserted.user_email,
