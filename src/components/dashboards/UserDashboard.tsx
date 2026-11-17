@@ -535,7 +535,7 @@ export default function UserDashboard({
                 )}
               </div>
               <p className="text-xs text-slate-500 mt-1">
-                {profile.email} · {profile.city || 'Kuala Lumpur'} · Customer Hub
+                {profile.email} · {profile.city || 'Dhaka'} · Customer Hub
               </p>
             </div>
           </div>
@@ -676,7 +676,7 @@ export default function UserDashboard({
                 </div>
                 <h3 className="text-sm font-bold text-slate-800">No active bookings found</h3>
                 <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1 mb-4">
-                  You haven&apos;t booked any furnished apartments yet. Explore available residences in Kuala Lumpur.
+                  You haven&apos;t booked any furnished apartments yet. Explore available residences across Dhaka.
                 </p>
                 <Link
                   href="/properties"
@@ -730,7 +730,7 @@ export default function UserDashboard({
                           </h3>
                           <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
                             <MapPin size={13} className="text-slate-400" />
-                            <span>{bk.area || 'Kuala Lumpur'}</span>
+                            <span>{bk.area || 'Dhaka'}</span>
                           </p>
 
                           <div className="text-xs text-slate-600 mt-2 flex items-center gap-3 flex-wrap">
@@ -881,7 +881,7 @@ export default function UserDashboard({
                     type="text"
                     value={editCity}
                     onChange={(e) => setEditCity(e.target.value)}
-                    placeholder="Kuala Lumpur"
+                    placeholder="Dhaka"
                     className="w-full h-10 px-3 rounded-xl border border-slate-200 text-xs font-semibold focus:outline-none focus:border-[#C72B62]"
                   />
                 </div>
@@ -921,7 +921,7 @@ export default function UserDashboard({
               <div>
                 <h2 className="text-base font-bold text-slate-900">Government Identity Verification</h2>
                 <p className="text-xs text-slate-500">
-                  Required by Malaysian hospitality regulations to book furnished apartments
+                  Complete identity verification to help protect guests and hosts.
                 </p>
               </div>
             </div>
