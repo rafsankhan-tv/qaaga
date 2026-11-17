@@ -735,7 +735,7 @@ RETURNS TABLE (
 LANGUAGE plpgsql
 SECURITY INVOKER
 SET search_path = ''
-AS $
+AS $qaaga_thread$
 DECLARE
   actor_email TEXT := public.current_user_email();
   property_row public.properties%ROWTYPE;
