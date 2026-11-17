@@ -183,7 +183,7 @@ CREATE TABLE IF NOT EXISTS public.payment_records (
     booking_id TEXT NOT NULL REFERENCES public.bookings(id) ON DELETE CASCADE,
     amount NUMERIC(10, 2) NOT NULL,
     currency TEXT NOT NULL DEFAULT 'USD',
-    payment_method TEXT NOT NULL CHECK (payment_method IN ('bank_transfer', 'wise', 'tng_ewallet', 'cash_checkin', 'card', 'other')),
+    payment_method TEXT NOT NULL CHECK (payment_method IN ('bkash', 'nagad', 'rocket', 'bank_transfer', 'wise', 'cash_checkin', 'card', 'other')),
     transaction_reference TEXT,
     proof_image_url TEXT NOT NULL,
     payer_name TEXT NOT NULL,
