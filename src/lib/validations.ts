@@ -55,7 +55,7 @@ export const MessageSchema = z.object({
 export const ProfileSchema = z.object({
   fullName: z.string().min(2, 'Name must be at least 2 characters').max(60),
   email: z.string().email('Please enter a valid email address'),
-  city: z.string().min(2).max(60).default('Kuala Lumpur'),
+  city: z.string().min(2).max(60).default('Dhaka'),
   phone: z.string().trim().max(30).optional(),
   avatarUrl: z.string().url().optional(),
   bio: z.string().trim().max(500).optional(),
