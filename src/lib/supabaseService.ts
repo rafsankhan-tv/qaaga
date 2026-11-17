@@ -988,30 +988,28 @@ export async function saveUserProfileToDatabase(profile: GuestProfile): Promise<
 }
 
 export async function fetchUsersWithStatus(): Promise<ServiceResult<GuestProfile[]>> {
-  return dedupFetch('users:all', async () => {
-    const supabase = getSupabase();
-    if (!supabase) {
-      return { data: [], status: 'error', error: 'Supabase client unavailable.' };
-    }
+  const supabase = getSupabase();
+  if (!supabase) return { data: [], status: 'error', error: 'Supabase unavailable.' };
 
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError || authData.user?.app_metadata?.role !== 'admin') {
+    return { data: [], status: 'error', error: 'Administrator permission is required.' };
+  }
+
+  return dedupFetch('users:' + authData.user.id, async () => {
     try {
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (error) {
-        return { data: [], status: 'error', error: error.message };
-      }
-
-      if (!Array.isArray(data) || data.length === 0) {
-        return { data: [], status: 'empty' };
-      }
+      if (error) return { data: [], status: 'error', error: error.message };
+      if (!Array.isArray(data) || !data.length) return { data: [], status: 'empty' };
 
       const mapped: GuestProfile[] = data.map((d) => ({
         fullName: d.full_name || 'Member',
         email: d.email,
-        city: d.city || 'Kuala Lumpur',
+        city: d.city || 'Dhaka',
         verified: Boolean(d.verified),
         role: d.role || 'guest',
         identity_status: d.identity_status || (d.verified ? 'verified' : 'unverified'),
@@ -1019,10 +1017,7 @@ export async function fetchUsersWithStatus(): Promise<ServiceResult<GuestProfile
         avatarUrl: d.avatar_url || '',
         bio: d.bio || '',
         joinedDate: d.created_at
-          ? new Date(d.created_at).toLocaleDateString('en-US', {
-              month: 'short',
-              year: 'numeric',
-            })
+          ? new Date(d.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
           : undefined,
         status: d.status || 'active',
       }));
@@ -1040,24 +1035,29 @@ export async function getAllUsersFromDatabase(): Promise<GuestProfile[]> {
 
 export async function updateUserRoleInDatabase(
   email: string,
-  role: 'customer' | 'guest' | 'host' | 'admin',
+  role: 'customer' | 'guest' | 'host',
   status: 'active' | 'suspended' = 'active'
 ): Promise<boolean> {
   const cleanEmail = email.trim().toLowerCase();
-  invalidateServiceCache(`profile:${cleanEmail}`);
-  invalidateServiceCache('users:all');
-  invalidateServiceCache('admin:stats');
   const supabase = getSupabase();
   if (!supabase) return false;
 
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError || authData.user?.app_metadata?.role !== 'admin') return false;
+
+  invalidateServiceCache('profile:' + cleanEmail);
+  invalidateServiceCache('users:' + authData.user.id);
+  invalidateServiceCache('admin:stats:' + authData.user.id);
+
   try {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('profiles')
       .update({ role, status, updated_at: new Date().toISOString() })
-      .eq('email', cleanEmail);
-    return !error;
-  } catch (err) {
-    console.warn('Notice: Remote Supabase update user role exception:', err);
+      .eq('email', cleanEmail)
+      .select('email')
+      .maybeSingle();
+    return !error && Boolean(data);
+  } catch {
     return false;
   }
 }
@@ -1659,92 +1659,72 @@ export interface AdminPlatformStats {
 }
 
 export async function getAdminPlatformStats(): Promise<AdminPlatformStats> {
-  return dedupFetch('admin:stats', async () => {
-    const supabase = getSupabase();
-    if (!supabase) {
-      return {
-        totalUsers: 0,
-        totalHosts: 0,
-        totalProperties: 0,
-        activeProperties: 0,
-        totalBookings: 0,
-        confirmedBookings: 0,
-        pendingBookings: 0,
-        totalGrossRevenueUsd: 0,
-        pendingVerifications: 0,
-        pendingPayments: 0,
-      };
-    }
+  const supabase = getSupabase();
+  if (!supabase) return emptyAdminPlatformStats();
 
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError || authData.user?.app_metadata?.role !== 'admin') return emptyAdminPlatformStats();
+
+  return dedupFetch('admin:stats:' + authData.user.id, async () => {
     try {
       const [
-        { count: userCount },
-        { count: hostCount },
-        { data: props },
-        { data: listingsData },
-        { data: allBookings },
-        { count: pendingIdCount },
-        { count: pendingPayCount },
+        { count: userCount, error: usersError },
+        { count: hostCount, error: hostsError },
+        { data: properties, error: propertiesError },
+        { data: allBookings, error: bookingsError },
+        { count: pendingIdCount, error: idvError },
+        { count: pendingPayCount, error: paymentsError },
       ] = await Promise.all([
         supabase.from('profiles').select('*', { count: 'exact', head: true }),
         supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'host'),
         supabase.from('properties').select('id, status'),
-        supabase.from('listings').select('id, is_active'),
         supabase.from('bookings').select('id, total_usd, status'),
-        supabase
-          .from('identity_verifications')
-          .select('*', { count: 'exact', head: true })
-          .eq('status', 'pending'),
-        supabase
-          .from('payment_records')
-          .select('*', { count: 'exact', head: true })
-          .eq('status', 'pending_review'),
+        supabase.from('identity_verifications').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
+        supabase.from('payment_records').select('*', { count: 'exact', head: true }).eq('status', 'pending_review'),
       ]);
 
-      const properties = Array.isArray(props) ? props : [];
-      const listingsRows = Array.isArray(listingsData) ? listingsData : [];
-      const bookingsList = Array.isArray(allBookings) ? allBookings : [];
+      const errors = [usersError, hostsError, propertiesError, bookingsError, idvError, paymentsError].filter(Boolean);
+      if (errors.length) throw new Error('One or more administrator dashboard queries failed.');
 
-      const totalProps = properties.length + listingsRows.length;
-      const activeProps =
-        properties.filter((p) => p.status === 'active').length +
-        listingsRows.filter((l) => l.is_active !== false).length;
-      const confirmed = bookingsList.filter(
-        (b) => b.status === 'Confirmed' || b.status === 'Accepted'
-      ).length;
-      const pending = bookingsList.filter((b) => b.status === 'Pending').length;
-      const totalRevenue = bookingsList
+      const propertyRows = Array.isArray(properties) ? properties : [];
+      const bookingRows = Array.isArray(allBookings) ? allBookings : [];
+      const confirmed = bookingRows.filter((b) => b.status === 'Confirmed' || b.status === 'Accepted').length;
+      const pending = bookingRows.filter((b) => b.status === 'Pending').length;
+      const revenue = bookingRows
         .filter((b) => b.status !== 'Cancelled' && b.status !== 'Rejected')
         .reduce((sum, b) => sum + (Number(b.total_usd) || 0), 0);
 
       return {
         totalUsers: userCount || 0,
         totalHosts: hostCount || 0,
-        totalProperties: totalProps,
-        activeProperties: activeProps,
-        totalBookings: bookingsList.length,
+        totalProperties: propertyRows.length,
+        activeProperties: propertyRows.filter((property) => property.status === 'active').length,
+        totalBookings: bookingRows.length,
         confirmedBookings: confirmed,
         pendingBookings: pending,
-        totalGrossRevenueUsd: totalRevenue,
+        totalGrossRevenueUsd: revenue,
         pendingVerifications: pendingIdCount || 0,
         pendingPayments: pendingPayCount || 0,
       };
-    } catch (err) {
-      console.warn('Notice: Calculating dynamic platform stats error:', err);
-      return {
-        totalUsers: 0,
-        totalHosts: 0,
-        totalProperties: 0,
-        activeProperties: 0,
-        totalBookings: 0,
-        confirmedBookings: 0,
-        pendingBookings: 0,
-        totalGrossRevenueUsd: 0,
-        pendingVerifications: 0,
-        pendingPayments: 0,
-      };
+    } catch {
+      return emptyAdminPlatformStats();
     }
   });
+}
+
+function emptyAdminPlatformStats(): AdminPlatformStats {
+  return {
+    totalUsers: 0,
+    totalHosts: 0,
+    totalProperties: 0,
+    activeProperties: 0,
+    totalBookings: 0,
+    confirmedBookings: 0,
+    pendingBookings: 0,
+    totalGrossRevenueUsd: 0,
+    pendingVerifications: 0,
+    pendingPayments: 0,
+  };
 }
 
 /* ========================================================================= */
