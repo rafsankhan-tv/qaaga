@@ -1360,22 +1360,69 @@ export async function submitPaymentProof(data: {
 }
 
 export async function getPaymentProofs(bookingId?: string): Promise<PaymentProofRecord[]> {
-  return dedupFetch('payments:' + authData.user.id + ':' + (bookingId || 'all'), async () => {
-    const supabase = getSupabase();
-    if (!supabase) return [];
-    const { data: authData, error: authError } = await supabase.auth.getUser();
-    if (authError || !authData.user) return [];
+  const supabase = getSupabase();
+  if (!supabase) return [];
 
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError || !authData.user) return [];
+
+  const userId = authData.user.id;
+  const isAdmin = authData.user.app_metadata?.role === 'admin';
+  const email = authData.user.email?.trim().toLowerCase();
+  const cacheKey = 'payments:' + userId + ':' + (bookingId || 'all');
+
+  return dedupFetch(cacheKey, async () => {
     try {
       let query = supabase
         .from('payment_records')
         .select('*')
         .order('created_at', { ascending: false });
+
       if (bookingId) query = query.eq('booking_id', bookingId);
+      if (!isAdmin && email) {
+        const { data: bookings, error: bookingError } = await supabase
+          .from('bookings')
+          .select('id')
+          .eq('host_email', email);
+        if (bookingError) return [];
+        const hostBookingIds = (bookings || []).map((row) => row.id);
+        // Hosts may see payment proofs for their bookings; customers see their own proofs.
+        const { data: ownRows, error: ownError } = await supabase
+          .from('payment_records')
+          .select('*')
+          .eq('payer_email', email)
+          .order('created_at', { ascending: false });
+        if (ownError) return [];
+        const hostRows = hostBookingIds.length
+          ? await supabase
+              .from('payment_records')
+              .select('*')
+              .in('booking_id', hostBookingIds)
+              .order('created_at', { ascending: false })
+          : { data: [], error: null };
+        if (hostRows.error) return [];
+        const map = new Map<string, any>();
+        [...(ownRows || []), ...(hostRows.data || [])].forEach((row: any) => map.set(row.id, row));
+        const combined = Array.from(map.values()).filter((row: any) => !bookingId || row.booking_id === bookingId);
+        return await Promise.all(combined.map(async (p: any) => ({
+          id: p.id,
+          bookingId: p.booking_id,
+          amount: Number(p.amount),
+          currency: p.currency || 'USD',
+          paymentMethod: p.payment_method,
+          transactionReference: p.transaction_reference,
+          proofImageUrl: await resolvePrivateStorageReference(supabase, p.proof_image_url),
+          payerName: p.payer_name,
+          payerEmail: p.payer_email,
+          status: p.status,
+          hostNotes: p.host_notes,
+          adminNotes: p.admin_notes,
+          createdAt: p.created_at,
+        })));
+      }
 
       const { data, error } = await query;
       if (error || !Array.isArray(data)) return [];
-
       return await Promise.all(data.map(async (p) => ({
         id: p.id,
         bookingId: p.booking_id,
