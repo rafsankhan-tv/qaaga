@@ -1,5 +1,5 @@
 -- QAAGA public PII protection and guest-safe messaging
-REVOKE SELECT ON public.properties FROM anon;
+REVOKE ALL ON public.properties FROM anon;
 GRANT SELECT (
   id, title, description, property_type, room_type, category,
   city, area, two_night_price_usd, price_daily, currency,
@@ -19,7 +19,8 @@ SELECT
   amenities, status, created_at, updated_at
 FROM public.properties;
 
-CREATE OR REPLACE VIEW public.listings
+DROP VIEW IF EXISTS public.listings;
+CREATE VIEW public.listings
 WITH (security_invoker = true)
 AS
 SELECT
