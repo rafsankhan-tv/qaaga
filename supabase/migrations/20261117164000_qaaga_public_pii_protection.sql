@@ -48,7 +48,7 @@ RETURNS TABLE (
 LANGUAGE plpgsql
 SECURITY INVOKER
 SET search_path = ''
-AS $
+AS $qaaga_thread$
 DECLARE
   actor_email TEXT := public.current_user_email();
   property_row public.properties%ROWTYPE;
@@ -100,7 +100,6 @@ BEGIN
     thread_row.id, thread_row.host_name, thread_row.listing_title,
     thread_row.listing_image, thread_row.unread;
 END;
-$$;
-
+$qaaga_thread$;
 REVOKE ALL ON FUNCTION public.create_property_thread(TEXT) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.create_property_thread(TEXT) TO authenticated;
