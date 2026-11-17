@@ -102,7 +102,8 @@ CREATE INDEX IF NOT EXISTS idx_properties_category ON public.properties(category
 CREATE INDEX IF NOT EXISTS idx_properties_area ON public.properties(area);
 
 -- Create backwards-compatible listings view / synonym if needed
-CREATE OR REPLACE VIEW public.listings WITH (security_invoker = true) AS SELECT * FROM public.properties;
+CREATE OR REPLACE VIEW public.public_properties WITH (security_invoker = true) AS SELECT id,title,description,property_type,room_type,category,city,area,two_night_price_usd,price_daily,currency,max_guests,bedrooms,bathrooms,beds,rating,reviews_count,guest_favorite,in_popular_kl,is_featured,image,gallery,amenities,status,created_at,updated_at FROM public.properties;
+CREATE OR REPLACE VIEW public.listings WITH (security_invoker = true) AS SELECT id,title,description,property_type,room_type,category,city,area,two_night_price_usd,price_daily,currency,max_guests,bedrooms,bathrooms,beds,rating,reviews_count,guest_favorite,in_popular_kl,is_featured,image,gallery,amenities,status,created_at,updated_at FROM public.properties;
 
 -- -------------------------------------------------------------------------
 -- 4. PROPERTY AVAILABILITY & CALENDAR
@@ -720,6 +721,87 @@ CREATE POLICY "reviews_insert_after_completed_stay" ON public.reviews
     )
   );
 
+
+-- Create a property conversation without disclosing the host email to the guest.
+CREATE OR REPLACE FUNCTION public.create_property_thread(p_property_id TEXT)
+RETURNS TABLE (
+  id TEXT,
+  host_name TEXT,
+  listing_title TEXT,
+  listing_image TEXT,
+  unread BOOLEAN
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $
+DECLARE
+  actor_email TEXT := public.current_user_email();
+  property_row public.properties%ROWTYPE;
+  thread_row public.threads%ROWTYPE;
+BEGIN
+  IF actor_email = '' THEN
+    RAISE EXCEPTION 'Authentication is required';
+  END IF;
+
+  SELECT * INTO property_row
+  FROM public.properties
+  WHERE public.properties.id = p_property_id
+    AND public.properties.status = 'active';
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'This property is not available for messaging';
+  END IF;
+
+  IF LOWER(property_row.host_email) = actor_email THEN
+    RAISE EXCEPTION 'Hosts cannot start a guest conversation with themselves';
+  END IF;
+
+  SELECT * INTO thread_row
+  FROM public.threads
+  WHERE public.threads.property_id = p_property_id
+    AND LOWER(public.threads.guest_email) = actor_email
+  ORDER BY public.threads.created_at DESC
+  LIMIT 1;
+
+  IF FOUND THEN
+    RETURN QUERY SELECT
+      thread_row.id,
+      thread_row.host_name,
+      thread_row.listing_title,
+      thread_row.listing_image,
+      thread_row.unread;
+    RETURN;
+  END IF;
+
+  INSERT INTO public.threads (
+    id, property_id, host_email, guest_email,
+    host_name, listing_title, listing_image, unread
+  )
+  VALUES (
+    'thread-' || gen_random_uuid()::TEXT,
+    property_row.id,
+    property_row.host_email,
+    actor_email,
+    property_row.host_name,
+    property_row.title,
+    COALESCE(property_row.image, ''),
+    false
+  )
+  RETURNING * INTO thread_row;
+
+  RETURN QUERY SELECT
+    thread_row.id,
+    thread_row.host_name,
+    thread_row.listing_title,
+    thread_row.listing_image,
+    thread_row.unread;
+END;
+$;
+
+REVOKE ALL ON FUNCTION public.create_property_thread(TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.create_property_thread(TEXT) TO authenticated;
+
 -- Threads and messages are visible only to their two participants.
 CREATE POLICY "threads_read_participants" ON public.threads
   FOR SELECT USING (
@@ -813,14 +895,17 @@ CREATE POLICY "admin_logs_insert_admin" ON public.admin_activity_logs
 
 -- Explicit grants: RLS still determines which rows each role may access.
 GRANT SELECT, INSERT, UPDATE ON public.profiles TO authenticated;
-GRANT SELECT ON public.properties, public.property_availability, public.reviews, public.site_branding, public.listings TO anon, authenticated;
+REVOKE SELECT ON public.properties FROM anon;
+GRANT SELECT (id,title,description,property_type,room_type,category,city,area,two_night_price_usd,price_daily,currency,max_guests,bedrooms,bathrooms,beds,rating,reviews_count,guest_favorite,in_popular_kl,is_featured,image,gallery,amenities,status,created_at,updated_at) ON public.properties TO anon;
+GRANT SELECT ON public.properties, public.property_availability, public.reviews, public.site_branding, public.listings, public.public_properties TO anon, authenticated;
 GRANT INSERT, UPDATE, DELETE ON public.properties, public.property_availability TO authenticated;
 GRANT SELECT, INSERT ON public.bookings TO authenticated;
 GRANT UPDATE (status, cancellation_reason, cancelled_by, cancelled_at, updated_at) ON public.bookings TO authenticated;
 GRANT SELECT, INSERT ON public.payment_records, public.identity_verifications TO authenticated;
 GRANT UPDATE (status, host_notes, verified_at, updated_at) ON public.payment_records TO authenticated;
 GRANT UPDATE (status, rejection_reason, reviewed_by, reviewed_at, updated_at) ON public.identity_verifications TO authenticated;
-GRANT SELECT ON public.reviews TO anon, authenticated;
+REVOKE SELECT ON public.reviews FROM anon, authenticated;
+GRANT SELECT (id, property_id, listing_id, author, rating, comment, created_at) ON public.reviews TO anon, authenticated;
 GRANT INSERT ON public.reviews TO authenticated;
 GRANT SELECT, INSERT ON public.threads, public.messages TO authenticated;
 GRANT UPDATE (unread, last_message, updated_at) ON public.threads TO authenticated;
