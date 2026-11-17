@@ -351,7 +351,7 @@ BEGIN
     );
   END LOOP;
 END
-$;
+$$;
 
 -- Remove the old SECURITY DEFINER email-based admin helper.
 DROP FUNCTION IF EXISTS public.is_super_admin(TEXT);
@@ -440,7 +440,7 @@ BEGIN
   NEW.status := OLD.status;
   RETURN NEW;
 END;
-$;
+$$;
 
 DROP TRIGGER IF EXISTS trg_guard_profile_privileged_fields ON public.profiles;
 CREATE TRIGGER trg_guard_profile_privileged_fields
@@ -490,7 +490,7 @@ BEGIN
   NEW.in_popular_kl := OLD.in_popular_kl;
   RETURN NEW;
 END;
-$;
+$$;
 
 DROP TRIGGER IF EXISTS trg_guard_property_owner_changes ON public.properties;
 CREATE TRIGGER trg_guard_property_owner_changes
@@ -680,7 +680,7 @@ BEGIN
   NEW.host_notes := NULL;
   RETURN NEW;
 END;
-$;
+$$;
 
 DROP TRIGGER IF EXISTS trg_guard_payment_record_insert ON public.payment_records;
 CREATE TRIGGER trg_guard_payment_record_insert
