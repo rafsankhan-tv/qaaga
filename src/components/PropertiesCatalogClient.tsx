@@ -247,15 +247,20 @@ export default function PropertiesCatalogClient({
   const handleAddReview = useCallback(
     async (rating: number, comment: string) => {
       if (!selectedListing) return;
-      const review: ListingReview = {
-        id: `rev-${Date.now()}`,
-        author: userProfile?.fullName || 'Verified Guest',
-        date: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
-        rating,
-        comment,
-      };
-      await insertReviewToDatabase(selectedListing.id, review);
-      setListingReviews((prev) => [review, ...prev]);
+      if (!userProfile?.email) {
+        showToast('Sign in before submitting a review.');
+        return;
+      }
+      try {
+        const savedReview = await insertReviewToDatabase(selectedListing.id, {
+          author: userProfile.fullName,
+          rating,
+          comment,
+        });
+        setListingReviews((prev) => [savedReview, ...prev]);
+      } catch (error: any) {
+        showToast(error?.message || 'Review could not be saved.');
+      }
     },
     [selectedListing, userProfile]
   );
