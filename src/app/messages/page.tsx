@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 
 export const metadata = {
   title: 'Messages & Inbox — QAAGA Super Marketplace',
-  description: 'Chat directly with verified hosts in Kuala Lumpur on qaaga.com.',
+  description: 'Chat directly with verified hosts in Dhaka on qaaga.com.',
 };
 
 export default async function MessagesPage() {
