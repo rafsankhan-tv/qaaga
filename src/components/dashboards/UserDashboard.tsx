@@ -81,7 +81,7 @@ export default function UserDashboard({
 
   // Payment Upload Modal State
   const [selectedBookingForPayment, setSelectedBookingForPayment] = useState<any | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<string>('bank_transfer');
+  const [paymentMethod, setPaymentMethod] = useState<string>('bkash');
   const [paymentTxRef, setPaymentTxRef] = useState<string>('');
   const [paymentSlipUrl, setPaymentSlipUrl] = useState<string>('');
   const [paymentSlipStorageRef, setPaymentSlipStorageRef] = useState<string>('');
@@ -1195,8 +1195,10 @@ export default function UserDashboard({
                     onChange={(e) => setPaymentMethod(e.target.value)}
                     className="w-full h-10 px-3 rounded-xl border border-slate-200 text-xs font-semibold bg-white"
                   >
-                    <option value="bank_transfer">Direct Bank Transfer (Maybank / CIMB / Public Bank)</option>
-                    <option value="tng_ewallet">Touch &apos;n Go eWallet</option>
+                    <option value="bkash">bKash</option>
+                    <option value="nagad">Nagad</option>
+                    <option value="rocket">Rocket</option>
+                    <option value="bank_transfer">Bank Transfer (Bangladesh)</option>
                     <option value="wise">Wise (International Transfer)</option>
                     <option value="cash_checkin">Cash upon Check-in (Host approved)</option>
                   </select>
@@ -1211,7 +1213,7 @@ export default function UserDashboard({
                     required
                     value={paymentTxRef}
                     onChange={(e) => setPaymentTxRef(e.target.value)}
-                    placeholder="e.g. MBB-987654321 / Wise-3498"
+                    placeholder="e.g. bKash TXN ID / Bank transaction reference"
                     className="w-full h-10 px-3 rounded-xl border border-slate-200 text-xs font-semibold"
                   />
                 </div>
