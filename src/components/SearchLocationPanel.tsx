@@ -264,7 +264,7 @@ export const SearchLocationPanel: React.FC<SearchLocationPanelProps> = ({
         </div>
       )}
 
-      {/* Popular Locations in Kuala Lumpur */}
+      {/* Popular destinations in Dhaka */}
       <div className="space-y-1">
         <div className="flex items-center justify-between px-2 pb-1">
           <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
@@ -331,7 +331,7 @@ export const SearchLocationPanel: React.FC<SearchLocationPanelProps> = ({
             <div className="py-8 text-center space-y-2">
               <p className="text-xs font-bold text-slate-700">No destination matching "{searchInput}"</p>
               <p className="text-[11px] text-slate-400">
-                You can search for any property by name or click below to explore all Kuala Lumpur stays.
+                Search for a property by name or explore all available stays in Dhaka.
               </p>
               <button
                 type="button"
