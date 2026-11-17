@@ -115,7 +115,7 @@ export async function PUT(req: NextRequest) {
     }
 
     // Preserve a previously granted admin role, but never allow self-service admin escalation.
-    const role = existing?.role === 'admin' ? 'admin' : profile.role;
+    const role = authenticated.user.app_metadata?.role === 'admin' ? 'admin' : profile.role;
     const verified = Boolean(authenticated.user.email_confirmed_at);
 
     const { error: saveError } = await authenticated.supabase
