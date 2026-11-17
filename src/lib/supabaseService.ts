@@ -75,6 +75,7 @@ export function invalidateServiceCache(prefix?: string): void {
 function mapDbListingToModel(row: any): QaagaListing {
   return {
     id: String(row.id),
+    hostEmail: row.host_email || undefined,
     title: row.title || 'Untitled Listing',
     area: row.area || 'Kuala Lumpur',
     city: row.city || 'Kuala Lumpur',
@@ -105,26 +106,42 @@ function mapDbListingToModel(row: any): QaagaListing {
  * Normalizes QaagaListing to DB row (snake_case)
  */
 function mapModelToDbListing(model: QaagaListing): Record<string, any> {
+  const normalizedType = String(model.subType || '').toLowerCase();
+  const propertyType =
+    normalizedType.includes('room') ? 'Private Room' :
+    normalizedType.includes('studio') ? 'Studio' :
+    normalizedType.includes('villa') ? 'Villa' :
+    normalizedType.includes('condo') ? 'Sky Condo' :
+    normalizedType.includes('suite') ? 'Suite' :
+    normalizedType.includes('penthouse') ? 'Penthouse' : 'Apartment';
+
   return {
     id: model.id,
+    host_email: model.hostEmail,
+    host_name: model.hostName || 'Host',
     title: model.title,
-    area: model.area,
-    city: model.city || 'Kuala Lumpur',
-    sub_type: model.subType || 'Apartment',
+    description: model.description || '',
+    property_type: propertyType,
+    room_type: propertyType === 'Private Room' ? 'Private room' : 'Entire place',
     category: model.category,
+    city: model.city || 'Dhaka',
+    area: model.area,
     two_night_price_usd: model.twoNightPriceUsd,
-    rating: model.rating,
-    reviews_count: model.reviewsCount,
-    guest_favorite: model.guestFavorite,
-    image: model.image,
-    gallery: model.gallery || [model.image],
+    price_daily: model.twoNightPriceUsd / 2,
+    currency: 'USD',
     max_guests: model.maxGuests || 2,
     bedrooms: model.bedrooms || '1 bedroom',
-    host_name: model.hostName || 'Host',
-    host_years: model.hostYears || 1,
-    amenities: model.amenities || [],
-    description: model.description || '',
+    bathrooms: 1,
+    beds: 1,
+    rating: Number(model.rating) || 0,
+    reviews_count: model.reviewsCount || 0,
+    guest_favorite: Boolean(model.guestFavorite),
     in_popular_kl: Boolean(model.inPopularKL),
+    is_featured: Boolean(model.guestFavorite),
+    status: 'pending_approval',
+    image: model.image,
+    gallery: model.gallery?.length ? model.gallery : [model.image],
+    amenities: model.amenities || [],
     updated_at: new Date().toISOString(),
   };
 }
@@ -208,24 +225,27 @@ export async function insertListingToDatabase(
   invalidateServiceCache('host_props:');
   invalidateServiceCache('admin:stats');
   const supabase = getSupabase();
-  if (!supabase) return listing;
+  if (!supabase) throw new Error('Supabase is not configured.');
 
-  try {
-    const payload = mapModelToDbListing(listing);
-    const { data, error } = await supabase
-      .from('listings')
-      .upsert(payload, { onConflict: 'id' })
-      .select()
-      .single();
-
-    if (!error && data) {
-      return mapDbListingToModel(data);
-    }
-  } catch (err) {
-    console.warn('Notice: Supabase listing insert notice:', err);
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  const userEmail = authData.user?.email?.trim().toLowerCase();
+  if (authError || !userEmail) throw new Error('Please sign in before publishing a listing.');
+  if (!listing.hostEmail || listing.hostEmail.trim().toLowerCase() !== userEmail) {
+    throw new Error('The listing host must match the signed-in account.');
   }
 
-  return listing;
+  const payload = mapModelToDbListing(listing);
+  const { data, error } = await supabase
+    .from('properties')
+    .insert(payload)
+    .select()
+    .single();
+
+  if (error || !data) {
+    throw new Error(error?.message || 'Unable to submit this listing for review.');
+  }
+
+  return mapDbListingToModel(data);
 }
 
 export async function deleteListingFromDatabase(id: string): Promise<boolean> {
@@ -235,15 +255,11 @@ export async function deleteListingFromDatabase(id: string): Promise<boolean> {
   const supabase = getSupabase();
   if (!supabase) return false;
 
-  try {
-    const [{ error: err1 }, { error: err2 }] = await Promise.all([
-      supabase.from('listings').delete().eq('id', id),
-      supabase.from('properties').delete().eq('id', id),
-    ]);
-    return !err1 || !err2;
-  } catch {
-    return false;
-  }
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError || !authData.user) return false;
+
+  const { error } = await supabase.from('properties').delete().eq('id', id);
+  return !error;
 }
 
 /* ========================================================================= */
@@ -306,59 +322,79 @@ export async function getBookingsFromDatabase(
 export async function insertBookingToDatabase(
   booking: BookingRecord,
   guestEmail: string,
-  guestName: string
+  guestName: string,
+  hostEmail: string
 ): Promise<BookingRecord> {
   invalidateServiceCache('bookings:');
   invalidateServiceCache('host_bookings:');
   invalidateServiceCache('admin:stats');
   const supabase = getSupabase();
-  if (!supabase) return booking;
+  if (!supabase) throw new Error('Supabase is not configured.');
 
-  try {
-    const payload = {
-      id: booking.id,
-      confirmation_code: booking.confirmationCode,
-      listing_id: booking.listingId,
-      guest_email: guestEmail.trim().toLowerCase(),
-      guest_name: guestName,
-      title: booking.title,
-      area: booking.area,
-      image: booking.image,
-      check_in_label: booking.checkInLabel,
-      nights: booking.nights,
-      guests: booking.guests,
-      total_usd: booking.totalUsd,
-      host_name: booking.hostName,
-      status: booking.status,
-    };
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  const authenticatedEmail = authData.user?.email?.trim().toLowerCase();
+  const normalizedGuestEmail = guestEmail.trim().toLowerCase();
+  const normalizedHostEmail = hostEmail.trim().toLowerCase();
 
-    const { data, error } = await supabase
-      .from('bookings')
-      .upsert(payload, { onConflict: 'id' })
-      .select()
-      .single();
-
-    if (!error && data) {
-      return {
-        id: data.id,
-        confirmationCode: data.confirmation_code,
-        listingId: data.listing_id,
-        title: data.title,
-        area: data.area,
-        image: data.image,
-        checkInLabel: data.check_in_label,
-        nights: Number(data.nights),
-        guests: Number(data.guests),
-        totalUsd: Number(data.total_usd),
-        hostName: data.host_name,
-        status: data.status,
-      };
-    }
-  } catch (err) {
-    console.warn('Notice: Supabase booking insert notice:', err);
+  if (authError || !authenticatedEmail || authenticatedEmail !== normalizedGuestEmail) {
+    throw new Error('Please sign in with your verified email before booking.');
+  }
+  if (!normalizedHostEmail || !booking.checkInDate || !booking.checkOutDate) {
+    throw new Error('A valid host and check-in/check-out date are required.');
   }
 
-  return booking;
+  const checkIn = new Date(booking.checkInDate);
+  const checkOut = new Date(booking.checkOutDate);
+  if (
+    Number.isNaN(checkIn.getTime()) ||
+    Number.isNaN(checkOut.getTime()) ||
+    checkOut <= checkIn
+  ) {
+    throw new Error('The selected booking dates are invalid.');
+  }
+
+  const payload = {
+    id: booking.id,
+    confirmation_code: booking.confirmationCode,
+    property_id: booking.listingId,
+    listing_id: booking.listingId,
+    customer_email: authenticatedEmail,
+    guest_email: authenticatedEmail,
+    customer_name: guestName.trim(),
+    guest_name: guestName.trim(),
+    title: booking.title,
+    area: booking.area,
+    image: booking.image,
+    host_email: normalizedHostEmail,
+    host_name: booking.hostName,
+    check_in: booking.checkInDate,
+    check_out: booking.checkOutDate,
+    check_in_label: booking.checkInLabel,
+    nights: booking.nights,
+    guests: booking.guests,
+    adults: booking.guests,
+    total_usd: booking.totalUsd,
+    currency: 'USD',
+    status: 'Pending',
+  };
+
+  const { data, error } = await supabase
+    .from('bookings')
+    .insert(payload)
+    .select()
+    .single();
+
+  if (error || !data) {
+    throw new Error(error?.message || 'Your booking request could not be saved.');
+  }
+
+  return {
+    ...booking,
+    id: data.id,
+    status: data.status,
+    checkInDate: data.check_in,
+    checkOutDate: data.check_out,
+  };
 }
 
 export async function cancelBookingInDatabase(
@@ -520,6 +556,47 @@ export async function fetchThreadsWithStatus(): Promise<ServiceResult<HostThread
   });
 }
 
+export async function createThreadInDatabase(input: {
+  propertyId: string;
+  hostEmail: string;
+  hostName: string;
+  listingTitle: string;
+  listingImage: string;
+}): Promise<HostThread> {
+  const supabase = getSupabase();
+  if (!supabase) throw new Error('Supabase is not configured.');
+
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  const guestEmail = authData.user?.email?.trim().toLowerCase();
+  const hostEmail = input.hostEmail.trim().toLowerCase();
+  if (authError || !guestEmail) throw new Error('Please sign in before messaging a host.');
+  if (!hostEmail || hostEmail === guestEmail) throw new Error('A valid host account is required.');
+
+  const threadId = `thread-${crypto.randomUUID()}`;
+  const { data, error } = await supabase.from('threads').insert({
+    id: threadId,
+    property_id: input.propertyId,
+    host_email: hostEmail,
+    guest_email: guestEmail,
+    host_name: input.hostName,
+    listing_title: input.listingTitle,
+    listing_image: input.listingImage,
+    unread: false,
+  }).select().single();
+
+  if (error || !data) throw new Error(error?.message || 'Unable to start this conversation.');
+
+  invalidateServiceCache('threads:');
+  return {
+    id: data.id,
+    hostName: data.host_name,
+    listingTitle: data.listing_title,
+    listingImage: data.listing_image,
+    unread: Boolean(data.unread),
+    messages: [],
+  };
+}
+
 export async function getThreadsFromDatabase(): Promise<HostThread[]> {
   const res = await fetchThreadsWithStatus();
   return res.data;
@@ -531,28 +608,42 @@ export async function sendMessageToDatabase(
 ): Promise<boolean> {
   invalidateServiceCache('threads:');
   const supabase = getSupabase();
-  if (!supabase) return false;
+  if (!supabase || !message.text.trim()) return false;
 
-  try {
-    const { error: msgErr } = await supabase.from('messages').insert({
-      thread_id: threadId,
-      sender: message.sender,
-      text: message.text,
-      time: message.time,
-    });
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  const senderEmail = authData.user?.email?.trim().toLowerCase();
+  if (authError || !senderEmail) return false;
 
-    await supabase
-      .from('threads')
-      .update({
-        last_message: message.text,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', threadId);
+  const { data: thread, error: threadError } = await supabase
+    .from('threads')
+    .select('id,host_email,guest_email')
+    .eq('id', threadId)
+    .single();
 
-    return !msgErr;
-  } catch {
-    return false;
-  }
+  if (threadError || !thread) return false;
+  const senderRole =
+    thread.host_email?.toLowerCase() === senderEmail ? 'host' :
+    thread.guest_email?.toLowerCase() === senderEmail ? 'guest' : null;
+  if (!senderRole) return false;
+
+  const { error: messageError } = await supabase.from('messages').insert({
+    thread_id: threadId,
+    sender: senderRole,
+    sender_email: senderEmail,
+    text: message.text.trim(),
+    time: message.time,
+  });
+  if (messageError) return false;
+
+  const { error: threadUpdateError } = await supabase
+    .from('threads')
+    .update({
+      last_message: message.text.trim(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', threadId);
+
+  return !threadUpdateError;
 }
 
 /* ========================================================================= */
