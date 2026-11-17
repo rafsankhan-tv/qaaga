@@ -156,9 +156,12 @@ export async function fetchListingsWithStatus(): Promise<ServiceResult<QaagaList
 
   return dedupFetch(cacheKey, async () => {
     try {
+      // Browse through the least-privilege public view. Direct properties access
+      // intentionally restricts anonymous users from reading host contact fields.
       const { data, error } = await supabase
-        .from('properties')
+        .from('public_properties')
         .select('*')
+        .eq('status', 'active')
         .order('created_at', { ascending: false });
 
       if (error) return { data: [], status: 'error', error: error.message };
