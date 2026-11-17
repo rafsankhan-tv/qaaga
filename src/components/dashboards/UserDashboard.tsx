@@ -293,8 +293,8 @@ export default function UserDashboard({
       } else {
         setDashboardError(res.error || 'Payment slip upload failed.');
       }
-    } catch (err) {
-      console.warn('Slip upload err:', err);
+    } catch (err: any) {
+      setDashboardError(err?.message || 'Payment slip upload failed.');
     } finally {
       setIsUploadingSlip(false);
     }
@@ -303,21 +303,26 @@ export default function UserDashboard({
   // Submit Payment Proof
   const handleSubmitPayment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedBookingForPayment || !paymentSlipStorageRef) return;
+    if (!selectedBookingForPayment || !paymentSlipStorageRef) {
+      setDashboardError('Upload a payment proof image before submitting.');
+      return;
+    }
     setIsSubmittingPayment(true);
-    const res = await submitPaymentProof({
-      bookingId: selectedBookingForPayment.id,
-      amount: selectedBookingForPayment.totalUsd,
-      currency: 'USD',
-      paymentMethod,
-      transactionReference: paymentTxRef.trim() || `TX-${Date.now().toString().slice(-6)}`,
-      proofImageUrl: paymentSlipStorageRef,
-      payerName: profile.fullName,
-      payerEmail: profile.email,
-    });
-    if (res) {
+    setDashboardError(null);
+    try {
+      const res = await submitPaymentProof({
+        bookingId: selectedBookingForPayment.id,
+        amount: selectedBookingForPayment.totalUsd,
+        currency: 'USD',
+        paymentMethod,
+        transactionReference: paymentTxRef.trim(),
+        proofImageUrl: paymentSlipStorageRef,
+        payerName: profile.fullName,
+        payerEmail: profile.email,
+      });
+      if (!res) throw new Error('Payment proof could not be saved.');
       setPayments((prev) => [res, ...prev]);
-      setPaymentSuccessMsg('Payment slip submitted successfully! The host will review and verify your booking.');
+      setPaymentSuccessMsg('Payment proof submitted. The host will review it.');
       setTimeout(() => {
         setPaymentSuccessMsg('');
         setSelectedBookingForPayment(null);
@@ -325,9 +330,13 @@ export default function UserDashboard({
         setPaymentSlipStorageRef('');
         setPaymentTxRef('');
       }, 2500);
+    } catch (error: any) {
+      setDashboardError(error?.message || 'Payment proof could not be submitted.');
+    } finally {
+      setIsSubmittingPayment(false);
     }
-    setIsSubmittingPayment(false);
   };
+
 
   // ID Document Front Upload
   const handleDocUpload = async (
@@ -355,6 +364,8 @@ export default function UserDashboard({
       } else {
         setDashboardError(res.error || 'Identity document upload failed.');
       }
+    } catch (error: any) {
+      setDashboardError(error?.message || 'Identity document upload failed.');
     } finally {
       setIsUploadingDoc(false);
     }
@@ -363,20 +374,25 @@ export default function UserDashboard({
   // Submit ID Verification
   const handleSubmitVerification = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!docFrontUrl) return;
+    if (!docFrontStorageRef) {
+      setDashboardError('Upload the front side of your identity document first.');
+      return;
+    }
     setIsSubmittingDoc(true);
-    const res = await submitIdentityVerification({
-      userEmail: profile.email,
-      userName: profile.fullName,
-      documentType: docType,
-      documentFrontUrl: docFrontStorageRef,
-      documentBackUrl: docBackStorageRef || undefined,
-      selfieUrl: docSelfieStorageRef || undefined,
-    });
-    if (res) {
+    setDashboardError(null);
+    try {
+      const res = await submitIdentityVerification({
+        userEmail: profile.email,
+        userName: profile.fullName,
+        documentType: docType,
+        documentFrontUrl: docFrontStorageRef,
+        documentBackUrl: docBackStorageRef || undefined,
+        selfieUrl: docSelfieStorageRef || undefined,
+      });
+      if (!res) throw new Error('Identity verification could not be submitted.');
       setVerifications((prev) => [res, ...prev]);
       setProfile((prev) => ({ ...prev, identity_status: 'pending' }));
-      setDocSuccessMsg('Identity verification documents submitted! Our compliance team will review within 24 hours.');
+      setDocSuccessMsg('Identity documents submitted for review.');
       setTimeout(() => {
         setDocSuccessMsg('');
         setDocFrontUrl('');
@@ -386,9 +402,13 @@ export default function UserDashboard({
         setDocBackStorageRef('');
         setDocSelfieStorageRef('');
       }, 3000);
+    } catch (error: any) {
+      setDashboardError(error?.message || 'Identity verification could not be submitted.');
+    } finally {
+      setIsSubmittingDoc(false);
     }
-    setIsSubmittingDoc(false);
   };
+
 
   const isVerifiedUser = profile.verified || profile.identity_status === 'verified';
 
