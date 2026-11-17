@@ -101,11 +101,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   const validateInput = (val: string) => {
     const trimmed = val.trim();
-    if (!trimmed) return 'Please enter an email or phone number';
-    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed);
-    const isPhone = /^[0-9+\s\-()]{7,16}$/.test(trimmed);
-    if (!isEmail && !isPhone) {
-      return 'Please enter a valid email address or phone number';
+    if (!trimmed) return 'Please enter your email address';
+    if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(trimmed)) {
+      return 'Please enter a valid email address';
     }
     return '';
   };
@@ -141,16 +139,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setResendCooldown(30);
 
       // Pre-populate name prediction for Complete Profile step
-      if (isEmail) {
+      {
         const prefix = cleanTarget.split('@')[0].replace(/[._-]/g, ' ');
         const cap = prefix
           .split(' ')
           .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
           .join(' ');
         setFullNameInput(cap || 'Guest User');
-      } else {
-        setFullNameInput('User ' + cleanTarget.slice(-4));
-        setPhoneInput(cleanTarget);
       }
 
       onShowToast({
