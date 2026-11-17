@@ -1072,7 +1072,7 @@ const AdminPanelModalInner: React.FC<AdminPanelProps> = ({
                             </div>
                           </td>
                           <td className="p-3.5 text-slate-600">
-                            <p className="font-medium text-slate-800">{u.city || 'Kuala Lumpur'}</p>
+                            <p className="font-medium text-slate-800">{u.city || 'Dhaka'}</p>
                             <p className="text-[11px] text-slate-400">{u.phone || 'No phone'}</p>
                           </td>
                           <td className="p-3.5">
