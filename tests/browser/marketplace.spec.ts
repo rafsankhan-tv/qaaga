@@ -73,14 +73,14 @@ test.describe('QAAGA public marketplace', () => {
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.goto('/');
 
-    await page.getByText('Where', { exact: true }).first().click();
+    await page.getByTestId('search-where-segment').click();
     const destinationInput = page.getByPlaceholder('Search destinations in Dhaka');
     await expect(destinationInput).toBeVisible();
     await destinationInput.fill('Gulshan');
     await expect(page.getByRole('button', { name: /^Gulshan/ })).toBeVisible();
     await page.getByRole('button', { name: /^Gulshan/ }).click();
 
-    await page.getByText('When', { exact: true }).first().click();
+    await page.getByTestId('search-when-segment').click();
     const weekendPreset = page.getByRole('button', { name: 'This weekend' });
     await expect(weekendPreset).toBeVisible();
     await expect(weekendPreset).toBeEnabled();
@@ -127,7 +127,6 @@ test.describe('QAAGA public marketplace', () => {
     await expect(page.getByRole('button', { name: 'This weekend' })).toBeVisible();
     await page.getByRole('button', { name: 'This weekend' }).click();
 
-    await page.getByRole('button', { name: /Who/ }).last().click();
     await expect(page.getByText('Guests & Travelers')).toBeVisible();
     await page.getByRole('button', { name: 'Increase Children' }).click();
     await expect(page.getByText('2 guests', { exact: true })).toBeVisible();
@@ -148,9 +147,10 @@ test.describe('QAAGA public marketplace', () => {
 
     const card = page.locator('article').filter({ has: detailButton }).first();
     const image = card.locator('img').first();
-    const before = await image.evaluate((element) => getComputedStyle(element).transform);
+    const beforeY = (await card.boundingBox())?.y;
+    expect(beforeY).not.toBeUndefined();
     await card.hover();
-    await expect.poll(async () => image.evaluate((element) => getComputedStyle(element).transform)).not.toBe(before);
+    await expect.poll(async () => (await card.boundingBox())?.y ?? beforeY!).toBeLessThan(beforeY!);
 
     await detailButton.click();
     await expect(page.getByRole('heading', { name: FIXTURE_TITLE })).toBeVisible();
