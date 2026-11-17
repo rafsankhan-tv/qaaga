@@ -162,7 +162,6 @@ export async function fetchListingsWithStatus(): Promise<ServiceResult<QaagaList
         supabase
           .from('properties')
           .select('*')
-          .eq('status', 'active')
           .order('created_at', { ascending: false }),
       ]);
 
@@ -467,47 +466,41 @@ export async function insertReviewToDatabase(
   listingId: string,
   review: { author: string; rating: number; comment: string }
 ): Promise<ListingReview> {
-  invalidateServiceCache(`reviews:${listingId}`);
+  invalidateServiceCache('reviews:' + listingId);
   const supabase = getSupabase();
-  const newReview: ListingReview = {
-    id: `rev-${Date.now()}`,
-    author: review.author,
-    date: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
-    rating: review.rating,
-    comment: review.comment,
-  };
+  if (!supabase) throw new Error('Supabase is not configured.');
 
-  if (!supabase) return newReview;
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  const authorEmail = authData.user?.email?.trim().toLowerCase();
+  if (authError || !authorEmail) throw new Error('Sign in before submitting a review.');
 
-  try {
-    const { data, error } = await supabase
-      .from('reviews')
-      .insert({
-        listing_id: listingId,
-        author: review.author,
-        rating: review.rating,
-        comment: review.comment,
-      })
-      .select()
-      .single();
+  const { data, error } = await supabase
+    .from('reviews')
+    .insert({
+      property_id: listingId,
+      listing_id: listingId,
+      author: review.author.trim(),
+      author_email: authorEmail,
+      rating: review.rating,
+      comment: review.comment.trim(),
+    })
+    .select()
+    .single();
 
-    if (!error && data) {
-      return {
-        id: String(data.id),
-        author: data.author,
-        date: new Date(data.created_at).toLocaleDateString('en-US', {
-          month: 'short',
-          year: 'numeric',
-        }),
-        rating: Number(data.rating),
-        comment: data.comment,
-      };
-    }
-  } catch (err) {
-    console.warn('Notice: Supabase review insert error:', err);
+  if (error || !data) {
+    throw new Error(error?.message || 'Your review could not be saved.');
   }
 
-  return newReview;
+  return {
+    id: String(data.id),
+    author: data.author,
+    date: new Date(data.created_at).toLocaleDateString('en-US', {
+      month: 'short',
+      year: 'numeric',
+    }),
+    rating: Number(data.rating),
+    comment: data.comment,
+  };
 }
 
 /* ========================================================================= */
@@ -654,38 +647,41 @@ export async function uploadFileToSupabaseStorage(
   bucket: 'qaaga-listings' | 'qaaga-branding' | 'qaaga-avatars' = 'qaaga-listings'
 ): Promise<{ url: string; error?: string }> {
   const supabase = getSupabase();
+  if (!supabase) return { url: '', error: 'Supabase Storage is not configured.' };
 
-  if (supabase) {
-    try {
-      const fileExt = file.name.split('.').pop() || 'png';
-      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
-      const filePath = `${fileName}`;
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  const userId = authData.user?.id;
+  if (authError || !userId) return { url: '', error: 'Sign in before uploading a file.' };
 
-      const { data, error } = await supabase.storage
-        .from(bucket)
-        .upload(filePath, file, {
-          cacheControl: '31536000',
-          upsert: true,
-        });
-
-      if (!error && data) {
-        const {
-          data: { publicUrl },
-        } = supabase.storage.from(bucket).getPublicUrl(filePath);
-
-        return { url: publicUrl };
-      }
-    } catch (err) {
-      console.warn('Supabase storage upload notice, using inline reader:', err);
-    }
+  if (!file.size || file.size > 10 * 1024 * 1024) {
+    return { url: '', error: 'File must be smaller than 10 MB.' };
   }
 
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve({ url: String(reader.result) });
-    reader.onerror = () => resolve({ url: '', error: 'Failed to read file' });
-    reader.readAsDataURL(file);
-  });
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/avif'];
+  if (!allowedTypes.includes(file.type)) {
+    return { url: '', error: 'Only JPG, PNG, WebP or AVIF images are supported.' };
+  }
+
+  try {
+    const extension = file.type.split('/')[1].replace('jpeg', 'jpg');
+    const filePath = userId + '/' + crypto.randomUUID() + '.' + extension;
+    const { data, error } = await supabase.storage
+      .from(bucket)
+      .upload(filePath, file, {
+        cacheControl: '31536000',
+        upsert: false,
+        contentType: file.type,
+      });
+
+    if (error || !data) {
+      return { url: '', error: error?.message || 'Supabase Storage upload failed.' };
+    }
+
+    const { data: publicData } = supabase.storage.from(bucket).getPublicUrl(data.path);
+    return { url: publicData.publicUrl };
+  } catch (error: any) {
+    return { url: '', error: error?.message || 'Supabase Storage upload failed.' };
+  }
 }
 
 /* ========================================================================= */
@@ -906,48 +902,74 @@ export async function getUserProfileFromDatabase(email: string): Promise<GuestPr
 }
 
 export async function saveUserProfileToDatabase(profile: GuestProfile): Promise<GuestProfile> {
-  const cleanEmail = profile.email.trim().toLowerCase();
-  invalidateServiceCache(`profile:${cleanEmail}`);
-  invalidateServiceCache('users:all');
-  const normalized: GuestProfile = {
-    ...profile,
-    email: cleanEmail,
-    verified: Boolean(profile.verified),
-  };
-
   const supabase = getSupabase();
-  if (supabase && cleanEmail) {
-    try {
-      const { error } = await supabase.from('profiles').upsert(
-        {
-          email: cleanEmail,
-          full_name: normalized.fullName,
-          city: normalized.city || 'Kuala Lumpur',
-          role: normalized.role || 'guest',
-          phone: normalized.phone || null,
-          avatar_url: normalized.avatarUrl || null,
-          bio: normalized.bio || null,
-          status: normalized.status || 'active',
-          verified: normalized.verified,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'email' }
-      );
-      if (error) {
-        console.warn('Notice: Remote Supabase profile save notice:', error.message);
-      }
-    } catch (err) {
-      console.warn('Notice: Remote Supabase profile save exception:', err);
-    }
+  if (!supabase) throw new Error('Supabase is not configured.');
+
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  const authenticatedEmail = authData.user?.email?.trim().toLowerCase();
+  const requestedEmail = profile.email.trim().toLowerCase();
+  if (authError || !authenticatedEmail || requestedEmail !== authenticatedEmail) {
+    throw new Error('You can only update the profile for your signed-in account.');
   }
 
-  if (typeof window !== 'undefined') {
-    try {
-      localStorage.setItem('qaaga_v3_profile', JSON.stringify(normalized));
-    } catch {}
+  const { data: existing, error: readError } = await supabase
+    .from('profiles')
+    .select('role,status,identity_status')
+    .eq('email', authenticatedEmail)
+    .maybeSingle();
+  if (readError) throw new Error(readError.message);
+
+  const isTrustedAdmin = authData.user.app_metadata?.role === 'admin';
+  const role = isTrustedAdmin && existing?.role === 'admin'
+    ? 'admin'
+    : existing?.role === 'host' && profile.role === 'host'
+      ? 'host'
+      : profile.role === 'host' ? 'host' : 'guest';
+  const verified = Boolean(authData.user.email_confirmed_at);
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .upsert(
+      {
+        email: authenticatedEmail,
+        full_name: profile.fullName.trim(),
+        city: profile.city?.trim() || 'Dhaka',
+        phone: profile.phone?.trim() || null,
+        avatar_url: profile.avatarUrl || null,
+        bio: profile.bio?.trim() || null,
+        role,
+        status: existing?.status || 'active',
+        verified,
+        identity_status: existing?.identity_status || 'unverified',
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'email' }
+    )
+    .select('full_name,email,city,phone,avatar_url,bio,role,status,verified,identity_status,created_at')
+    .single();
+
+  if (error || !data) {
+    throw new Error(error?.message || 'Profile could not be saved.');
   }
 
-  return normalized;
+  invalidateServiceCache('profile:' + authenticatedEmail);
+  invalidateServiceCache('users:all');
+
+  return {
+    fullName: data.full_name || 'Member',
+    email: data.email,
+    city: data.city || 'Dhaka',
+    phone: data.phone || undefined,
+    avatarUrl: data.avatar_url || undefined,
+    bio: data.bio || undefined,
+    role: data.role,
+    status: data.status,
+    verified: Boolean(data.verified),
+    identity_status: data.identity_status,
+    joinedDate: data.created_at
+      ? new Date(data.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+      : profile.joinedDate,
+  };
 }
 
 export async function fetchUsersWithStatus(): Promise<ServiceResult<GuestProfile[]>> {
