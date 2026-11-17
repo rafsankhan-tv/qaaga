@@ -1,9 +1,13 @@
 import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
 import { NextRequest } from 'next/server';
 
-export type AuthenticatedSupabase =
-  | { ok: true; supabase: SupabaseClient; user: User }
-  | { ok: false; status: 401 | 503; error: string };
+export type AuthenticatedSupabase = {
+  ok: boolean;
+  supabase: SupabaseClient;
+  user: User;
+  status: number;
+  error: string;
+};
 
 function getPublicConfig() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
@@ -38,12 +42,12 @@ export async function requireAuthenticatedSupabase(
   const accessToken = match?.[1]?.trim();
 
   if (!accessToken) {
-    return { ok: false, status: 401, error: 'Authentication required.' };
+    return { ok: false, supabase: null as unknown as SupabaseClient, user: null as unknown as User, status: 401, error: 'Authentication required.' };
   }
 
   const config = getPublicConfig();
   if (!config) {
-    return { ok: false, status: 503, error: 'Supabase is not configured.' };
+    return { ok: false, supabase: null as unknown as SupabaseClient, user: null as unknown as User, status: 503, error: 'Supabase is not configured.' };
   }
 
   const supabase = createClient(config.url, config.key, {
@@ -59,8 +63,8 @@ export async function requireAuthenticatedSupabase(
 
   const { data, error } = await supabase.auth.getUser(accessToken);
   if (error || !data.user?.id || !data.user.email) {
-    return { ok: false, status: 401, error: 'Your session is invalid or expired.' };
+    return { ok: false, supabase: null as unknown as SupabaseClient, user: null as unknown as User, status: 401, error: 'Your session is invalid or expired.' };
   }
 
-  return { ok: true, supabase, user: data.user };
+  return { ok: true, supabase, user: data.user, status: 200, error: '' };
 }
