@@ -403,7 +403,7 @@ CREATE OR REPLACE FUNCTION public.guard_profile_privileged_fields()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 SET search_path = ''
-AS $
+AS $$
 BEGIN
   IF public.is_platform_admin() THEN
     RETURN NEW;
@@ -470,7 +470,7 @@ CREATE OR REPLACE FUNCTION public.guard_property_owner_changes()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 SET search_path = ''
-AS $
+AS $$
 BEGIN
   IF public.is_platform_admin() THEN
     RETURN NEW;
@@ -658,7 +658,7 @@ CREATE OR REPLACE FUNCTION public.guard_payment_record_insert()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 SET search_path = ''
-AS $
+AS $$
 DECLARE
   booking_row public.bookings%ROWTYPE;
 BEGIN
