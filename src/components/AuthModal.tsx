@@ -49,7 +49,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [emailOrPhone, setEmailOrPhone] = useState('');
   const [step, setStep] = useState<'input' | 'otp' | 'complete_profile' | 'success'>('input');
   const [otpDigits, setOtpDigits] = useState(['', '', '', '', '', '']);
-  const [generatedCode, setGeneratedCode] = useState('123456');
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [resendCooldown, setResendCooldown] = useState(0);
@@ -122,8 +121,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     setLoading(true);
 
-    const isEmail = emailOrPhone.includes('@');
-    const cleanTarget = emailOrPhone.trim();
+    const cleanTarget = emailOrPhone.trim().toLowerCase();
 
     try {
       // 1. Trigger server-side OTP dispatcher
@@ -134,24 +132,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       });
       const data = await res.json();
 
-      if (data?.code) {
-        setGeneratedCode(String(data.code));
-      } else {
-        const fallbackCode = Math.floor(100000 + Math.random() * 900000).toString();
-        setGeneratedCode(fallbackCode);
-      }
-
-      // 2. Also invoke client-side Supabase if available
-      const supabase = getSupabase();
-      if (supabase && isEmail) {
-        try {
-          await supabase.auth.signInWithOtp({
-            email: cleanTarget,
-            options: { shouldCreateUser: true },
-          });
-        } catch {
-          // Handled via server OTP route
-        }
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || 'Unable to send verification email.');
       }
 
       setLoading(false);
@@ -176,13 +158,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       });
 
       setTimeout(() => digitRefs.current[0]?.focus(), 120);
-    } catch {
+    } catch (err: any) {
       setLoading(false);
-      const fallbackCode = Math.floor(100000 + Math.random() * 900000).toString();
-      setGeneratedCode(fallbackCode);
-      setStep('otp');
-      setResendCooldown(30);
-      setTimeout(() => digitRefs.current[0]?.focus(), 120);
+      setErrorMessage(err?.message || 'Unable to send verification email. Please try again.');
     }
   };
 
@@ -234,41 +212,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     let isVerified = false;
 
     try {
-      // 1. Call server verification API
-      const res = await fetch('/api/auth/otp/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: cleanTarget, code }),
-      });
-      const data = await res.json();
-      if (res.ok && data?.verified) {
-        isVerified = true;
-      }
-    } catch {
-      // Fallback local check
-    }
-
-    // 2. Client-side Supabase verification or local match
-    if (!isVerified) {
       const supabase = getSupabase();
-      if (supabase && cleanTarget.includes('@')) {
-        try {
-          const { data, error } = await supabase.auth.verifyOtp({
-            email: cleanTarget,
-            token: code,
-            type: 'email',
-          });
-          if (!error && data?.user) {
-            isVerified = true;
-          }
-        } catch {
-          // fallback
-        }
-      }
-    }
-
-    if (code === generatedCode || code === '123456') {
-      isVerified = true;
+      if (!supabase) throw new Error('Authentication service is not configured.');
+      const { data, error } = await supabase.auth.verifyOtp({
+        email: cleanTarget,
+        token: code,
+        type: 'email',
+      });
+      if (!error && data?.user) isVerified = true;
+      else if (error) setErrorMessage('Invalid or expired verification code. Please try again.');
+    } catch {
+      setErrorMessage('Unable to verify the code. Please try again.');
     }
 
     if (isVerified) {
@@ -374,15 +328,23 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }, 1500);
   };
 
-  const handleSocialLogin = (provider: 'google' | 'apple') => {
+  const handleSocialLogin = async (provider: 'google' | 'apple') => {
     setLoading(true);
-    setTimeout(() => {
+    setErrorMessage('');
+    const supabase = getSupabase();
+    if (!supabase) {
       setLoading(false);
-      const isGoogle = provider === 'google';
-      setFullNameInput(isGoogle ? 'Google Member' : 'Apple Member');
-      setEmailOrPhone(isGoogle ? 'guest.google@qaaga.com' : 'guest.apple@qaaga.com');
-      setStep('complete_profile');
-    }, 500);
+      setErrorMessage('Authentication service is not configured.');
+      return;
+    }
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo: window.location.origin },
+    });
+    if (error) {
+      setLoading(false);
+      setErrorMessage(error.message);
+    }
   };
 
   const handleTestConnection = async () => {
