@@ -60,6 +60,7 @@ import {
   saveUserProfileToDatabase,
   sendMessageToDatabase,
   createThreadInDatabase,
+  updateBookingStatus,
   subscribeToSupabaseTable,
 } from '@/lib/supabaseService';
 
