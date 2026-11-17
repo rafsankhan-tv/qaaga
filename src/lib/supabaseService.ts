@@ -78,7 +78,7 @@ function mapDbListingToModel(row: any): QaagaListing {
     hostEmail: row.host_email || undefined,
     title: row.title || 'Untitled Listing',
     area: row.area || 'Kuala Lumpur',
-    city: row.city || 'Kuala Lumpur',
+    city: row.city || 'Dhaka',
     subType: row.sub_type || row.property_type || 'Apartment',
     category: row.category || 'stay',
     twoNightPriceUsd:
