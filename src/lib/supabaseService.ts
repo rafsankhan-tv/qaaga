@@ -424,7 +424,7 @@ export async function getReviewsFromDatabase(
     try {
       const { data, error } = await supabase
         .from('reviews')
-        .select('*')
+        .select('id,property_id,listing_id,author,rating,comment,created_at')
         .eq('listing_id', listingId)
         .order('created_at', { ascending: false });
 
@@ -470,7 +470,7 @@ export async function insertReviewToDatabase(
       rating: review.rating,
       comment: review.comment.trim(),
     })
-    .select()
+    .select('id,property_id,listing_id,author,rating,comment,created_at')
     .single();
 
   if (error || !data) {
@@ -538,41 +538,29 @@ export async function fetchThreadsWithStatus(): Promise<ServiceResult<HostThread
 
 export async function createThreadInDatabase(input: {
   propertyId: string;
-  hostEmail: string;
-  hostName: string;
-  listingTitle: string;
-  listingImage: string;
 }): Promise<HostThread> {
   const supabase = getSupabase();
   if (!supabase) throw new Error('Supabase is not configured.');
 
   const { data: authData, error: authError } = await supabase.auth.getUser();
-  const guestEmail = authData.user?.email?.trim().toLowerCase();
-  const hostEmail = input.hostEmail.trim().toLowerCase();
-  if (authError || !guestEmail) throw new Error('Please sign in before messaging a host.');
-  if (!hostEmail || hostEmail === guestEmail) throw new Error('A valid host account is required.');
+  if (authError || !authData.user?.email) {
+    throw new Error('Please sign in before messaging a host.');
+  }
 
-  const threadId = `thread-${crypto.randomUUID()}`;
-  const { data, error } = await supabase.from('threads').insert({
-    id: threadId,
-    property_id: input.propertyId,
-    host_email: hostEmail,
-    guest_email: guestEmail,
-    host_name: input.hostName,
-    listing_title: input.listingTitle,
-    listing_image: input.listingImage,
-    unread: false,
-  }).select().single();
+  const { data, error } = await supabase.rpc('create_property_thread', {
+    p_property_id: input.propertyId,
+  });
 
-  if (error || !data) throw new Error(error?.message || 'Unable to start this conversation.');
+  const row = Array.isArray(data) ? data[0] : data;
+  if (error || !row) throw new Error(error?.message || 'Unable to start this conversation.');
 
   invalidateServiceCache('threads:');
   return {
-    id: data.id,
-    hostName: data.host_name,
-    listingTitle: data.listing_title,
-    listingImage: data.listing_image,
-    unread: Boolean(data.unread),
+    id: row.id,
+    hostName: row.host_name || 'Host',
+    listingTitle: row.listing_title || 'Property conversation',
+    listingImage: row.listing_image || '',
+    unread: Boolean(row.unread),
     messages: [],
   };
 }
