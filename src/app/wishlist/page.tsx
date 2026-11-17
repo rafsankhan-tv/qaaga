@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 
 export const metadata = {
   title: 'My Wishlist — QAAGA Super Marketplace',
-  description: 'View and manage your saved apartments, rooms, and stays in Kuala Lumpur on qaaga.com.',
+  description: 'View and manage your saved apartments, rooms, and stays in Dhaka on qaaga.com.',
 };
 
 export default async function WishlistPage() {

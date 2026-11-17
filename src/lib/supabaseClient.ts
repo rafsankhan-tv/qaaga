@@ -1,7 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-export const DEFAULT_SUPABASE_KEY = 'sb_publishable_d7m4vOhy66QCwYxlspMZjQ_dyNAdFbM';
-
 export function getSupabaseConfig(): { url: string; key: string } {
   let storedUrl = '';
   let storedKey = '';
@@ -11,19 +9,19 @@ export function getSupabaseConfig(): { url: string; key: string } {
       storedUrl = localStorage.getItem('qaaga_supabase_url') || '';
       storedKey = localStorage.getItem('qaaga_supabase_key') || '';
     } catch {
-      // ignore
+      // Storage can be unavailable in restricted browser contexts.
     }
   }
 
-  const url =
-    storedUrl.trim() ||
-    process.env.NEXT_PUBLIC_SUPABASE_URL ||
-    'https://d7m4vohy66qcwyxlspmz.supabase.co'; // Fallback inferred endpoint
-
-  const key =
-    storedKey.trim() ||
+  // Production build-time configuration is authoritative. Browser-stored values are
+  // only a development fallback and must never override the deployed QAAGA project.
+  const envUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+  const envKey =
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-    DEFAULT_SUPABASE_KEY;
+    '';
+  const url = envUrl.trim() || storedUrl.trim();
+  const key = envKey.trim() || storedKey.trim();
 
   return { url, key };
 }
@@ -35,6 +33,7 @@ let lastKey = '';
 export function getSupabase(): SupabaseClient | null {
   const { url, key } = getSupabaseConfig();
 
+  // Fail closed: never silently connect to an old or unrelated project.
   if (!url || !key) return null;
 
   if (cachedClient && url === lastUrl && key === lastKey) {
@@ -53,7 +52,7 @@ export function getSupabase(): SupabaseClient | null {
     lastKey = key;
     return cachedClient;
   } catch (err) {
-    console.warn('Supabase client initialization notice:', err);
+    console.warn('Supabase client initialization failed:', err);
     return null;
   }
 }
@@ -73,10 +72,9 @@ export function saveSupabaseConfig(url: string, key: string): void {
       localStorage.setItem('qaaga_supabase_url', url.trim());
       localStorage.setItem('qaaga_supabase_key', key.trim());
     } catch {
-      // ignore
+      // Storage can be unavailable in restricted browser contexts.
     }
   }
-  // Clear cached client so next getSupabase() reinitializes
   cachedClient = null;
   lastUrl = '';
   lastKey = '';
@@ -85,7 +83,7 @@ export function saveSupabaseConfig(url: string, key: string): void {
 export async function testSupabaseConnection(): Promise<SupabaseTestResult> {
   const { url, key } = getSupabaseConfig();
   const startTime = Date.now();
-  const keyPrefix = key ? `${key.slice(0, 16)}...` : 'None';
+  const keyPrefix = key ? `${key.slice(0, 12)}…` : 'Not configured';
 
   if (!url || !key) {
     return {
@@ -93,27 +91,18 @@ export async function testSupabaseConnection(): Promise<SupabaseTestResult> {
       url: url || 'Not configured',
       keyPrefix,
       latencyMs: 0,
-      message: 'Supabase URL or Key is missing.',
+      message: 'Supabase URL or publishable key is missing.',
     };
   }
 
   try {
     const client = getSupabase();
-    if (!client) {
-      throw new Error('Failed to initialize Supabase client');
-    }
-
-    const { data, error } = await client.auth.getSession();
+    if (!client) throw new Error('Failed to initialize Supabase client');
+    const { error } = await client.auth.getSession();
     const latencyMs = Date.now() - startTime;
 
     if (error) {
-      return {
-        connected: false,
-        url,
-        keyPrefix,
-        latencyMs,
-        message: `Connection error: ${error.message}`,
-      };
+      return { connected: false, url, keyPrefix, latencyMs, message: `Connection error: ${error.message}` };
     }
 
     return {
@@ -121,8 +110,7 @@ export async function testSupabaseConnection(): Promise<SupabaseTestResult> {
       url,
       keyPrefix,
       latencyMs,
-      message: `Supabase connected successfully (${latencyMs}ms)`,
-      details: { hasSession: Boolean(data?.session) },
+      message: `Supabase client reachable (${latencyMs}ms)`,
     };
   } catch (err: any) {
     const latencyMs = Date.now() - startTime;
@@ -131,7 +119,7 @@ export async function testSupabaseConnection(): Promise<SupabaseTestResult> {
       url,
       keyPrefix,
       latencyMs,
-      message: `Notice: ${err?.message || 'Network/CORS unreachable'}`,
+      message: err?.message || 'Unable to reach Supabase.',
     };
   }
 }

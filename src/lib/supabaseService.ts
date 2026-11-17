@@ -75,26 +75,25 @@ export function invalidateServiceCache(prefix?: string): void {
 function mapDbListingToModel(row: any): QaagaListing {
   return {
     id: String(row.id),
+    hostEmail: row.host_email || undefined,
     title: row.title || 'Untitled Listing',
-    area: row.area || 'Kuala Lumpur',
-    city: row.city || 'Kuala Lumpur',
+    area: row.area || '',
+    city: row.city || 'Dhaka',
     subType: row.sub_type || row.property_type || 'Apartment',
     category: row.category || 'stay',
-    twoNightPriceUsd:
-      Number(row.two_night_price_usd) ||
-      (Number(row.price_daily) ? Number(row.price_daily) * 2 : 120),
-    rating: String(row.rating || '5.0'),
+    twoNightPriceUsd: Number(row.two_night_price_usd ?? (Number(row.price_daily) * 2)) || 0,
+    rating: String(row.rating ?? '0'),
     reviewsCount: Number(row.reviews_count) || 0,
     guestFavorite: Boolean(row.guest_favorite ?? row.is_featured),
-    image: row.image || '/assets/kl-ui/kl-1.jpg',
+    image: row.image || '',
     gallery:
       Array.isArray(row.gallery) && row.gallery.length > 0
         ? row.gallery
-        : [row.image || '/assets/kl-ui/kl-1.jpg'],
+        : (row.image ? [row.image] : []),
     maxGuests: Number(row.max_guests) || 2,
     bedrooms: row.bedrooms || '1 bedroom',
     hostName: row.host_name || 'Host',
-    hostYears: Number(row.host_years) || 1,
+    hostYears: Number(row.host_years) || 0,
     amenities: Array.isArray(row.amenities) ? row.amenities : [],
     description: row.description || '',
     inPopularKL: Boolean(row.in_popular_kl),
@@ -105,26 +104,42 @@ function mapDbListingToModel(row: any): QaagaListing {
  * Normalizes QaagaListing to DB row (snake_case)
  */
 function mapModelToDbListing(model: QaagaListing): Record<string, any> {
+  const normalizedType = String(model.subType || '').toLowerCase();
+  const propertyType =
+    normalizedType.includes('room') ? 'Private Room' :
+    normalizedType.includes('studio') ? 'Studio' :
+    normalizedType.includes('villa') ? 'Villa' :
+    normalizedType.includes('condo') ? 'Sky Condo' :
+    normalizedType.includes('suite') ? 'Suite' :
+    normalizedType.includes('penthouse') ? 'Penthouse' : 'Apartment';
+
   return {
     id: model.id,
+    host_email: model.hostEmail,
+    host_name: model.hostName || 'Host',
     title: model.title,
-    area: model.area,
-    city: model.city || 'Kuala Lumpur',
-    sub_type: model.subType || 'Apartment',
+    description: model.description || '',
+    property_type: propertyType,
+    room_type: propertyType === 'Private Room' ? 'Private room' : 'Entire place',
     category: model.category,
+    city: model.city || 'Dhaka',
+    area: model.area,
     two_night_price_usd: model.twoNightPriceUsd,
-    rating: model.rating,
-    reviews_count: model.reviewsCount,
-    guest_favorite: model.guestFavorite,
-    image: model.image,
-    gallery: model.gallery || [model.image],
+    price_daily: model.twoNightPriceUsd / 2,
+    currency: 'USD',
     max_guests: model.maxGuests || 2,
     bedrooms: model.bedrooms || '1 bedroom',
-    host_name: model.hostName || 'Host',
-    host_years: model.hostYears || 1,
-    amenities: model.amenities || [],
-    description: model.description || '',
+    bathrooms: 1,
+    beds: 1,
+    rating: Number(model.rating) || 0,
+    reviews_count: model.reviewsCount || 0,
+    guest_favorite: Boolean(model.guestFavorite),
     in_popular_kl: Boolean(model.inPopularKL),
+    is_featured: Boolean(model.guestFavorite),
+    status: 'pending_approval',
+    image: model.image,
+    gallery: model.gallery?.length ? model.gallery : [model.image],
+    amenities: model.amenities || [],
     updated_at: new Date().toISOString(),
   };
 }
@@ -133,60 +148,28 @@ function mapModelToDbListing(model: QaagaListing): Record<string, any> {
 /* 1. LISTINGS DATABASE OPERATIONS (REAL SUPABASE, ZERO FAKE FALLBACKS)      */
 /* ========================================================================= */
 export async function fetchListingsWithStatus(): Promise<ServiceResult<QaagaListing[]>> {
-  return dedupFetch('listings:all', async () => {
-    const supabase = getSupabase();
-    if (!supabase) {
-      return { data: [], status: 'error', error: 'Supabase client is not configured.' };
-    }
+  const supabase = getSupabase();
+  if (!supabase) return { data: [], status: 'error', error: 'Supabase client is not configured.' };
 
+  const { data: userData } = await supabase.auth.getUser();
+  const cacheKey = 'listings:' + (userData.user?.id || 'anonymous');
+
+  return dedupFetch(cacheKey, async () => {
     try {
-      const [listingsRes, propsRes] = await Promise.all([
-        supabase.from('listings').select('*').order('created_at', { ascending: false }),
-        supabase
-          .from('properties')
-          .select('*')
-          .eq('status', 'active')
-          .order('created_at', { ascending: false }),
-      ]);
+      // Browse through the least-privilege public view. Direct properties access
+      // intentionally restricts anonymous users from reading host contact fields.
+      const { data, error } = await supabase
+        .from('public_properties')
+        .select('*')
+        .eq('status', 'active')
+        .order('created_at', { ascending: false });
 
-      const mergedMap = new Map<string, QaagaListing>();
+      if (error) return { data: [], status: 'error', error: error.message };
 
-      if (!listingsRes.error && Array.isArray(listingsRes.data)) {
-        for (const row of listingsRes.data) {
-          if (row.is_active === false) continue;
-          const mapped = mapDbListingToModel(row);
-          mergedMap.set(mapped.id, mapped);
-        }
-      }
-
-      if (!propsRes.error && Array.isArray(propsRes.data)) {
-        for (const row of propsRes.data) {
-          const mapped = mapDbListingToModel(row);
-          if (!mergedMap.has(mapped.id)) {
-            mergedMap.set(mapped.id, mapped);
-          }
-        }
-      }
-
-      if (listingsRes.error && propsRes.error) {
-        return {
-          data: [],
-          status: 'error',
-          error: listingsRes.error.message || propsRes.error.message,
-        };
-      }
-
-      const items = Array.from(mergedMap.values());
-      return {
-        data: items,
-        status: items.length > 0 ? 'ok' : 'empty',
-      };
+      const items = Array.isArray(data) ? data.map(mapDbListingToModel) : [];
+      return { data: items, status: items.length ? 'ok' : 'empty' };
     } catch (err: any) {
-      return {
-        data: [],
-        status: 'error',
-        error: err?.message || 'Unable to reach Supabase listings table.',
-      };
+      return { data: [], status: 'error', error: err?.message || 'Unable to reach Supabase properties.' };
     }
   });
 }
@@ -208,24 +191,60 @@ export async function insertListingToDatabase(
   invalidateServiceCache('host_props:');
   invalidateServiceCache('admin:stats');
   const supabase = getSupabase();
-  if (!supabase) return listing;
+  if (!supabase) throw new Error('Supabase is not configured.');
 
-  try {
-    const payload = mapModelToDbListing(listing);
-    const { data, error } = await supabase
-      .from('listings')
-      .upsert(payload, { onConflict: 'id' })
-      .select()
-      .single();
-
-    if (!error && data) {
-      return mapDbListingToModel(data);
-    }
-  } catch (err) {
-    console.warn('Notice: Supabase listing insert notice:', err);
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  const userEmail = authData.user?.email?.trim().toLowerCase();
+  if (authError || !userEmail) throw new Error('Please sign in before publishing a listing.');
+  if (!listing.hostEmail || listing.hostEmail.trim().toLowerCase() !== userEmail) {
+    throw new Error('The listing host must match the signed-in account.');
   }
 
-  return listing;
+  const payload = mapModelToDbListing(listing);
+  const { data, error } = await supabase
+    .from('properties')
+    .insert(payload)
+    .select()
+    .single();
+
+  if (error || !data) {
+    throw new Error(error?.message || 'Unable to submit this listing for review.');
+  }
+
+  return mapDbListingToModel(data);
+}
+
+export async function updateListingInDatabase(
+  listing: QaagaListing
+): Promise<QaagaListing> {
+  invalidateServiceCache('listings:');
+  invalidateServiceCache('host_props:');
+  invalidateServiceCache('admin:stats');
+
+  const supabase = getSupabase();
+  if (!supabase) throw new Error('Supabase is not configured.');
+
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  const userEmail = authData.user?.email?.trim().toLowerCase();
+  if (authError || !userEmail || listing.hostEmail?.trim().toLowerCase() !== userEmail) {
+    throw new Error('You can only update your own property listings.');
+  }
+
+  const payload = {
+    ...mapModelToDbListing(listing),
+    status: 'pending_approval',
+    updated_at: new Date().toISOString(),
+  };
+  const { data, error } = await supabase
+    .from('properties')
+    .update(payload)
+    .eq('id', listing.id)
+    .eq('host_email', userEmail)
+    .select()
+    .single();
+
+  if (error || !data) throw new Error('Listing could not be updated. Check your host permissions.');
+  return mapDbListingToModel(data);
 }
 
 export async function deleteListingFromDatabase(id: string): Promise<boolean> {
@@ -235,15 +254,15 @@ export async function deleteListingFromDatabase(id: string): Promise<boolean> {
   const supabase = getSupabase();
   if (!supabase) return false;
 
-  try {
-    const [{ error: err1 }, { error: err2 }] = await Promise.all([
-      supabase.from('listings').delete().eq('id', id),
-      supabase.from('properties').delete().eq('id', id),
-    ]);
-    return !err1 || !err2;
-  } catch {
-    return false;
-  }
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  const email = authData.user?.email?.trim().toLowerCase();
+  if (authError || !authData.user) return false;
+  const isAdmin = authData.user.app_metadata?.role === 'admin';
+
+  const query = supabase.from('properties').delete().eq('id', id);
+  if (!isAdmin) query.eq('host_email', email || '');
+  const { data, error } = await query.select('id').maybeSingle();
+  return !error && Boolean(data);
 }
 
 /* ========================================================================= */
@@ -252,46 +271,48 @@ export async function deleteListingFromDatabase(id: string): Promise<boolean> {
 export async function fetchBookingsWithStatus(
   guestEmail?: string
 ): Promise<ServiceResult<BookingRecord[]>> {
-  const cacheKey = `bookings:${guestEmail ? guestEmail.trim().toLowerCase() : 'all'}`;
-  return dedupFetch(cacheKey, async () => {
-    const supabase = getSupabase();
-    if (!supabase) {
-      return { data: [], status: 'error', error: 'Supabase client unavailable.' };
-    }
+  const supabase = getSupabase();
+  if (!supabase) return { data: [], status: 'error', error: 'Supabase client unavailable.' };
 
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  const accountEmail = authData.user?.email?.trim().toLowerCase();
+  const requestedEmail = guestEmail?.trim().toLowerCase();
+  if (authError || !accountEmail || (requestedEmail && requestedEmail !== accountEmail)) {
+    return { data: [], status: 'error', error: 'Booking records are available only to their signed-in customer.' };
+  }
+
+  const cacheKey = 'bookings:' + (authData.user?.id || accountEmail);
+  return dedupFetch(cacheKey, async () => {
     try {
-      let query = supabase
+      const { data, error } = await supabase
         .from('bookings')
         .select('*')
+        .eq('customer_email', accountEmail)
         .order('created_at', { ascending: false });
-      if (guestEmail && guestEmail.trim()) {
-        query = query.eq('guest_email', guestEmail.trim().toLowerCase());
-      }
-      const { data, error } = await query;
-      if (error) {
-        return { data: [], status: 'error', error: error.message };
-      }
-      if (!Array.isArray(data) || data.length === 0) {
-        return { data: [], status: 'empty' };
-      }
+
+      if (error) return { data: [], status: 'error', error: error.message };
+      if (!Array.isArray(data) || !data.length) return { data: [], status: 'empty' };
 
       const mapped: BookingRecord[] = data.map((row: any) => ({
         id: row.id,
         confirmationCode: row.confirmation_code,
-        listingId: row.listing_id || row.property_id,
-        title: row.title,
-        area: row.area,
-        image: row.image || '/assets/kl-ui/kl-1.jpg',
-        checkInLabel: row.check_in_label,
-        nights: Number(row.nights) || 2,
+        listingId: row.property_id,
+        checkInDate: row.check_in,
+        checkOutDate: row.check_out,
+        title: row.title || 'Property booking',
+        area: row.area || '',
+        image: row.image || '',
+        checkInLabel: row.check_in_label || [row.check_in, row.check_out].filter(Boolean).join(' – '),
+        nights: Number(row.nights) || 0,
         guests: Number(row.guests) || 1,
-        totalUsd: Number(row.total_usd) || 100,
+        totalUsd: Number(row.total_usd) || 0,
         hostName: row.host_name || 'Host',
-        status: row.status || 'Confirmed',
+        status: row.status || 'Pending',
       }));
+
       return { data: mapped, status: 'ok' };
     } catch (err: any) {
-      return { data: [], status: 'error', error: err?.message || 'Failed to fetch bookings.' };
+      return { data: [], status: 'error', error: err?.message || 'Unable to load your bookings.' };
     }
   });
 }
@@ -311,54 +332,54 @@ export async function insertBookingToDatabase(
   invalidateServiceCache('bookings:');
   invalidateServiceCache('host_bookings:');
   invalidateServiceCache('admin:stats');
+
   const supabase = getSupabase();
-  if (!supabase) return booking;
+  if (!supabase) throw new Error('Supabase is not configured.');
 
-  try {
-    const payload = {
-      id: booking.id,
-      confirmation_code: booking.confirmationCode,
-      listing_id: booking.listingId,
-      guest_email: guestEmail.trim().toLowerCase(),
-      guest_name: guestName,
-      title: booking.title,
-      area: booking.area,
-      image: booking.image,
-      check_in_label: booking.checkInLabel,
-      nights: booking.nights,
-      guests: booking.guests,
-      total_usd: booking.totalUsd,
-      host_name: booking.hostName,
-      status: booking.status,
-    };
-
-    const { data, error } = await supabase
-      .from('bookings')
-      .upsert(payload, { onConflict: 'id' })
-      .select()
-      .single();
-
-    if (!error && data) {
-      return {
-        id: data.id,
-        confirmationCode: data.confirmation_code,
-        listingId: data.listing_id,
-        title: data.title,
-        area: data.area,
-        image: data.image,
-        checkInLabel: data.check_in_label,
-        nights: Number(data.nights),
-        guests: Number(data.guests),
-        totalUsd: Number(data.total_usd),
-        hostName: data.host_name,
-        status: data.status,
-      };
-    }
-  } catch (err) {
-    console.warn('Notice: Supabase booking insert notice:', err);
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  const currentEmail = authData.user?.email?.trim().toLowerCase();
+  if (authError || !currentEmail || currentEmail !== guestEmail.trim().toLowerCase()) {
+    throw new Error('Please sign in with your verified email before booking.');
+  }
+  if (!authData.user.email_confirmed_at) throw new Error('Verify your email before booking.');
+  if (!booking.checkInDate || !booking.checkOutDate) {
+    throw new Error('A valid property and check-in/check-out date are required.');
   }
 
-  return booking;
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  const accessToken = sessionData.session?.access_token;
+  if (sessionError || !accessToken) throw new Error('Your login session has expired. Please sign in again.');
+
+  const response = await fetch('/api/bookings', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer ' + accessToken,
+    },
+    body: JSON.stringify({
+      listingId: booking.listingId,
+      checkInDate: booking.checkInDate,
+      checkOutDate: booking.checkOutDate,
+      guests: booking.guests,
+    }),
+  });
+
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || !result?.success || !result?.booking) {
+    throw new Error(result?.error || 'Your booking request could not be saved.');
+  }
+
+  const saved = result.booking;
+  return {
+    ...booking,
+    id: saved.id,
+    confirmationCode: saved.confirmationCode || booking.confirmationCode,
+    checkInDate: saved.checkInDate || booking.checkInDate,
+    checkOutDate: saved.checkOutDate || booking.checkOutDate,
+    nights: Number(saved.nights) || booking.nights,
+    totalUsd: Number(saved.totalUsd) || booking.totalUsd,
+    status: saved.status || 'Pending',
+  };
 }
 
 export async function cancelBookingInDatabase(
@@ -371,23 +392,25 @@ export async function cancelBookingInDatabase(
   const supabase = getSupabase();
   if (!supabase) return false;
 
-  try {
-    const updatePayload: Record<string, any> = {
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  const email = authData.user?.email?.trim().toLowerCase();
+  if (authError || !email) return false;
+
+  const { data, error } = await supabase
+    .from('bookings')
+    .update({
       status: 'Cancelled',
+      cancellation_reason: reason || null,
+      cancelled_by: email,
+      cancelled_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-    };
-    if (reason) {
-      updatePayload.cancellation_reason = reason;
-      updatePayload.cancelled_at = new Date().toISOString();
-    }
-    const { error } = await supabase
-      .from('bookings')
-      .update(updatePayload)
-      .eq('id', id);
-    return !error;
-  } catch {
-    return false;
-  }
+    })
+    .eq('id', id)
+    .eq('customer_email', email)
+    .select('id')
+    .maybeSingle();
+
+  return !error && Boolean(data);
 }
 
 /* ========================================================================= */
@@ -403,7 +426,7 @@ export async function getReviewsFromDatabase(
     try {
       const { data, error } = await supabase
         .from('reviews')
-        .select('*')
+        .select('id,property_id,listing_id,author,rating,comment,created_at')
         .eq('listing_id', listingId)
         .order('created_at', { ascending: false });
 
@@ -415,7 +438,7 @@ export async function getReviewsFromDatabase(
             month: 'short',
             year: 'numeric',
           }),
-          rating: Number(r.rating) || 5,
+          rating: Number(r.rating) || 0,
           comment: r.comment,
         }));
       }
@@ -431,69 +454,64 @@ export async function insertReviewToDatabase(
   listingId: string,
   review: { author: string; rating: number; comment: string }
 ): Promise<ListingReview> {
-  invalidateServiceCache(`reviews:${listingId}`);
+  invalidateServiceCache('reviews:' + listingId);
   const supabase = getSupabase();
-  const newReview: ListingReview = {
-    id: `rev-${Date.now()}`,
-    author: review.author,
-    date: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
-    rating: review.rating,
-    comment: review.comment,
-  };
+  if (!supabase) throw new Error('Supabase is not configured.');
 
-  if (!supabase) return newReview;
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  const authorEmail = authData.user?.email?.trim().toLowerCase();
+  if (authError || !authorEmail) throw new Error('Sign in before submitting a review.');
 
-  try {
-    const { data, error } = await supabase
-      .from('reviews')
-      .insert({
-        listing_id: listingId,
-        author: review.author,
-        rating: review.rating,
-        comment: review.comment,
-      })
-      .select()
-      .single();
+  const { data, error } = await supabase
+    .from('reviews')
+    .insert({
+      property_id: listingId,
+      listing_id: listingId,
+      author: review.author.trim(),
+      author_email: authorEmail,
+      rating: review.rating,
+      comment: review.comment.trim(),
+    })
+    .select('id,property_id,listing_id,author,rating,comment,created_at')
+    .single();
 
-    if (!error && data) {
-      return {
-        id: String(data.id),
-        author: data.author,
-        date: new Date(data.created_at).toLocaleDateString('en-US', {
-          month: 'short',
-          year: 'numeric',
-        }),
-        rating: Number(data.rating),
-        comment: data.comment,
-      };
-    }
-  } catch (err) {
-    console.warn('Notice: Supabase review insert error:', err);
+  if (error || !data) {
+    throw new Error(error?.message || 'Your review could not be saved.');
   }
 
-  return newReview;
+  return {
+    id: String(data.id),
+    author: data.author,
+    date: new Date(data.created_at).toLocaleDateString('en-US', {
+      month: 'short',
+      year: 'numeric',
+    }),
+    rating: Number(data.rating),
+    comment: data.comment,
+  };
 }
 
 /* ========================================================================= */
 /* 4. MESSAGES & INBOX OPERATIONS                                            */
 /* ========================================================================= */
 export async function fetchThreadsWithStatus(): Promise<ServiceResult<HostThread[]>> {
-  return dedupFetch('threads:all', async () => {
-    const supabase = getSupabase();
-    if (!supabase) {
-      return { data: [], status: 'error', error: 'Supabase unavailable.' };
-    }
+  const supabase = getSupabase();
+  if (!supabase) return { data: [], status: 'error', error: 'Supabase unavailable.' };
 
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError || !authData.user) {
+    return { data: [], status: 'empty' };
+  }
+
+  const userId = authData.user.id;
+  return dedupFetch('threads:' + userId, async () => {
     try {
       const { data: threadsData, error } = await supabase
         .from('threads')
         .select('*, messages(*)')
         .order('updated_at', { ascending: false });
 
-      if (error) {
-        return { data: [], status: 'error', error: error.message };
-      }
-
+      if (error) return { data: [], status: 'error', error: error.message };
       if (!Array.isArray(threadsData) || threadsData.length === 0) {
         return { data: [], status: 'empty' };
       }
@@ -502,7 +520,7 @@ export async function fetchThreadsWithStatus(): Promise<ServiceResult<HostThread
         id: t.id,
         hostName: t.host_name,
         listingTitle: t.listing_title,
-        listingImage: t.listing_image || '/assets/kl-ui/kl-1.jpg',
+        listingImage: t.listing_image || '',
         unread: Boolean(t.unread),
         messages: Array.isArray(t.messages)
           ? t.messages.map((m: any) => ({
@@ -520,6 +538,35 @@ export async function fetchThreadsWithStatus(): Promise<ServiceResult<HostThread
   });
 }
 
+export async function createThreadInDatabase(input: {
+  propertyId: string;
+}): Promise<HostThread> {
+  const supabase = getSupabase();
+  if (!supabase) throw new Error('Supabase is not configured.');
+
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError || !authData.user?.email) {
+    throw new Error('Please sign in before messaging a host.');
+  }
+
+  const { data, error } = await supabase.rpc('create_property_thread', {
+    p_property_id: input.propertyId,
+  });
+
+  const row = Array.isArray(data) ? data[0] : data;
+  if (error || !row) throw new Error(error?.message || 'Unable to start this conversation.');
+
+  invalidateServiceCache('threads:');
+  return {
+    id: row.id,
+    hostName: row.host_name || 'Host',
+    listingTitle: row.listing_title || 'Property conversation',
+    listingImage: row.listing_image || '',
+    unread: Boolean(row.unread),
+    messages: [],
+  };
+}
+
 export async function getThreadsFromDatabase(): Promise<HostThread[]> {
   const res = await fetchThreadsWithStatus();
   return res.data;
@@ -531,70 +578,138 @@ export async function sendMessageToDatabase(
 ): Promise<boolean> {
   invalidateServiceCache('threads:');
   const supabase = getSupabase();
-  if (!supabase) return false;
+  if (!supabase || !message.text.trim()) return false;
 
-  try {
-    const { error: msgErr } = await supabase.from('messages').insert({
-      thread_id: threadId,
-      sender: message.sender,
-      text: message.text,
-      time: message.time,
-    });
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  const senderEmail = authData.user?.email?.trim().toLowerCase();
+  if (authError || !senderEmail) return false;
 
-    await supabase
-      .from('threads')
-      .update({
-        last_message: message.text,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', threadId);
+  const { data: thread, error: threadError } = await supabase
+    .from('threads')
+    .select('id,host_email,guest_email')
+    .eq('id', threadId)
+    .single();
 
-    return !msgErr;
-  } catch {
-    return false;
-  }
+  if (threadError || !thread) return false;
+  const senderRole =
+    thread.host_email?.toLowerCase() === senderEmail ? 'host' :
+    thread.guest_email?.toLowerCase() === senderEmail ? 'guest' : null;
+  if (!senderRole) return false;
+
+  const { error: messageError } = await supabase.from('messages').insert({
+    thread_id: threadId,
+    sender: senderRole,
+    sender_email: senderEmail,
+    text: message.text.trim(),
+    time: message.time,
+  });
+  if (messageError) return false;
+
+  const { error: threadUpdateError } = await supabase
+    .from('threads')
+    .update({
+      last_message: message.text.trim(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', threadId);
+
+  return !threadUpdateError;
 }
 
 /* ========================================================================= */
 /* 5. STORAGE FILE UPLOAD (SUPABASE STORAGE)                                 */
 /* ========================================================================= */
+export async function uploadPrivateFileToSupabaseStorage(
+  file: File,
+  purpose: 'payment' | 'identity'
+): Promise<{ url: string; storageRef?: string; error?: string }> {
+  const supabase = getSupabase();
+  if (!supabase) return { url: '', error: 'Supabase Storage is not configured.' };
+
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  const userId = authData.user?.id;
+  if (authError || !userId) return { url: '', error: 'Sign in before uploading a private document.' };
+
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/avif', 'application/pdf'];
+  if (!allowedTypes.includes(file.type)) return { url: '', error: 'Unsupported document format.' };
+  if (!file.size || file.size > 10 * 1024 * 1024) return { url: '', error: 'File must be smaller than 10 MB.' };
+
+  const extension = file.type === 'application/pdf' ? 'pdf' : file.type.split('/')[1].replace('jpeg', 'jpg');
+  const filePath = userId + '/' + purpose + '/' + crypto.randomUUID() + '.' + extension;
+  const { data, error } = await supabase.storage
+    .from('qaaga-private')
+    .upload(filePath, file, {
+      cacheControl: '3600',
+      upsert: false,
+      contentType: file.type,
+    });
+
+  if (error || !data) return { url: '', error: 'Private document upload failed.' };
+  const storageRef = 'storage://qaaga-private/' + data.path;
+  const { data: signedData, error: signError } = await supabase.storage
+    .from('qaaga-private')
+    .createSignedUrl(data.path, 15 * 60);
+  if (signError || !signedData?.signedUrl) {
+    return { url: '', storageRef, error: 'The document was uploaded but a preview link could not be created.' };
+  }
+  return { url: signedData.signedUrl, storageRef };
+}
+
+async function resolvePrivateStorageReference(
+  supabase: ReturnType<typeof getSupabase>,
+  reference: string | null | undefined
+): Promise<string> {
+  if (!reference?.startsWith('storage://qaaga-private/')) return reference || '';
+  if (!supabase) return '';
+
+  const path = reference.slice('storage://qaaga-private/'.length);
+  const { data, error } = await supabase.storage
+    .from('qaaga-private')
+    .createSignedUrl(path, 15 * 60);
+
+  return error || !data?.signedUrl ? '' : data.signedUrl;
+}
+
 export async function uploadFileToSupabaseStorage(
   file: File,
-  bucket: 'qaaga-listings' | 'qaaga-branding' | 'qaaga-avatars' = 'qaaga-listings'
+  bucket: 'qaaga-listings' | 'qaaga-avatars' = 'qaaga-listings'
 ): Promise<{ url: string; error?: string }> {
   const supabase = getSupabase();
+  if (!supabase) return { url: '', error: 'Supabase Storage is not configured.' };
 
-  if (supabase) {
-    try {
-      const fileExt = file.name.split('.').pop() || 'png';
-      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
-      const filePath = `${fileName}`;
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  const userId = authData.user?.id;
+  if (authError || !userId) return { url: '', error: 'Sign in before uploading a file.' };
 
-      const { data, error } = await supabase.storage
-        .from(bucket)
-        .upload(filePath, file, {
-          cacheControl: '31536000',
-          upsert: true,
-        });
-
-      if (!error && data) {
-        const {
-          data: { publicUrl },
-        } = supabase.storage.from(bucket).getPublicUrl(filePath);
-
-        return { url: publicUrl };
-      }
-    } catch (err) {
-      console.warn('Supabase storage upload notice, using inline reader:', err);
-    }
+  if (!file.size || file.size > 10 * 1024 * 1024) {
+    return { url: '', error: 'File must be smaller than 10 MB.' };
   }
 
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve({ url: String(reader.result) });
-    reader.onerror = () => resolve({ url: '', error: 'Failed to read file' });
-    reader.readAsDataURL(file);
-  });
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/avif'];
+  if (!allowedTypes.includes(file.type)) {
+    return { url: '', error: 'Only JPG, PNG, WebP or AVIF images are supported.' };
+  }
+
+  try {
+    const extension = file.type.split('/')[1].replace('jpeg', 'jpg');
+    const filePath = userId + '/' + crypto.randomUUID() + '.' + extension;
+    const { data, error } = await supabase.storage
+      .from(bucket)
+      .upload(filePath, file, {
+        cacheControl: '31536000',
+        upsert: false,
+        contentType: file.type,
+      });
+
+    if (error || !data) {
+      return { url: '', error: error?.message || 'Supabase Storage upload failed.' };
+    }
+
+    const { data: publicData } = supabase.storage.from(bucket).getPublicUrl(data.path);
+    return { url: publicData.publicUrl };
+  } catch (error: any) {
+    return { url: '', error: error?.message || 'Supabase Storage upload failed.' };
+  }
 }
 
 /* ========================================================================= */
@@ -603,62 +718,39 @@ export async function uploadFileToSupabaseStorage(
 export async function uploadBrandingAssetToSupabase(
   file: File,
   type: 'logo' | 'favicon'
-): Promise<{ url: string; storageType: 'supabase-storage' | 'optimized-base64'; error?: string }> {
+): Promise<{ url: string; storageType: 'supabase-storage'; error?: string }> {
   const supabase = getSupabase();
+  if (!supabase) throw new Error('Supabase is not configured.');
 
-  if (supabase) {
-    const bucketsToTry = ['qaaga-branding', 'branding', 'public-assets', 'public'];
-    const fileExt = (file.name.split('.').pop() || (type === 'favicon' ? 'ico' : 'png')).toLowerCase();
-    const cleanFileName = `${type}-${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
-
-    for (const b of bucketsToTry) {
-      try {
-        const { data, error } = await supabase.storage
-          .from(b)
-          .upload(cleanFileName, file, {
-            cacheControl: '31536000',
-            upsert: true,
-            contentType: file.type || (fileExt === 'svg' ? 'image/svg+xml' : 'image/png'),
-          });
-
-        if (!error && data) {
-          const { data: pubData } = supabase.storage.from(b).getPublicUrl(cleanFileName);
-          if (pubData?.publicUrl) {
-            return {
-              url: pubData.publicUrl,
-              storageType: 'supabase-storage',
-            };
-          }
-        }
-      } catch {
-        // Try next bucket
-      }
-    }
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError || authData.user?.app_metadata?.role !== 'admin') {
+    throw new Error('Only a trusted platform administrator can upload branding assets.');
   }
 
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      resolve({
-        url: String(reader.result || ''),
-        storageType: 'optimized-base64',
-      });
-    };
-    reader.onerror = () => {
-      resolve({
-        url: '',
-        storageType: 'optimized-base64',
-        error: 'Failed to read branding image file',
-      });
-    };
-    reader.readAsDataURL(file);
-  });
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/avif', 'image/svg+xml'];
+  if (!allowedTypes.includes(file.type)) throw new Error('Unsupported branding file type.');
+  if (!file.size || file.size > 5 * 1024 * 1024) throw new Error('Branding images must be smaller than 5 MB.');
+
+  const ext = file.type === 'image/svg+xml' ? 'svg' : file.type.split('/')[1].replace('jpeg', 'jpg');
+  const path = authData.user.id + '/' + type + '/' + crypto.randomUUID() + '.' + ext;
+  const { data, error } = await supabase.storage
+    .from('qaaga-branding')
+    .upload(path, file, {
+      cacheControl: '31536000',
+      upsert: false,
+      contentType: file.type,
+    });
+
+  if (error || !data) throw new Error('Branding asset upload failed. Check the qaaga-branding bucket.');
+  const { data: publicData } = supabase.storage.from('qaaga-branding').getPublicUrl(data.path);
+
+  return { url: publicData.publicUrl, storageType: 'supabase-storage' };
 }
 
 export async function saveBrandingToSupabase(branding: any): Promise<any> {
   invalidateServiceCache('branding:');
   const supabase = getSupabase();
-  if (!supabase) return branding;
+  if (!supabase) throw new Error('Supabase is not configured.');
 
   try {
     const payload = {
@@ -699,7 +791,7 @@ export async function saveBrandingToSupabase(branding: any): Promise<any> {
     console.warn('Notice: Remote Supabase branding save notice:', err);
   }
 
-  return branding;
+  throw new Error('Branding could not be saved to Supabase.');
 }
 
 export async function getBrandingFromSupabase(): Promise<any | null> {
@@ -740,7 +832,7 @@ export async function getBrandingFromSupabase(): Promise<any | null> {
 /* 6. REALTIME CHANNEL SUBSCRIPTION                                          */
 /* ========================================================================= */
 export function subscribeToSupabaseTable(
-  tableName: 'listings' | 'properties' | 'bookings' | 'reviews' | 'threads' | 'messages' | 'site_branding' | 'profiles',
+  tableName: 'listings' | 'properties' | 'public_property_feed' | 'bookings' | 'reviews' | 'threads' | 'messages' | 'site_branding' | 'profiles',
   onPayload: (payload: any) => void
 ): () => void {
   const supabase = getSupabase();
@@ -790,7 +882,7 @@ export async function getUserProfileFromDatabase(email: string): Promise<GuestPr
         return {
           fullName: data.full_name || 'Verified Member',
           email: data.email,
-          city: data.city || 'Kuala Lumpur',
+          city: data.city || 'Dhaka',
           verified: Boolean(data.verified),
           role: data.role || 'guest',
           identity_status: data.identity_status || (data.verified ? 'verified' : 'unverified'),
@@ -815,75 +907,100 @@ export async function getUserProfileFromDatabase(email: string): Promise<GuestPr
 }
 
 export async function saveUserProfileToDatabase(profile: GuestProfile): Promise<GuestProfile> {
-  const cleanEmail = profile.email.trim().toLowerCase();
-  invalidateServiceCache(`profile:${cleanEmail}`);
-  invalidateServiceCache('users:all');
-  const normalized: GuestProfile = {
-    ...profile,
-    email: cleanEmail,
-    verified: Boolean(profile.verified),
-  };
-
   const supabase = getSupabase();
-  if (supabase && cleanEmail) {
-    try {
-      const { error } = await supabase.from('profiles').upsert(
-        {
-          email: cleanEmail,
-          full_name: normalized.fullName,
-          city: normalized.city || 'Kuala Lumpur',
-          role: normalized.role || 'guest',
-          phone: normalized.phone || null,
-          avatar_url: normalized.avatarUrl || null,
-          bio: normalized.bio || null,
-          status: normalized.status || 'active',
-          verified: normalized.verified,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'email' }
-      );
-      if (error) {
-        console.warn('Notice: Remote Supabase profile save notice:', error.message);
-      }
-    } catch (err) {
-      console.warn('Notice: Remote Supabase profile save exception:', err);
-    }
+  if (!supabase) throw new Error('Supabase is not configured.');
+
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  const authenticatedEmail = authData.user?.email?.trim().toLowerCase();
+  const requestedEmail = profile.email.trim().toLowerCase();
+  if (authError || !authenticatedEmail || requestedEmail !== authenticatedEmail) {
+    throw new Error('You can only update the profile for your signed-in account.');
   }
 
-  if (typeof window !== 'undefined') {
-    try {
-      localStorage.setItem('qaaga_v3_profile', JSON.stringify(normalized));
-    } catch {}
+  const { data: existing, error: readError } = await supabase
+    .from('profiles')
+    .select('role,status,identity_status,verified')
+    .eq('email', authenticatedEmail)
+    .maybeSingle();
+  if (readError) throw new Error(readError.message);
+
+  const isTrustedAdmin = authData.user.app_metadata?.role === 'admin';
+  const role = isTrustedAdmin && existing?.role === 'admin'
+    ? 'admin'
+    : existing?.role === 'host' && profile.role === 'host'
+      ? 'host'
+      : profile.role === 'host' ? 'host' : 'guest';
+  // Email confirmation is separate from identity-document approval.
+  const verified = Boolean(existing?.verified);
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .upsert(
+      {
+        email: authenticatedEmail,
+        full_name: profile.fullName.trim(),
+        city: profile.city?.trim() || 'Dhaka',
+        phone: profile.phone?.trim() || null,
+        avatar_url: profile.avatarUrl || null,
+        bio: profile.bio?.trim() || null,
+        role,
+        status: existing?.status || 'active',
+        verified,
+        identity_status: existing?.identity_status || 'unverified',
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'email' }
+    )
+    .select('full_name,email,city,phone,avatar_url,bio,role,status,verified,identity_status,created_at')
+    .single();
+
+  if (error || !data) {
+    throw new Error(error?.message || 'Profile could not be saved.');
   }
 
-  return normalized;
+  invalidateServiceCache('profile:' + authenticatedEmail);
+  invalidateServiceCache('users:all');
+
+  return {
+    fullName: data.full_name || 'Member',
+    email: data.email,
+    city: data.city || 'Dhaka',
+    phone: data.phone || undefined,
+    avatarUrl: data.avatar_url || undefined,
+    bio: data.bio || undefined,
+    role: data.role,
+    status: data.status,
+    verified: Boolean(data.verified),
+    identity_status: data.identity_status,
+    joinedDate: data.created_at
+      ? new Date(data.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+      : profile.joinedDate,
+  };
 }
 
 export async function fetchUsersWithStatus(): Promise<ServiceResult<GuestProfile[]>> {
-  return dedupFetch('users:all', async () => {
-    const supabase = getSupabase();
-    if (!supabase) {
-      return { data: [], status: 'error', error: 'Supabase client unavailable.' };
-    }
+  const supabase = getSupabase();
+  if (!supabase) return { data: [], status: 'error', error: 'Supabase unavailable.' };
 
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError || authData.user?.app_metadata?.role !== 'admin') {
+    return { data: [], status: 'error', error: 'Administrator permission is required.' };
+  }
+
+  return dedupFetch('users:' + authData.user.id, async () => {
     try {
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (error) {
-        return { data: [], status: 'error', error: error.message };
-      }
-
-      if (!Array.isArray(data) || data.length === 0) {
-        return { data: [], status: 'empty' };
-      }
+      if (error) return { data: [], status: 'error', error: error.message };
+      if (!Array.isArray(data) || !data.length) return { data: [], status: 'empty' };
 
       const mapped: GuestProfile[] = data.map((d) => ({
         fullName: d.full_name || 'Member',
         email: d.email,
-        city: d.city || 'Kuala Lumpur',
+        city: d.city || 'Dhaka',
         verified: Boolean(d.verified),
         role: d.role || 'guest',
         identity_status: d.identity_status || (d.verified ? 'verified' : 'unverified'),
@@ -891,10 +1008,7 @@ export async function fetchUsersWithStatus(): Promise<ServiceResult<GuestProfile
         avatarUrl: d.avatar_url || '',
         bio: d.bio || '',
         joinedDate: d.created_at
-          ? new Date(d.created_at).toLocaleDateString('en-US', {
-              month: 'short',
-              year: 'numeric',
-            })
+          ? new Date(d.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
           : undefined,
         status: d.status || 'active',
       }));
@@ -916,20 +1030,25 @@ export async function updateUserRoleInDatabase(
   status: 'active' | 'suspended' = 'active'
 ): Promise<boolean> {
   const cleanEmail = email.trim().toLowerCase();
-  invalidateServiceCache(`profile:${cleanEmail}`);
-  invalidateServiceCache('users:all');
-  invalidateServiceCache('admin:stats');
   const supabase = getSupabase();
   if (!supabase) return false;
 
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError || authData.user?.app_metadata?.role !== 'admin') return false;
+
+  invalidateServiceCache('profile:' + cleanEmail);
+  invalidateServiceCache('users:' + authData.user.id);
+  invalidateServiceCache('admin:stats:' + authData.user.id);
+
   try {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('profiles')
       .update({ role, status, updated_at: new Date().toISOString() })
-      .eq('email', cleanEmail);
-    return !error;
-  } catch (err) {
-    console.warn('Notice: Remote Supabase update user role exception:', err);
+      .eq('email', cleanEmail)
+      .select('email')
+      .maybeSingle();
+    return !error && Boolean(data);
+  } catch {
     return false;
   }
 }
@@ -952,36 +1071,35 @@ export interface PropertyRecord extends QaagaListing {
 
 export async function getPropertiesByHost(hostEmail: string): Promise<PropertyRecord[]> {
   const cleanEmail = hostEmail.trim().toLowerCase();
-  return dedupFetch(`host_props:${cleanEmail}`, async () => {
-    const supabase = getSupabase();
-    if (!supabase) return [];
+  const supabase = getSupabase();
+  if (!supabase || !cleanEmail) return [];
 
-    try {
-      const { data, error } = await supabase
-        .from('properties')
-        .select('*')
-        .eq('host_email', cleanEmail)
-        .order('created_at', { ascending: false });
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  const currentEmail = authData.user?.email?.trim().toLowerCase();
+  const isAdmin = authData.user?.app_metadata?.role === 'admin';
+  if (authError || !authData.user || (!isAdmin && currentEmail !== cleanEmail)) return [];
 
-      if (!error && Array.isArray(data)) {
-        return data.map((row) => ({
-          ...mapDbListingToModel(row),
-          hostEmail: row.host_email,
-          propertyType: row.property_type,
-          roomType: row.room_type,
-          priceDaily: Number(row.price_daily) || Math.round((Number(row.two_night_price_usd) || 120) / 2),
-          priceWeekly: Number(row.price_weekly) || undefined,
-          priceMonthly: Number(row.price_monthly) || undefined,
-          status: row.status || 'active',
-          isFeatured: Boolean(row.is_featured),
-          facilities: row.facilities || {},
-          createdAt: row.created_at,
-        }));
-      }
-    } catch (err) {
-      console.warn('Notice: Properties by host query error:', err);
-    }
-    return [];
+  return dedupFetch('host_props:' + authData.user.id + ':' + cleanEmail, async () => {
+    const { data, error } = await supabase
+      .from('properties')
+      .select('*')
+      .eq('host_email', cleanEmail)
+      .order('created_at', { ascending: false });
+
+    if (error || !Array.isArray(data)) return [];
+    return data.map((row) => ({
+      ...mapDbListingToModel(row),
+      hostEmail: row.host_email,
+      propertyType: row.property_type,
+      roomType: row.room_type,
+      priceDaily: Number(row.price_daily ?? (Number(row.two_night_price_usd) / 2)) || 0,
+      priceWeekly: Number(row.price_weekly) || undefined,
+      priceMonthly: Number(row.price_monthly) || undefined,
+      status: row.status || 'pending_approval',
+      isFeatured: Boolean(row.is_featured),
+      facilities: row.facilities || {},
+      createdAt: row.created_at,
+    }));
   });
 }
 
@@ -995,15 +1113,18 @@ export async function updatePropertyStatus(
   const supabase = getSupabase();
   if (!supabase) return false;
 
-  try {
-    const { error } = await supabase
-      .from('properties')
-      .update({ status, updated_at: new Date().toISOString() })
-      .eq('id', id);
-    return !error;
-  } catch {
-    return false;
-  }
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  const email = authData.user?.email?.trim().toLowerCase();
+  if (authError || !authData.user) return false;
+
+  const query = supabase
+    .from('properties')
+    .update({ status, updated_at: new Date().toISOString() })
+    .eq('id', id);
+  if (authData.user.app_metadata?.role !== 'admin') query.eq('host_email', email || '');
+
+  const { data, error } = await query.select('id').maybeSingle();
+  return !error && Boolean(data);
 }
 
 export async function checkPropertyAvailability(
@@ -1012,7 +1133,7 @@ export async function checkPropertyAvailability(
   checkOutDate: string
 ): Promise<{ isAvailable: boolean; conflictReason?: string }> {
   const supabase = getSupabase();
-  if (!supabase) return { isAvailable: true };
+  if (!supabase) return { isAvailable: false, conflictReason: 'Availability cannot be verified because the database is unavailable.' };
 
   try {
     const { data: bookings, error: bookingErr } = await supabase
@@ -1021,7 +1142,8 @@ export async function checkPropertyAvailability(
       .eq('property_id', propertyId)
       .in('status', ['Confirmed', 'Accepted', 'Pending']);
 
-    if (!bookingErr && Array.isArray(bookings)) {
+    if (bookingErr || !Array.isArray(bookings)) return { isAvailable: false, conflictReason: 'Unable to verify existing reservations. Please try again.' };
+    if (Array.isArray(bookings)) {
       const inTime = new Date(checkInDate).getTime();
       const outTime = new Date(checkOutDate).getTime();
 
@@ -1046,7 +1168,8 @@ export async function checkPropertyAvailability(
       .gte('date', checkInDate)
       .lte('date', checkOutDate);
 
-    if (!blockErr && Array.isArray(blocked) && blocked.length > 0) {
+    if (blockErr) return { isAvailable: false, conflictReason: 'Unable to verify host availability. Please try again.' };
+    if (Array.isArray(blocked) && blocked.length > 0) {
       return {
         isAvailable: false,
         conflictReason: 'Selected dates include dates manually blocked by the host.',
@@ -1055,7 +1178,7 @@ export async function checkPropertyAvailability(
 
     return { isAvailable: true };
   } catch {
-    return { isAvailable: true };
+    return { isAvailable: false, conflictReason: 'Availability could not be verified. Please try again.' };
   }
 }
 
@@ -1064,43 +1187,42 @@ export async function checkPropertyAvailability(
 /* ========================================================================= */
 export async function getBookingsForHost(hostEmail: string): Promise<any[]> {
   const cleanEmail = hostEmail.trim().toLowerCase();
-  return dedupFetch(`host_bookings:${cleanEmail}`, async () => {
-    const supabase = getSupabase();
-    if (!supabase) return [];
+  const supabase = getSupabase();
+  if (!supabase || !cleanEmail) return [];
 
-    try {
-      const { data, error } = await supabase
-        .from('bookings')
-        .select('*')
-        .or(`host_email.eq.${cleanEmail},host_name.ilike.%${cleanEmail}%`)
-        .order('created_at', { ascending: false });
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  const currentEmail = authData.user?.email?.trim().toLowerCase();
+  const isAdmin = authData.user?.app_metadata?.role === 'admin';
+  if (authError || !authData.user || (!isAdmin && currentEmail !== cleanEmail)) return [];
 
-      if (!error && Array.isArray(data)) {
-        return data.map((b) => ({
-          id: b.id,
-          confirmationCode: b.confirmation_code,
-          propertyId: b.property_id || b.listing_id,
-          title: b.title,
-          area: b.area,
-          image: b.image,
-          customerEmail: b.customer_email || b.guest_email,
-          customerName: b.customer_name || b.guest_name,
-          customerPhone: b.customer_phone,
-          checkIn: b.check_in,
-          checkOut: b.check_out,
-          checkInLabel: b.check_in_label,
-          nights: Number(b.nights) || 1,
-          guests: Number(b.guests) || 1,
-          totalUsd: Number(b.total_usd) || 100,
-          status: b.status || 'Pending',
-          cancellationReason: b.cancellation_reason,
-          createdAt: b.created_at,
-        }));
-      }
-    } catch (err) {
-      console.warn('Notice: Host bookings fetch error:', err);
-    }
-    return [];
+  return dedupFetch('host_bookings:' + authData.user.id + ':' + cleanEmail, async () => {
+    const { data, error } = await supabase
+      .from('bookings')
+      .select('*')
+      .eq('host_email', cleanEmail)
+      .order('created_at', { ascending: false });
+
+    if (error || !Array.isArray(data)) return [];
+    return data.map((b) => ({
+      id: b.id,
+      confirmationCode: b.confirmation_code,
+      propertyId: b.property_id || b.listing_id,
+      title: b.title,
+      area: b.area,
+      image: b.image,
+      customerEmail: b.customer_email || b.guest_email,
+      customerName: b.customer_name || b.guest_name,
+      customerPhone: b.customer_phone,
+      checkIn: b.check_in,
+      checkOut: b.check_out,
+      checkInLabel: b.check_in_label,
+      nights: Number(b.nights) || 0,
+      guests: Number(b.guests) || 1,
+      totalUsd: Number(b.total_usd) || 0,
+      status: b.status || 'Pending',
+      cancellationReason: b.cancellation_reason,
+      createdAt: b.created_at,
+    }));
   });
 }
 
@@ -1116,26 +1238,26 @@ export async function updateBookingStatus(
   const supabase = getSupabase();
   if (!supabase) return false;
 
-  try {
-    const payload: Record<string, any> = {
-      status,
-      updated_at: new Date().toISOString(),
-    };
-    if (reason) payload.cancellation_reason = reason;
-    if (cancelledBy) {
-      payload.cancelled_by = cancelledBy;
-      payload.cancelled_at = new Date().toISOString();
-    }
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  const email = authData.user?.email?.trim().toLowerCase();
+  if (authError || !email) return false;
+  const isAdmin = authData.user?.app_metadata?.role === 'admin';
 
-    const { error } = await supabase
-      .from('bookings')
-      .update(payload)
-      .eq('id', bookingId);
-
-    return !error;
-  } catch {
-    return false;
+  const payload: Record<string, any> = {
+    status,
+    updated_at: new Date().toISOString(),
+  };
+  if (reason) payload.cancellation_reason = reason;
+  if (cancelledBy && isAdmin) {
+    payload.cancelled_by = cancelledBy;
+    payload.cancelled_at = new Date().toISOString();
   }
+
+  const query = supabase.from('bookings').update(payload).eq('id', bookingId);
+  if (!isAdmin) query.eq('host_email', email);
+
+  const { data, error } = await query.select('id').maybeSingle();
+  return !error && Boolean(data);
 }
 
 /* ========================================================================= */
@@ -1172,79 +1294,143 @@ export async function submitPaymentProof(data: {
   const supabase = getSupabase();
   if (!supabase) return null;
 
-  try {
-    const { data: inserted, error } = await supabase
-      .from('payment_records')
-      .insert({
-        booking_id: data.bookingId,
-        amount: data.amount,
-        currency: data.currency || 'USD',
-        payment_method: data.paymentMethod,
-        transaction_reference: data.transactionReference,
-        proof_image_url: data.proofImageUrl,
-        payer_name: data.payerName,
-        payer_email: data.payerEmail,
-        status: 'pending_review',
-      })
-      .select()
-      .single();
-
-    if (!error && inserted) {
-      return {
-        id: inserted.id,
-        bookingId: inserted.booking_id,
-        amount: Number(inserted.amount),
-        currency: inserted.currency,
-        paymentMethod: inserted.payment_method,
-        transactionReference: inserted.transaction_reference,
-        proofImageUrl: inserted.proof_image_url,
-        payerName: inserted.payer_name,
-        payerEmail: inserted.payer_email,
-        status: inserted.status,
-        createdAt: inserted.created_at,
-      };
-    }
-  } catch (err) {
-    console.warn('Notice: Supabase payment record insert error:', err);
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  const currentEmail = authData.user?.email?.trim().toLowerCase();
+  if (authError || !currentEmail || currentEmail !== data.payerEmail.trim().toLowerCase()) {
+    throw new Error('Payment proof must be submitted from the booking customer account.');
+  }
+  if (!data.proofImageUrl.startsWith('storage://qaaga-private/')) {
+    throw new Error('Payment proof must be uploaded to private QAAGA storage.');
   }
 
-  return null;
+  const { data: booking, error: bookingError } = await supabase
+    .from('bookings')
+    .select('id,customer_email,total_usd,status')
+    .eq('id', data.bookingId)
+    .eq('customer_email', currentEmail)
+    .maybeSingle();
+
+  if (bookingError || !booking || ['Cancelled', 'Rejected'].includes(booking.status)) {
+    throw new Error('This booking is not eligible for payment proof submission.');
+  }
+
+  const { data: inserted, error } = await supabase
+    .from('payment_records')
+    .insert({
+      booking_id: data.bookingId,
+      amount: Number(booking.total_usd),
+      currency: data.currency || 'USD',
+      payment_method: data.paymentMethod,
+      transaction_reference: data.transactionReference,
+      proof_image_url: data.proofImageUrl,
+      payer_name: data.payerName,
+      payer_email: currentEmail,
+      status: 'pending_review',
+    })
+    .select()
+    .single();
+
+  if (error || !inserted) {
+    throw new Error('Payment proof could not be saved. Please try again.');
+  }
+
+  return {
+    id: inserted.id,
+    bookingId: inserted.booking_id,
+    amount: Number(inserted.amount),
+    currency: inserted.currency,
+    paymentMethod: inserted.payment_method,
+    transactionReference: inserted.transaction_reference,
+    proofImageUrl: await resolvePrivateStorageReference(supabase, data.proofImageUrl),
+    payerName: inserted.payer_name,
+    payerEmail: inserted.payer_email,
+    status: inserted.status,
+    createdAt: inserted.created_at,
+  };
 }
 
 export async function getPaymentProofs(bookingId?: string): Promise<PaymentProofRecord[]> {
-  return dedupFetch(`payments:${bookingId || 'all'}`, async () => {
-    const supabase = getSupabase();
-    if (!supabase) return [];
+  const supabase = getSupabase();
+  if (!supabase) return [];
 
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError || !authData.user) return [];
+
+  const userId = authData.user.id;
+  const isAdmin = authData.user.app_metadata?.role === 'admin';
+  const email = authData.user.email?.trim().toLowerCase();
+  const cacheKey = 'payments:' + userId + ':' + (bookingId || 'all');
+
+  return dedupFetch(cacheKey, async () => {
     try {
       let query = supabase
         .from('payment_records')
         .select('*')
         .order('created_at', { ascending: false });
+
       if (bookingId) query = query.eq('booking_id', bookingId);
-      const { data, error } = await query;
-      if (!error && Array.isArray(data)) {
-        return data.map((p) => ({
+      if (!isAdmin && email) {
+        const { data: bookings, error: bookingError } = await supabase
+          .from('bookings')
+          .select('id')
+          .eq('host_email', email);
+        if (bookingError) return [];
+        const hostBookingIds = (bookings || []).map((row) => row.id);
+        // Hosts may see payment proofs for their bookings; customers see their own proofs.
+        const { data: ownRows, error: ownError } = await supabase
+          .from('payment_records')
+          .select('*')
+          .eq('payer_email', email)
+          .order('created_at', { ascending: false });
+        if (ownError) return [];
+        const hostRows = hostBookingIds.length
+          ? await supabase
+              .from('payment_records')
+              .select('*')
+              .in('booking_id', hostBookingIds)
+              .order('created_at', { ascending: false })
+          : { data: [], error: null };
+        if (hostRows.error) return [];
+        const map = new Map<string, any>();
+        [...(ownRows || []), ...(hostRows.data || [])].forEach((row: any) => map.set(row.id, row));
+        const combined = Array.from(map.values()).filter((row: any) => !bookingId || row.booking_id === bookingId);
+        return await Promise.all(combined.map(async (p: any) => ({
           id: p.id,
           bookingId: p.booking_id,
           amount: Number(p.amount),
           currency: p.currency || 'USD',
           paymentMethod: p.payment_method,
           transactionReference: p.transaction_reference,
-          proofImageUrl: p.proof_image_url,
+          proofImageUrl: await resolvePrivateStorageReference(supabase, p.proof_image_url),
           payerName: p.payer_name,
           payerEmail: p.payer_email,
           status: p.status,
           hostNotes: p.host_notes,
           adminNotes: p.admin_notes,
           createdAt: p.created_at,
-        }));
+        })));
       }
-    } catch (err) {
-      console.warn('Notice: Payment records query error:', err);
-    }
 
-    return [];
+      const { data, error } = await query;
+      if (error || !Array.isArray(data)) return [];
+      return await Promise.all(data.map(async (p) => ({
+        id: p.id,
+        bookingId: p.booking_id,
+        amount: Number(p.amount),
+        currency: p.currency || 'USD',
+        paymentMethod: p.payment_method,
+        transactionReference: p.transaction_reference,
+        proofImageUrl: await resolvePrivateStorageReference(supabase, p.proof_image_url),
+        payerName: p.payer_name,
+        payerEmail: p.payer_email,
+        status: p.status,
+        hostNotes: p.host_notes,
+        adminNotes: p.admin_notes,
+        createdAt: p.created_at,
+      })));
+    } catch {
+      return [];
+    }
   });
 }
 
@@ -1259,16 +1445,23 @@ export async function updatePaymentProofStatus(
   if (!supabase) return false;
 
   try {
-    const { error } = await supabase
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    const email = authData.user?.email?.trim().toLowerCase();
+    if (authError || !email) return false;
+
+    const { data, error } = await supabase
       .from('payment_records')
       .update({
         status,
-        admin_notes: notes,
+        host_notes: notes,
         verified_at: status === 'verified' ? new Date().toISOString() : null,
         updated_at: new Date().toISOString(),
       })
-      .eq('id', id);
-    return !error;
+      .eq('id', id)
+      .select('id')
+      .maybeSingle();
+
+    return !error && Boolean(data);
   } catch {
     return false;
   }
@@ -1300,62 +1493,80 @@ export async function submitIdentityVerification(data: {
   documentBackUrl?: string;
   selfieUrl?: string;
 }): Promise<IdentityVerificationRecord | null> {
-  const cleanEmail = data.userEmail.trim().toLowerCase();
-  invalidateServiceCache(`idv:${cleanEmail}`);
-  invalidateServiceCache('idv:all');
-  invalidateServiceCache('admin:stats');
   const supabase = getSupabase();
   if (!supabase) return null;
 
-  const now = new Date().toISOString();
-
-  try {
-    const { data: inserted, error } = await supabase
-      .from('identity_verifications')
-      .insert({
-        user_email: cleanEmail,
-        user_name: data.userName,
-        document_type: data.documentType,
-        document_front_url: data.documentFrontUrl,
-        document_back_url: data.documentBackUrl || null,
-        selfie_url: data.selfieUrl || null,
-        status: 'pending',
-      })
-      .select()
-      .single();
-
-    if (!error && inserted) {
-      await supabase
-        .from('profiles')
-        .update({ identity_status: 'pending', updated_at: now })
-        .eq('email', cleanEmail);
-
-      return {
-        id: inserted.id,
-        userEmail: inserted.user_email,
-        userName: inserted.user_name,
-        documentType: inserted.document_type,
-        documentFrontUrl: inserted.document_front_url,
-        documentBackUrl: inserted.document_back_url,
-        selfieUrl: inserted.selfie_url,
-        status: inserted.status,
-        createdAt: inserted.created_at,
-      };
-    }
-  } catch (err) {
-    console.warn('Notice: Supabase identity verification submit error:', err);
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  const cleanEmail = authData.user?.email?.trim().toLowerCase();
+  if (authError || !cleanEmail || cleanEmail !== data.userEmail.trim().toLowerCase()) {
+    throw new Error('Identity documents can only be submitted for your signed-in account.');
   }
 
-  return null;
+  const privateRefs = [data.documentFrontUrl, data.documentBackUrl, data.selfieUrl].filter(Boolean);
+  if (privateRefs.some((value) => !value?.startsWith('storage://qaaga-private/'))) {
+    throw new Error('Identity documents must be uploaded to private QAAGA storage.');
+  }
+
+  invalidateServiceCache('idv:' + cleanEmail);
+  invalidateServiceCache('idv:all');
+  invalidateServiceCache('admin:stats');
+
+  const { data: inserted, error } = await supabase
+    .from('identity_verifications')
+    .insert({
+      user_email: cleanEmail,
+      user_name: data.userName,
+      document_type: data.documentType,
+      document_front_url: data.documentFrontUrl,
+      document_back_url: data.documentBackUrl || null,
+      selfie_url: data.selfieUrl || null,
+      status: 'pending',
+    })
+    .select()
+    .single();
+
+  if (error || !inserted) {
+    throw new Error('Identity verification request could not be submitted.');
+  }
+
+  const { error: profileStatusError } = await supabase
+    .from('profiles')
+    .update({
+      identity_status: 'pending',
+      updated_at: new Date().toISOString(),
+    })
+    .eq('email', cleanEmail);
+
+  if (profileStatusError) {
+    // The verification request exists and remains pending in its own record.
+    // Do not claim the profile summary has changed when the database rejected it.
+    console.warn('Could not update the profile identity status summary:', profileStatusError.message);
+  }
+
+  return {
+    id: inserted.id,
+    userEmail: inserted.user_email,
+    userName: inserted.user_name,
+    documentType: inserted.document_type,
+    documentFrontUrl: await resolvePrivateStorageReference(supabase, inserted.document_front_url),
+    documentBackUrl: await resolvePrivateStorageReference(supabase, inserted.document_back_url),
+    selfieUrl: await resolvePrivateStorageReference(supabase, inserted.selfie_url),
+    status: inserted.status,
+    createdAt: inserted.created_at,
+  };
 }
 
 export async function getIdentityVerifications(
   userEmail?: string
 ): Promise<IdentityVerificationRecord[]> {
   const cleanEmail = userEmail ? userEmail.trim().toLowerCase() : 'all';
-  return dedupFetch(`idv:${cleanEmail}`, async () => {
-    const supabase = getSupabase();
-    if (!supabase) return [];
+  const supabase = getSupabase();
+  if (!supabase) return [];
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError || !authData.user) return [];
+  const currentEmail = authData.user.email?.trim().toLowerCase();
+  if (userEmail && currentEmail !== cleanEmail && authData.user.app_metadata?.role !== 'admin') return [];
+  return dedupFetch('idv:' + authData.user.id + ':' + cleanEmail, async () => {
 
     try {
       let query = supabase
@@ -1363,28 +1574,27 @@ export async function getIdentityVerifications(
         .select('*')
         .order('created_at', { ascending: false });
       if (userEmail) query = query.eq('user_email', cleanEmail);
-      const { data, error } = await query;
-      if (!error && Array.isArray(data)) {
-        return data.map((v) => ({
-          id: v.id,
-          userEmail: v.user_email,
-          userName: v.user_name,
-          documentType: v.document_type,
-          documentFrontUrl: v.document_front_url,
-          documentBackUrl: v.document_back_url,
-          selfieUrl: v.selfie_url,
-          status: v.status,
-          rejectionReason: v.rejection_reason,
-          reviewedBy: v.reviewed_by,
-          reviewedAt: v.reviewed_at,
-          createdAt: v.created_at,
-        }));
-      }
-    } catch (err) {
-      console.warn('Notice: Identity verifications query error:', err);
-    }
 
-    return [];
+      const { data, error } = await query;
+      if (error || !Array.isArray(data)) return [];
+
+      return await Promise.all(data.map(async (v) => ({
+        id: v.id,
+        userEmail: v.user_email,
+        userName: v.user_name,
+        documentType: v.document_type,
+        documentFrontUrl: await resolvePrivateStorageReference(supabase, v.document_front_url),
+        documentBackUrl: await resolvePrivateStorageReference(supabase, v.document_back_url),
+        selfieUrl: await resolvePrivateStorageReference(supabase, v.selfie_url),
+        status: v.status,
+        rejectionReason: v.rejection_reason,
+        reviewedBy: v.reviewed_by,
+        reviewedAt: v.reviewed_at,
+        createdAt: v.created_at,
+      })));
+    } catch {
+      return [];
+    }
   });
 }
 
@@ -1393,43 +1603,46 @@ export async function updateIdentityVerificationStatus(
   userEmail: string,
   status: 'approved' | 'rejected',
   rejectionReason?: string,
-  reviewedBy: string = 'Super Admin'
+  reviewedBy?: string
 ): Promise<boolean> {
   const cleanEmail = userEmail.trim().toLowerCase();
-  invalidateServiceCache(`idv:${cleanEmail}`);
+  invalidateServiceCache('idv:' + cleanEmail);
   invalidateServiceCache('idv:all');
-  invalidateServiceCache(`profile:${cleanEmail}`);
+  invalidateServiceCache('profile:' + cleanEmail);
   invalidateServiceCache('admin:stats');
   const supabase = getSupabase();
   if (!supabase) return false;
 
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError || authData.user?.app_metadata?.role !== 'admin') return false;
+
   const now = new Date().toISOString();
+  const { data: verification, error: verificationError } = await supabase
+    .from('identity_verifications')
+    .update({
+      status,
+      rejection_reason: rejectionReason || null,
+      reviewed_by: reviewedBy || authData.user.email,
+      reviewed_at: now,
+      updated_at: now,
+    })
+    .eq('id', id)
+    .eq('user_email', cleanEmail)
+    .select('id')
+    .maybeSingle();
 
-  try {
-    await supabase
-      .from('identity_verifications')
-      .update({
-        status,
-        rejection_reason: rejectionReason || null,
-        reviewed_by: reviewedBy,
-        reviewed_at: now,
-        updated_at: now,
-      })
-      .eq('id', id);
+  if (verificationError || !verification) return false;
 
-    await supabase
-      .from('profiles')
-      .update({
-        identity_status: status === 'approved' ? 'verified' : 'rejected',
-        verified: status === 'approved',
-        updated_at: now,
-      })
-      .eq('email', cleanEmail);
+  const { error: profileError } = await supabase
+    .from('profiles')
+    .update({
+      identity_status: status === 'approved' ? 'verified' : 'rejected',
+      verified: status === 'approved',
+      updated_at: now,
+    })
+    .eq('email', cleanEmail);
 
-    return true;
-  } catch {
-    return false;
-  }
+  return !profileError;
 }
 
 /* ========================================================================= */
@@ -1449,92 +1662,72 @@ export interface AdminPlatformStats {
 }
 
 export async function getAdminPlatformStats(): Promise<AdminPlatformStats> {
-  return dedupFetch('admin:stats', async () => {
-    const supabase = getSupabase();
-    if (!supabase) {
-      return {
-        totalUsers: 0,
-        totalHosts: 0,
-        totalProperties: 0,
-        activeProperties: 0,
-        totalBookings: 0,
-        confirmedBookings: 0,
-        pendingBookings: 0,
-        totalGrossRevenueUsd: 0,
-        pendingVerifications: 0,
-        pendingPayments: 0,
-      };
-    }
+  const supabase = getSupabase();
+  if (!supabase) return emptyAdminPlatformStats();
 
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError || authData.user?.app_metadata?.role !== 'admin') return emptyAdminPlatformStats();
+
+  return dedupFetch('admin:stats:' + authData.user.id, async () => {
     try {
       const [
-        { count: userCount },
-        { count: hostCount },
-        { data: props },
-        { data: listingsData },
-        { data: allBookings },
-        { count: pendingIdCount },
-        { count: pendingPayCount },
+        { count: userCount, error: usersError },
+        { count: hostCount, error: hostsError },
+        { data: properties, error: propertiesError },
+        { data: allBookings, error: bookingsError },
+        { count: pendingIdCount, error: idvError },
+        { count: pendingPayCount, error: paymentsError },
       ] = await Promise.all([
         supabase.from('profiles').select('*', { count: 'exact', head: true }),
         supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'host'),
         supabase.from('properties').select('id, status'),
-        supabase.from('listings').select('id, is_active'),
         supabase.from('bookings').select('id, total_usd, status'),
-        supabase
-          .from('identity_verifications')
-          .select('*', { count: 'exact', head: true })
-          .eq('status', 'pending'),
-        supabase
-          .from('payment_records')
-          .select('*', { count: 'exact', head: true })
-          .eq('status', 'pending_review'),
+        supabase.from('identity_verifications').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
+        supabase.from('payment_records').select('*', { count: 'exact', head: true }).eq('status', 'pending_review'),
       ]);
 
-      const properties = Array.isArray(props) ? props : [];
-      const listingsRows = Array.isArray(listingsData) ? listingsData : [];
-      const bookingsList = Array.isArray(allBookings) ? allBookings : [];
+      const errors = [usersError, hostsError, propertiesError, bookingsError, idvError, paymentsError].filter(Boolean);
+      if (errors.length) throw new Error('One or more administrator dashboard queries failed.');
 
-      const totalProps = properties.length + listingsRows.length;
-      const activeProps =
-        properties.filter((p) => p.status === 'active').length +
-        listingsRows.filter((l) => l.is_active !== false).length;
-      const confirmed = bookingsList.filter(
-        (b) => b.status === 'Confirmed' || b.status === 'Accepted'
-      ).length;
-      const pending = bookingsList.filter((b) => b.status === 'Pending').length;
-      const totalRevenue = bookingsList
+      const propertyRows = Array.isArray(properties) ? properties : [];
+      const bookingRows = Array.isArray(allBookings) ? allBookings : [];
+      const confirmed = bookingRows.filter((b) => b.status === 'Confirmed' || b.status === 'Accepted').length;
+      const pending = bookingRows.filter((b) => b.status === 'Pending').length;
+      const revenue = bookingRows
         .filter((b) => b.status !== 'Cancelled' && b.status !== 'Rejected')
         .reduce((sum, b) => sum + (Number(b.total_usd) || 0), 0);
 
       return {
         totalUsers: userCount || 0,
         totalHosts: hostCount || 0,
-        totalProperties: totalProps,
-        activeProperties: activeProps,
-        totalBookings: bookingsList.length,
+        totalProperties: propertyRows.length,
+        activeProperties: propertyRows.filter((property) => property.status === 'active').length,
+        totalBookings: bookingRows.length,
         confirmedBookings: confirmed,
         pendingBookings: pending,
-        totalGrossRevenueUsd: totalRevenue,
+        totalGrossRevenueUsd: revenue,
         pendingVerifications: pendingIdCount || 0,
         pendingPayments: pendingPayCount || 0,
       };
-    } catch (err) {
-      console.warn('Notice: Calculating dynamic platform stats error:', err);
-      return {
-        totalUsers: 0,
-        totalHosts: 0,
-        totalProperties: 0,
-        activeProperties: 0,
-        totalBookings: 0,
-        confirmedBookings: 0,
-        pendingBookings: 0,
-        totalGrossRevenueUsd: 0,
-        pendingVerifications: 0,
-        pendingPayments: 0,
-      };
+    } catch {
+      return emptyAdminPlatformStats();
     }
   });
+}
+
+function emptyAdminPlatformStats(): AdminPlatformStats {
+  return {
+    totalUsers: 0,
+    totalHosts: 0,
+    totalProperties: 0,
+    activeProperties: 0,
+    totalBookings: 0,
+    confirmedBookings: 0,
+    pendingBookings: 0,
+    totalGrossRevenueUsd: 0,
+    pendingVerifications: 0,
+    pendingPayments: 0,
+  };
 }
 
 /* ========================================================================= */
@@ -1543,36 +1736,31 @@ export async function getAdminPlatformStats(): Promise<AdminPlatformStats> {
 export async function getNotificationsFromDatabase(
   recipientEmail: string
 ): Promise<any[]> {
-  const cleanEmail = recipientEmail.trim().toLowerCase();
-  return dedupFetch(`notifications:${cleanEmail}`, async () => {
-    const supabase = getSupabase();
-    if (!supabase || !cleanEmail) return [];
+  const supabase = getSupabase();
+  if (!supabase) return [];
 
-    try {
-      const { data, error } = await supabase
-        .from('notifications')
-        .select('*')
-        .eq('recipient_email', cleanEmail)
-        .order('created_at', { ascending: false });
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  const currentEmail = authData.user?.email?.trim().toLowerCase();
+  const requestedEmail = recipientEmail.trim().toLowerCase();
+  if (authError || !currentEmail || currentEmail !== requestedEmail) return [];
 
-      if (!error && Array.isArray(data)) {
-        return data.map((n) => ({
-          id: n.id,
-          title: n.title,
-          desc: n.message,
-          time: new Date(n.created_at).toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit',
-          }),
-          read: Boolean(n.read),
-          link: n.link,
-          type: n.type,
-        }));
-      }
-    } catch (err) {
-      console.warn('Notice: Notifications query error:', err);
-    }
-    return [];
+  return dedupFetch('notifications:' + (authData.user?.id || currentEmail), async () => {
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('recipient_email', currentEmail)
+      .order('created_at', { ascending: false });
+
+    if (error || !Array.isArray(data)) return [];
+    return data.map((n) => ({
+      id: n.id,
+      title: n.title,
+      desc: n.message,
+      time: new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      read: Boolean(n.read),
+      link: n.link,
+      type: n.type,
+    }));
   });
 }
 

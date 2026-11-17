@@ -15,13 +15,12 @@ export async function generateMetadata(): Promise<Metadata> {
   const activeIcon = branding.faviconUrl || BLANK_TRANSPARENT_ICON;
 
   return {
-    title: 'QAAGA Super Marketplace',
+    title: 'QAAGA | Stays, Experiences & Services',
     description:
-      "qaaga.com is a verified furnished room, apartment & hospitality marketplace for stays, experiences, and local services.",
+      'Discover stays, experiences and local services with QAAGA.',
     openGraph: {
-      title: 'QAAGA Super Marketplace',
-      description:
-        "qaaga.com is a verified furnished room, apartment & hospitality marketplace for stays, experiences, and local services.",
+      title: 'QAAGA | Stays, Experiences & Services',
+      description: 'Discover stays, experiences and local services with QAAGA.',
       type: 'website',
     },
     icons: {
@@ -41,8 +40,7 @@ export const viewport: Viewport = {
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
   const initialBranding = await readServerBranding();
-  const supabaseUrl =
-    process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://d7m4vohy66qcwyxlspmz.supabase.co';
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 
   return (
     <html lang="en">
@@ -53,8 +51,12 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
           rel="stylesheet"
           href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
         />
-        <link rel="preconnect" href={supabaseUrl} crossOrigin="anonymous" />
-        <link rel="dns-prefetch" href={supabaseUrl} />
+        {supabaseUrl ? (
+          <>
+            <link rel="preconnect" href={supabaseUrl} crossOrigin="anonymous" />
+            <link rel="dns-prefetch" href={supabaseUrl} />
+          </>
+        ) : null}
       </head>
       <body className="antialiased bg-white text-slate-900 selection:bg-[#C72B62] selection:text-white">
         <FaviconHeadSync initialBranding={initialBranding} />

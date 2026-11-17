@@ -27,15 +27,14 @@ import {
   XCircle,
 } from 'lucide-react';
 import { BrandLogo } from '@/components/BrandLogo';
+import { getSupabase } from '@/lib/supabaseClient';
 import { ListingImage } from '@/components/ListingCard';
 import {
   DEFAULT_BRANDING,
   GuestProfile,
   SiteBranding,
-  SUPER_ADMIN_EMAIL,
 } from '@/data/listings';
 import {
-  getUserProfileFromDatabase,
   saveUserProfileToDatabase,
   getBookingsFromDatabase,
   cancelBookingInDatabase,
@@ -46,6 +45,7 @@ import {
   getPaymentProofs,
   PaymentProofRecord,
   uploadFileToSupabaseStorage,
+  uploadPrivateFileToSupabaseStorage,
   getNotificationsFromDatabase,
 } from '@/lib/supabaseService';
 
@@ -58,13 +58,15 @@ export default function UserDashboard({
 }: UserDashboardProps) {
   const [activeTab, setActiveTab] = useState<'bookings' | 'profile' | 'verification' | 'payments' | 'notifications'>('bookings');
   const [profile, setProfile] = useState<GuestProfile>({
-    fullName: 'Verified Customer',
-    email: 'customer@qaaga.com',
-    city: 'Kuala Lumpur',
-    role: 'customer',
+    fullName: '',
+    email: '',
+    city: 'Dhaka',
+    role: 'guest',
     verified: false,
     identity_status: 'unverified',
   });
+  const [authState, setAuthState] = useState<'checking' | 'authorized' | 'denied'>('checking');
+  const [dashboardError, setDashboardError] = useState<string | null>(null);
   const [bookings, setBookings] = useState<any[]>([]);
   const [loadingBookings, setLoadingBookings] = useState(true);
   const [payments, setPayments] = useState<PaymentProofRecord[]>([]);
@@ -79,9 +81,10 @@ export default function UserDashboard({
 
   // Payment Upload Modal State
   const [selectedBookingForPayment, setSelectedBookingForPayment] = useState<any | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<string>('bank_transfer');
+  const [paymentMethod, setPaymentMethod] = useState<string>('bkash');
   const [paymentTxRef, setPaymentTxRef] = useState<string>('');
   const [paymentSlipUrl, setPaymentSlipUrl] = useState<string>('');
+  const [paymentSlipStorageRef, setPaymentSlipStorageRef] = useState<string>('');
   const [isUploadingSlip, setIsUploadingSlip] = useState<boolean>(false);
   const [isSubmittingPayment, setIsSubmittingPayment] = useState<boolean>(false);
   const [paymentSuccessMsg, setPaymentSuccessMsg] = useState<string>('');
@@ -91,6 +94,9 @@ export default function UserDashboard({
   const [docFrontUrl, setDocFrontUrl] = useState<string>('');
   const [docBackUrl, setDocBackUrl] = useState<string>('');
   const [docSelfieUrl, setDocSelfieUrl] = useState<string>('');
+  const [docFrontStorageRef, setDocFrontStorageRef] = useState<string>('');
+  const [docBackStorageRef, setDocBackStorageRef] = useState<string>('');
+  const [docSelfieStorageRef, setDocSelfieStorageRef] = useState<string>('');
   const [isUploadingDoc, setIsUploadingDoc] = useState<boolean>(false);
   const [isSubmittingDoc, setIsSubmittingDoc] = useState<boolean>(false);
   const [docSuccessMsg, setDocSuccessMsg] = useState<string>('');
@@ -106,70 +112,117 @@ export default function UserDashboard({
   // Profile Edit State
   const [editName, setEditName] = useState('');
   const [editPhone, setEditPhone] = useState('');
-  const [editCity, setEditCity] = useState('Kuala Lumpur');
+  const [editCity, setEditCity] = useState('Dhaka');
   const [editBio, setEditBio] = useState('');
   const [editAvatarUrl, setEditAvatarUrl] = useState('');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [profileSavedToast, setProfileSavedToast] = useState(false);
 
-  // Hydrate Profile & Data
+  // Restore identity only from a verified Supabase Auth session.
   useEffect(() => {
-    let currentEmail = 'customer@qaaga.com';
-    try {
-      const stored = localStorage.getItem('qaaga_v3_profile');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed.email) {
-          currentEmail = parsed.email;
-          setProfile(parsed);
-          setEditName(parsed.fullName || '');
-          setEditPhone(parsed.phone || '');
-          setEditCity(parsed.city || 'Kuala Lumpur');
-          setEditBio(parsed.bio || '');
-          setEditAvatarUrl(parsed.avatarUrl || '');
-        }
-      }
-    } catch {}
-
     let active = true;
-    setLoadingBookings(true);
-    setLoadingPayments(true);
 
-    Promise.all([
-      getUserProfileFromDatabase(currentEmail),
-      getBookingsFromDatabase(currentEmail),
-      getPaymentProofs(),
-      getIdentityVerifications(currentEmail),
-      getNotificationsFromDatabase(currentEmail),
-    ])
-      .then(([p, bks, pays, idvs, notifs]) => {
-        if (!active) return;
-        if (p) {
-          setProfile(p);
-          setEditName(p.fullName || '');
-          setEditPhone(p.phone || '');
-          setEditCity(p.city || 'Kuala Lumpur');
-          setEditBio(p.bio || '');
-          setEditAvatarUrl(p.avatarUrl || '');
+    const loadDashboard = async () => {
+      const supabase = getSupabase();
+      if (!supabase) {
+        if (active) {
+          setAuthState('denied');
+          setDashboardError('Supabase authentication is not configured.');
         }
-        setBookings(bks || []);
-        const userPays = (pays || []).filter(
-          (r) => r.payerEmail.toLowerCase() === currentEmail.toLowerCase()
-        );
-        setPayments(userPays);
-        setVerifications(idvs || []);
-        setNotifications(notifs || []);
-      })
-      .finally(() => {
-        if (!active) return;
-        setLoadingBookings(false);
-        setLoadingPayments(false);
-      });
+        return;
+      }
 
-    return () => {
-      active = false;
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      const session = sessionData.session;
+      if (sessionError || !session?.access_token || !session.user.email) {
+        if (active) setAuthState('denied');
+        return;
+      }
+
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      const currentEmail = authData.user?.email?.trim().toLowerCase();
+      if (authError || !currentEmail) {
+        if (active) setAuthState('denied');
+        return;
+      }
+
+      const headers = { Authorization: 'Bearer ' + session.access_token };
+      let response = await fetch(
+        '/api/auth/profile?email=' + encodeURIComponent(currentEmail),
+        { headers }
+      );
+      let result = await response.json().catch(() => ({}));
+
+      if (response.status === 404) {
+        const metadata = session.user.user_metadata || {};
+        const fallbackName = metadata.full_name || metadata.name || currentEmail.split('@')[0];
+        response = await fetch('/api/auth/profile', {
+          method: 'PUT',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fullName: String(fallbackName),
+            email: currentEmail,
+            city: 'Dhaka',
+            role: 'guest',
+          }),
+        });
+        result = await response.json().catch(() => ({}));
+      }
+
+      const account = result.profile;
+      if (!response.ok || !account || !['guest', 'customer', 'admin'].includes(account.role)) {
+        if (active) {
+          setAuthState('denied');
+          setDashboardError('This area is for signed-in customers. A host account should use the Host Dashboard.');
+        }
+        return;
+      }
+
+      if (!active) return;
+      const restoredProfile: GuestProfile = {
+        ...account,
+        email: currentEmail,
+        city: account.city || 'Dhaka',
+        role: account.role,
+        verified: Boolean(account.verified),
+      };
+      setProfile(restoredProfile);
+      setEditName(restoredProfile.fullName || '');
+      setEditPhone(restoredProfile.phone || '');
+      setEditCity(restoredProfile.city || 'Dhaka');
+      setEditBio(restoredProfile.bio || '');
+      setEditAvatarUrl(restoredProfile.avatarUrl || '');
+      setAuthState('authorized');
+
+      setLoadingBookings(true);
+      setLoadingPayments(true);
+      const [bks, pays, idvs, notifs] = await Promise.all([
+        getBookingsFromDatabase(currentEmail),
+        getPaymentProofs(),
+        getIdentityVerifications(currentEmail),
+        getNotificationsFromDatabase(currentEmail),
+      ]);
+
+      if (!active) return;
+      setBookings(bks || []);
+      setPayments((pays || []).filter((item) => item.payerEmail?.toLowerCase() === currentEmail));
+      setVerifications(idvs || []);
+      setNotifications(notifs || []);
+      setLoadingBookings(false);
+      setLoadingPayments(false);
     };
+
+    loadDashboard().catch((error: any) => {
+      if (!active) return;
+      setAuthState('denied');
+      setDashboardError(error?.message || 'Unable to load your account dashboard.');
+      setLoadingBookings(false);
+      setLoadingPayments(false);
+    });
+
+    return () => { active = false; };
   }, []);
+
 
   // Save Profile Handler
   const handleSaveProfile = async (e: React.FormEvent) => {
@@ -179,15 +232,20 @@ export default function UserDashboard({
       ...profile,
       fullName: editName.trim() || profile.fullName,
       phone: editPhone.trim() || undefined,
-      city: editCity.trim() || 'Kuala Lumpur',
+      city: editCity.trim() || 'Dhaka',
       bio: editBio.trim() || undefined,
       avatarUrl: editAvatarUrl || undefined,
     };
-    const saved = await saveUserProfileToDatabase(updated);
-    setProfile(saved);
-    setIsSavingProfile(false);
-    setProfileSavedToast(true);
-    setTimeout(() => setProfileSavedToast(false), 3000);
+    try {
+      const saved = await saveUserProfileToDatabase(updated);
+      setProfile(saved);
+      setProfileSavedToast(true);
+      setTimeout(() => setProfileSavedToast(false), 3000);
+    } catch (error: any) {
+      setDashboardError(error?.message || 'Profile could not be saved.');
+    } finally {
+      setIsSavingProfile(false);
+    }
   };
 
   // Avatar Upload Handler
@@ -208,14 +266,15 @@ export default function UserDashboard({
   const handleConfirmCancel = async () => {
     if (!cancelBookingId) return;
     setIsCancelling(true);
-    await cancelBookingInDatabase(cancelBookingId, cancelReason || 'Cancelled by guest');
-    setBookings((prev) =>
-      prev.map((b) =>
-        b.id === cancelBookingId
-          ? { ...b, status: 'Cancelled', cancellationReason: cancelReason }
-          : b
-      )
-    );
+    const saved = await cancelBookingInDatabase(cancelBookingId, cancelReason || 'Cancelled by guest');
+    if (!saved) {
+      setDashboardError('Booking cancellation failed. Please refresh and try again.');
+      setIsCancelling(false);
+      return;
+    }
+    setBookings((prev) => prev.map((b) =>
+      b.id === cancelBookingId ? { ...b, status: 'Cancelled', cancellationReason: cancelReason } : b
+    ));
     setIsCancelling(false);
     setCancelBookingId(null);
     setCancelReason('');
@@ -227,12 +286,15 @@ export default function UserDashboard({
     if (!file) return;
     setIsUploadingSlip(true);
     try {
-      const res = await uploadFileToSupabaseStorage(file, 'qaaga-listings');
-      if (res.url) {
+      const res = await uploadPrivateFileToSupabaseStorage(file, 'payment');
+      if (res.url && res.storageRef) {
         setPaymentSlipUrl(res.url);
+        setPaymentSlipStorageRef(res.storageRef);
+      } else {
+        setDashboardError(res.error || 'Payment slip upload failed.');
       }
-    } catch (err) {
-      console.warn('Slip upload err:', err);
+    } catch (err: any) {
+      setDashboardError(err?.message || 'Payment slip upload failed.');
     } finally {
       setIsUploadingSlip(false);
     }
@@ -241,30 +303,40 @@ export default function UserDashboard({
   // Submit Payment Proof
   const handleSubmitPayment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedBookingForPayment || !paymentSlipUrl) return;
+    if (!selectedBookingForPayment || !paymentSlipStorageRef) {
+      setDashboardError('Upload a payment proof image before submitting.');
+      return;
+    }
     setIsSubmittingPayment(true);
-    const res = await submitPaymentProof({
-      bookingId: selectedBookingForPayment.id,
-      amount: selectedBookingForPayment.totalUsd,
-      currency: 'USD',
-      paymentMethod,
-      transactionReference: paymentTxRef.trim() || `TX-${Date.now().toString().slice(-6)}`,
-      proofImageUrl: paymentSlipUrl,
-      payerName: profile.fullName,
-      payerEmail: profile.email,
-    });
-    if (res) {
+    setDashboardError(null);
+    try {
+      const res = await submitPaymentProof({
+        bookingId: selectedBookingForPayment.id,
+        amount: selectedBookingForPayment.totalUsd,
+        currency: 'USD',
+        paymentMethod,
+        transactionReference: paymentTxRef.trim(),
+        proofImageUrl: paymentSlipStorageRef,
+        payerName: profile.fullName,
+        payerEmail: profile.email,
+      });
+      if (!res) throw new Error('Payment proof could not be saved.');
       setPayments((prev) => [res, ...prev]);
-      setPaymentSuccessMsg('Payment slip submitted successfully! The host will review and verify your booking.');
+      setPaymentSuccessMsg('Payment proof submitted. The host will review it.');
       setTimeout(() => {
         setPaymentSuccessMsg('');
         setSelectedBookingForPayment(null);
         setPaymentSlipUrl('');
+        setPaymentSlipStorageRef('');
         setPaymentTxRef('');
       }, 2500);
+    } catch (error: any) {
+      setDashboardError(error?.message || 'Payment proof could not be submitted.');
+    } finally {
+      setIsSubmittingPayment(false);
     }
-    setIsSubmittingPayment(false);
   };
+
 
   // ID Document Front Upload
   const handleDocUpload = async (
@@ -275,12 +347,25 @@ export default function UserDashboard({
     if (!file) return;
     setIsUploadingDoc(true);
     try {
-      const res = await uploadFileToSupabaseStorage(file, 'qaaga-listings');
-      if (res.url) {
-        if (type === 'front') setDocFrontUrl(res.url);
-        if (type === 'back') setDocBackUrl(res.url);
-        if (type === 'selfie') setDocSelfieUrl(res.url);
+      const res = await uploadPrivateFileToSupabaseStorage(file, 'identity');
+      if (res.url && res.storageRef) {
+        if (type === 'front') {
+          setDocFrontUrl(res.url);
+          setDocFrontStorageRef(res.storageRef);
+        }
+        if (type === 'back') {
+          setDocBackUrl(res.url);
+          setDocBackStorageRef(res.storageRef);
+        }
+        if (type === 'selfie') {
+          setDocSelfieUrl(res.url);
+          setDocSelfieStorageRef(res.storageRef);
+        }
+      } else {
+        setDashboardError(res.error || 'Identity document upload failed.');
       }
+    } catch (error: any) {
+      setDashboardError(error?.message || 'Identity document upload failed.');
     } finally {
       setIsUploadingDoc(false);
     }
@@ -289,34 +374,67 @@ export default function UserDashboard({
   // Submit ID Verification
   const handleSubmitVerification = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!docFrontUrl) return;
+    if (!docFrontStorageRef) {
+      setDashboardError('Upload the front side of your identity document first.');
+      return;
+    }
     setIsSubmittingDoc(true);
-    const res = await submitIdentityVerification({
-      userEmail: profile.email,
-      userName: profile.fullName,
-      documentType: docType,
-      documentFrontUrl: docFrontUrl,
-      documentBackUrl: docBackUrl || undefined,
-      selfieUrl: docSelfieUrl || undefined,
-    });
-    if (res) {
+    setDashboardError(null);
+    try {
+      const res = await submitIdentityVerification({
+        userEmail: profile.email,
+        userName: profile.fullName,
+        documentType: docType,
+        documentFrontUrl: docFrontStorageRef,
+        documentBackUrl: docBackStorageRef || undefined,
+        selfieUrl: docSelfieStorageRef || undefined,
+      });
+      if (!res) throw new Error('Identity verification could not be submitted.');
       setVerifications((prev) => [res, ...prev]);
       setProfile((prev) => ({ ...prev, identity_status: 'pending' }));
-      setDocSuccessMsg('Identity verification documents submitted! Our compliance team will review within 24 hours.');
+      setDocSuccessMsg('Identity documents submitted for review.');
       setTimeout(() => {
         setDocSuccessMsg('');
         setDocFrontUrl('');
         setDocBackUrl('');
         setDocSelfieUrl('');
+        setDocFrontStorageRef('');
+        setDocBackStorageRef('');
+        setDocSelfieStorageRef('');
       }, 3000);
+    } catch (error: any) {
+      setDashboardError(error?.message || 'Identity verification could not be submitted.');
+    } finally {
+      setIsSubmittingDoc(false);
     }
-    setIsSubmittingDoc(false);
   };
+
 
   const isVerifiedUser = profile.verified || profile.identity_status === 'verified';
 
+  if (authState !== 'authorized') {
+    return (
+      <main className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+        <section className="w-full max-w-md rounded-3xl bg-white border border-slate-200 p-8 text-center shadow-sm">
+          <Shield className="mx-auto h-10 w-10 text-slate-400" />
+          <h1 className="mt-4 text-xl font-bold text-slate-900">Customer Dashboard</h1>
+          <p className="mt-2 text-sm text-slate-600">
+            {authState === 'checking' ? 'Checking your QAAGA account…' : (dashboardError || 'Sign in with your customer account to continue.')}
+          </p>
+          {authState === 'denied' && <Link href="/login" className="mt-5 inline-flex rounded-full bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white">Sign in</Link>}
+          <Link href="/" className="mt-4 block text-sm text-slate-500">Back to marketplace</Link>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col">
+      {dashboardError && (
+        <div role="alert" className="mx-auto mt-4 w-full max-w-7xl px-4">
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">{dashboardError}</div>
+        </div>
+      )}
       {/* Top Bar Header */}
       <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
@@ -417,7 +535,7 @@ export default function UserDashboard({
                 )}
               </div>
               <p className="text-xs text-slate-500 mt-1">
-                {profile.email} · {profile.city || 'Kuala Lumpur'} · Customer Hub
+                {profile.email} · {profile.city || 'Dhaka'} · Customer Hub
               </p>
             </div>
           </div>
@@ -558,7 +676,7 @@ export default function UserDashboard({
                 </div>
                 <h3 className="text-sm font-bold text-slate-800">No active bookings found</h3>
                 <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1 mb-4">
-                  You haven&apos;t booked any furnished apartments yet. Explore available residences in Kuala Lumpur.
+                  You haven&apos;t booked any furnished apartments yet. Explore available residences across Dhaka.
                 </p>
                 <Link
                   href="/properties"
@@ -612,7 +730,7 @@ export default function UserDashboard({
                           </h3>
                           <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
                             <MapPin size={13} className="text-slate-400" />
-                            <span>{bk.area || 'Kuala Lumpur'}</span>
+                            <span>{bk.area || 'Dhaka'}</span>
                           </p>
 
                           <div className="text-xs text-slate-600 mt-2 flex items-center gap-3 flex-wrap">
@@ -763,7 +881,7 @@ export default function UserDashboard({
                     type="text"
                     value={editCity}
                     onChange={(e) => setEditCity(e.target.value)}
-                    placeholder="Kuala Lumpur"
+                    placeholder="Dhaka"
                     className="w-full h-10 px-3 rounded-xl border border-slate-200 text-xs font-semibold focus:outline-none focus:border-[#C72B62]"
                   />
                 </div>
@@ -803,7 +921,7 @@ export default function UserDashboard({
               <div>
                 <h2 className="text-base font-bold text-slate-900">Government Identity Verification</h2>
                 <p className="text-xs text-slate-500">
-                  Required by Malaysian hospitality regulations to book furnished apartments
+                  Complete identity verification to help protect guests and hosts.
                 </p>
               </div>
             </div>
@@ -1077,8 +1195,10 @@ export default function UserDashboard({
                     onChange={(e) => setPaymentMethod(e.target.value)}
                     className="w-full h-10 px-3 rounded-xl border border-slate-200 text-xs font-semibold bg-white"
                   >
-                    <option value="bank_transfer">Direct Bank Transfer (Maybank / CIMB / Public Bank)</option>
-                    <option value="tng_ewallet">Touch &apos;n Go eWallet</option>
+                    <option value="bkash">bKash</option>
+                    <option value="nagad">Nagad</option>
+                    <option value="rocket">Rocket</option>
+                    <option value="bank_transfer">Bank Transfer (Bangladesh)</option>
                     <option value="wise">Wise (International Transfer)</option>
                     <option value="cash_checkin">Cash upon Check-in (Host approved)</option>
                   </select>
@@ -1093,7 +1213,7 @@ export default function UserDashboard({
                     required
                     value={paymentTxRef}
                     onChange={(e) => setPaymentTxRef(e.target.value)}
-                    placeholder="e.g. MBB-987654321 / Wise-3498"
+                    placeholder="e.g. bKash TXN ID / Bank transaction reference"
                     className="w-full h-10 px-3 rounded-xl border border-slate-200 text-xs font-semibold"
                   />
                 </div>

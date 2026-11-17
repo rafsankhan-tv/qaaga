@@ -69,7 +69,7 @@ export const SearchGuestSelector: React.FC<SearchGuestSelectorProps> = ({
       <div className="flex items-center justify-between pb-2 border-b border-slate-100">
         <div>
           <h4 className="text-sm font-bold text-slate-900">Guests & Travelers</h4>
-          <p className="text-xs text-slate-500">
+          <p data-testid="guest-summary" className="text-xs text-slate-500">
             {totalGuests} guest{totalGuests > 1 ? 's' : ''}
             {infants > 0 ? `, ${infants} infant${infants > 1 ? 's' : ''}` : ''}
             {pets > 0 ? `, ${pets} pet${pets > 1 ? 's' : ''}` : ''}

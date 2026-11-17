@@ -1032,6 +1032,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
             {/* Segment 1: Where */}
             <div
               onClick={() => handleOpenSearchModal('where')}
+              data-testid="search-where-segment"
               className={`flex-1 min-w-0 py-1.5 sm:py-2 px-3 sm:px-4 rounded-full flex items-center justify-between gap-1 cursor-pointer transition-all ${
                 activePopover === 'where'
                   ? 'bg-white shadow-[0_4px_16px_rgba(0,0,0,0.12)] border border-slate-200/90'
@@ -1099,6 +1100,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
             <button
               type="button"
               onClick={() => handleOpenSearchModal('when')}
+              data-testid="search-when-segment"
               className={`w-[28%] sm:w-[32%] min-w-0 text-left py-1.5 sm:py-2 px-3 sm:px-4 rounded-full transition-all cursor-pointer ${
                 activePopover === 'when'
                   ? 'bg-white shadow-[0_4px_16px_rgba(0,0,0,0.12)] border border-slate-200/90'
@@ -1137,6 +1139,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
             <button
               type="button"
               onClick={() => handleOpenSearchModal('who')}
+              data-testid="search-who-segment"
               className={`w-[24%] sm:w-[26%] min-w-0 text-left py-1.5 sm:py-2 px-3 sm:px-4 rounded-full transition-all cursor-pointer ${
                 activePopover === 'who'
                   ? 'bg-white shadow-[0_4px_16px_rgba(0,0,0,0.12)] border border-slate-200/90'

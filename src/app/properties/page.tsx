@@ -5,9 +5,9 @@ import { SearchGridSkeleton } from '@/components/Skeletons';
 export const dynamic = 'force-dynamic';
 
 export const metadata = {
-  title: 'Furnished Apartments & Rooms — QAAGA.com',
+  title: 'Furnished Apartments & Rooms in Bangladesh — QAAGA',
   description:
-    'Browse verified furnished apartments, sky condos, and private rooms across Kuala Lumpur on QAAGA.com.',
+    'Browse verified furnished apartments and private rooms across Dhaka and Bangladesh on QAAGA.com.',
 };
 
 const PropertiesCatalogClient = dynamicLoader(

@@ -15,6 +15,14 @@ export default defineConfig({
     trace: 'on-first-retry',
     headless: true,
   },
+  webServer: process.env.PLAYWRIGHT_TEST_BASE_URL
+    ? undefined
+    : {
+        command: 'bun run start',
+        url: 'http://127.0.0.1:3000/api/health',
+        reuseExistingServer: !process.env.CI,
+        timeout: 120_000,
+      },
   projects: [
     {
       name: 'chromium',

@@ -31,44 +31,56 @@ interface DatePreset {
   display: string;
 }
 
-const PRESETS: DatePreset[] = [
-  {
-    id: 'weekend',
-    label: 'This weekend',
-    tag: 'Nov 14 – 16 · 2 nights',
-    checkIn: '2026-11-14',
-    checkOut: '2026-11-16',
-    nights: 2,
-    display: 'Nov 14 – 16',
-  },
-  {
-    id: 'next-week',
-    label: 'Next weekend',
-    tag: 'Nov 20 – 23 · 3 nights',
-    checkIn: '2026-11-20',
-    checkOut: '2026-11-23',
-    nights: 3,
-    display: 'Nov 20 – 23',
-  },
-  {
-    id: '5-nights',
-    label: '5 nights stay',
-    tag: 'Dec 1 – 6 · 5 nights',
-    checkIn: '2026-12-01',
-    checkOut: '2026-12-06',
-    nights: 5,
-    display: 'Dec 1 – 6',
-  },
-  {
-    id: '1-week',
-    label: '1 week getaway',
-    tag: 'Dec 12 – 19 · 7 nights',
-    checkIn: '2026-12-12',
-    checkOut: '2026-12-19',
-    nights: 7,
-    display: 'Dec 12 – 19',
-  },
-];
+function getDhakaToday(): Date {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Dhaka',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+  const part = (type: string) => Number(parts.find((item) => item.type === type)?.value);
+  return new Date(part('year'), part('month') - 1, part('day'));
+}
+
+function addDays(date: Date, days: number): Date {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function toLocalIso(date: Date): string {
+  return formatIso(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function makePreset(id: string, label: string, start: Date, nights: number): DatePreset {
+  const end = addDays(start, nights);
+  const checkIn = toLocalIso(start);
+  const checkOut = toLocalIso(end);
+  const range = formatDisplayRange(checkIn, checkOut);
+
+  return {
+    id,
+    label,
+    tag: range.display + ' · ' + range.nights + ' nights',
+    checkIn,
+    checkOut,
+    nights: range.nights,
+    display: range.display,
+  };
+}
+
+function buildDatePresets(): DatePreset[] {
+  const today = getDhakaToday();
+  const daysUntilFriday = (5 - today.getDay() + 7) % 7 || 7;
+  const thisWeekend = addDays(today, daysUntilFriday);
+
+  return [
+    makePreset('weekend', 'This weekend', thisWeekend, 2),
+    makePreset('next-week', 'Next weekend', addDays(thisWeekend, 7), 3),
+    makePreset('5-nights', '5 nights stay', addDays(today, 14), 5),
+    makePreset('1-week', '1 week getaway', addDays(today, 21), 7),
+  ];
+}
 
 const MONTH_NAMES = [
   'January',
@@ -102,8 +114,8 @@ const SHORT_MONTHS = [
 
 const DAY_NAMES = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 
-// Today's anchor in app: Nov 8, 2026
-const TODAY_STR = '2026-11-08';
+// Use Bangladesh-local dates so booking availability never relies on a stale hard-coded day.
+const TODAY_STR = toLocalIso(getDhakaToday());
 
 function formatIso(year: number, monthZeroIdx: number, day: number): string {
   const m = String(monthZeroIdx + 1).padStart(2, '0');
@@ -135,6 +147,8 @@ function formatDisplayRange(inIso: string, outIso: string): { display: string; n
   return { display, nights };
 }
 
+const PRESETS: DatePreset[] = buildDatePresets();
+
 export const SearchCalendar: React.FC<SearchCalendarProps> = ({
   checkInDate,
   checkOutDate,
@@ -144,14 +158,14 @@ export const SearchCalendar: React.FC<SearchCalendarProps> = ({
   onNext,
   isMobileSheet = false,
 }) => {
-  // Month offset relative to November 2026 (index 0 = Nov 2026, 1 = Dec 2026, etc.)
+  // Month offset is relative to the current Bangladesh-local month.
   const [monthOffset, setMonthOffset] = useState<number>(0);
   const [hoveredDate, setHoveredDate] = useState<string | null>(null);
 
   // Determine current viewing months
   const leftMonthData = useMemo(() => {
-    // base: November 2026
-    const base = new Date(2026, 10, 1);
+    const today = getDhakaToday();
+    const base = new Date(today.getFullYear(), today.getMonth(), 1);
     const target = new Date(base.getFullYear(), base.getMonth() + monthOffset, 1);
     const year = target.getFullYear();
     const month = target.getMonth();
@@ -162,7 +176,8 @@ export const SearchCalendar: React.FC<SearchCalendarProps> = ({
   }, [monthOffset]);
 
   const rightMonthData = useMemo(() => {
-    const base = new Date(2026, 10, 1);
+    const today = getDhakaToday();
+    const base = new Date(today.getFullYear(), today.getMonth(), 1);
     const target = new Date(base.getFullYear(), base.getMonth() + monthOffset + 1, 1);
     const year = target.getFullYear();
     const month = target.getMonth();
@@ -399,6 +414,9 @@ export const SearchCalendar: React.FC<SearchCalendarProps> = ({
               <button
                 key={p.id}
                 type="button"
+                data-testid={`calendar-preset-${p.id}`}
+                data-check-in={p.checkIn}
+                data-check-out={p.checkOut}
                 onClick={() => handleApplyPreset(p)}
                 className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all cursor-pointer ${
                   isActive

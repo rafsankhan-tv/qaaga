@@ -4,8 +4,8 @@ import { readServerBranding } from '@/lib/brandingStorage.server';
 export const dynamic = 'force-dynamic';
 
 export const metadata = {
-  title: 'Hospitality & Airport Services in KL — QAAGA Super Marketplace',
-  description: 'Book verified airport transfers, private chef dining, and concierge services on qaaga.com.',
+  title: 'Hospitality & Airport Services in Dhaka — QAAGA Super Marketplace',
+  description: 'Book verified airport transfers, private chef dining, and concierge services across Dhaka on qaaga.com.',
 };
 
 export default async function ServicesPage() {

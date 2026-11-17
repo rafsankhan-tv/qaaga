@@ -59,13 +59,17 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = React.memo(
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-3 sm:p-5"
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="qaaga-listing-detail-title"
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
         className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[90vh] overflow-y-auto"
       >
         {/* Sticky Modal Top Bar */}
         <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-xs px-5 sm:px-7 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <h3 className="text-lg sm:text-xl font-bold text-slate-950 truncate">
+            <h3 id="qaaga-listing-detail-title" className="text-lg sm:text-xl font-bold text-slate-950 truncate">
               {listing.title}
             </h3>
             <div className="flex items-center gap-2 text-xs text-slate-600 tabular-nums mt-0.5">
@@ -336,20 +340,19 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = React.memo(
               </div>
 
               {bookingSuccessCode ? (
-                <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-950 space-y-2">
+                <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-950 space-y-2">
                   <div className="flex items-center gap-2 font-bold text-sm">
-                    <ShieldCheck size={18} className="text-emerald-600 shrink-0" />
-                    <span>Booking Confirmed!</span>
+                    <ShieldCheck size={18} className="text-amber-600 shrink-0" />
+                    <span>Booking request sent</span>
                   </div>
-                  <p className="text-xs text-emerald-800">
-                    Confirmation code:{' '}
-                    <strong className="font-mono">{bookingSuccessCode}</strong>. Added to
-                    your Trips & Notifications.
+                  <p className="text-xs text-amber-800">
+                    Request reference:{' '}
+                    <strong className="font-mono">{bookingSuccessCode}</strong>. Your request is pending host approval.
                   </p>
                   <button
                     type="button"
                     onClick={onOpenTrips}
-                    className="w-full py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold cursor-pointer"
+                    className="w-full py-2 rounded-xl bg-amber-700 hover:bg-amber-800 text-white text-xs font-semibold cursor-pointer"
                   >
                     View in Trips
                   </button>

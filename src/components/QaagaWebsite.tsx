@@ -45,6 +45,7 @@ import {
   reconcileBrandingOnLoad,
 } from '@/lib/brandingStorage.client';
 import { smoothScrollTo } from './SmoothScrollProvider';
+import { getSupabase } from '@/lib/supabaseClient';
 import {
   cancelBookingInDatabase,
   deleteListingFromDatabase,
@@ -58,6 +59,8 @@ import {
   insertReviewToDatabase,
   saveUserProfileToDatabase,
   sendMessageToDatabase,
+  createThreadInDatabase,
+  updateBookingStatus,
   subscribeToSupabaseTable,
 } from '@/lib/supabaseService';
 
@@ -200,11 +203,11 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
   const [threads, setThreads] = useState<HostThread[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string>('');
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
-  const [currency, setCurrency] = useState<CurrencyCode>('USD');
+  const [currency, setCurrency] = useState<CurrencyCode>('BDT');
   const [profile, setProfile] = useState<GuestProfile>({
     fullName: 'Guest User',
     email: '',
-    city: 'Kuala Lumpur',
+    city: 'Dhaka',
     verified: false,
     role: 'guest',
   });
@@ -277,34 +280,9 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
         const parsed = JSON.parse(savedWish);
         if (Array.isArray(parsed)) setWishlistIds(parsed);
       }
-      const savedBookings = localStorage.getItem(STORAGE_KEYS.bookings);
-      if (savedBookings) {
-        const parsed = JSON.parse(savedBookings);
-        if (Array.isArray(parsed)) setBookings(parsed);
-      }
-      const savedThreads = localStorage.getItem(STORAGE_KEYS.threads);
-      if (savedThreads) {
-        const parsed = JSON.parse(savedThreads);
-        if (Array.isArray(parsed) && parsed.length > 0) setThreads(parsed);
-      }
-      const savedNotifs = localStorage.getItem(STORAGE_KEYS.notifications);
-      if (savedNotifs) {
-        const parsed = JSON.parse(savedNotifs);
-        if (Array.isArray(parsed)) setNotifications(parsed);
-      }
-      const savedCustom = localStorage.getItem(STORAGE_KEYS.customListings);
-      if (savedCustom) {
-        const parsed = JSON.parse(savedCustom);
-        if (Array.isArray(parsed) && parsed.length > 0) setDbListings(parsed);
-      }
       const savedCurrency = localStorage.getItem(STORAGE_KEYS.currency) as CurrencyCode | null;
       if (savedCurrency && CURRENCY_CONFIG[savedCurrency]) {
         setCurrency(savedCurrency);
-      }
-      const savedProfile = localStorage.getItem(STORAGE_KEYS.profile);
-      if (savedProfile) {
-        const parsed = JSON.parse(savedProfile);
-        if (parsed && typeof parsed.fullName === 'string') setProfile(parsed);
       }
       const syncLocal = readSyncLocalBranding();
       if (syncLocal && syncLocal.revision >= (initialBranding?.revision || 0)) {
@@ -365,6 +343,103 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
     };
   }, [initialBranding]);
 
+  // Restore the authenticated Supabase session after reload and OAuth redirects.
+  useEffect(() => {
+    let active = true;
+    const guestProfile: GuestProfile = {
+      fullName: 'Guest User',
+      email: '',
+      city: 'Dhaka',
+      verified: false,
+      role: 'guest',
+    };
+
+    const restoreAuthenticatedProfile = async () => {
+      const supabase = getSupabase();
+      if (!supabase) {
+        if (active) setProfile(guestProfile);
+        return;
+      }
+
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      const session = sessionData.session;
+      if (sessionError || !session?.access_token || !session.user.email) {
+        if (active) {
+          setProfile(guestProfile);
+          setBookings([]);
+          setThreads([]);
+          setNotifications([]);
+        }
+        return;
+      }
+
+      const accessToken = session.access_token;
+      const email = session.user.email.trim().toLowerCase();
+      const headers = { Authorization: 'Bearer ' + accessToken };
+
+      let response = await fetch('/api/auth/profile?email=' + encodeURIComponent(email), { headers });
+      if (response.status === 404) {
+        const metadata = session.user.user_metadata || {};
+        const fallbackName =
+          metadata.full_name ||
+          metadata.name ||
+          metadata.preferred_username ||
+          email.split('@')[0].replace(/[._-]/g, ' ');
+
+        response = await fetch('/api/auth/profile', {
+          method: 'PUT',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fullName: String(fallbackName).trim() || 'Member',
+            email,
+            city: 'Dhaka',
+            role: 'guest',
+          }),
+        });
+      }
+
+      if (!response.ok) {
+        throw new Error('Unable to restore your QAAGA profile.');
+      }
+
+      const result = await response.json();
+      const profileData = result.profile || {};
+      if (!active) return;
+
+      setProfile({
+        fullName: profileData.fullName || 'Member',
+        email,
+        city: profileData.city || 'Dhaka',
+        verified: Boolean(profileData.verified),
+        role: profileData.role === 'admin' ? 'admin' : profileData.role === 'host' ? 'host' : 'guest',
+        phone: profileData.phone,
+        avatarUrl: profileData.avatarUrl,
+        bio: profileData.bio,
+      });
+    };
+
+    restoreAuthenticatedProfile().catch((error) => {
+      if (active) {
+        setProfile(guestProfile);
+        showToast({ message: error?.message || 'Could not restore your account session.' });
+      }
+    });
+
+    const supabase = getSupabase();
+    const authSubscription = supabase?.auth.onAuthStateChange(() => {
+      queueMicrotask(() => {
+        restoreAuthenticatedProfile().catch(() => {
+          if (active) setProfile(guestProfile);
+        });
+      });
+    });
+
+    return () => {
+      active = false;
+      authSubscription?.data.subscription.unsubscribe();
+    };
+  }, [showToast]);
+
   const loadListingsFromSupabase = useCallback(async () => {
     setIsLoadingListings(true);
     setListingsError(null);
@@ -413,7 +488,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
     });
 
     // 4. Supabase Realtime Channels
-    const unsubListings = subscribeToSupabaseTable('listings', (payload) => {
+    const unsubListings = subscribeToSupabaseTable('public_property_feed', (payload) => {
       if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
         const item = payload.new;
         if (item) {
@@ -421,19 +496,19 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
             id: String(item.id),
             title: item.title,
             area: item.area,
-            city: item.city || 'Kuala Lumpur',
-            subType: item.sub_type || 'Apartment',
+            city: item.city || 'Dhaka',
+            subType: item.property_type || item.room_type || 'Apartment',
             category: item.category || 'stay',
-            twoNightPriceUsd: Number(item.two_night_price_usd) || 120,
-            rating: String(item.rating || '5.0'),
+            twoNightPriceUsd: Number(item.two_night_price_usd) || 0,
+            rating: String(item.rating || '0'),
             reviewsCount: Number(item.reviews_count) || 0,
             guestFavorite: Boolean(item.guest_favorite),
-            image: item.image || '/assets/kl-ui/kl-1.jpg',
-            gallery: Array.isArray(item.gallery) ? item.gallery : [item.image || '/assets/kl-ui/kl-1.jpg'],
+            image: item.image || '',
+            gallery: Array.isArray(item.gallery) ? item.gallery : (item.image ? [item.image] : []),
             maxGuests: Number(item.max_guests) || 2,
             bedrooms: item.bedrooms || '1 bedroom',
             hostName: item.host_name || 'Host',
-            hostYears: Number(item.host_years) || 1,
+            hostYears: 0,
             amenities: Array.isArray(item.amenities) ? item.amenities : [],
             description: item.description || '',
             inPopularKL: Boolean(item.in_popular_kl),
@@ -481,10 +556,60 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
       }
     });
 
+    const unsubThreads = subscribeToSupabaseTable('threads', (payload) => {
+      if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+        const row = payload.new;
+        if (row) {
+          const mappedThread: HostThread = {
+            id: String(row.id),
+            hostName: row.host_name || 'Host',
+            listingTitle: row.listing_title || 'Property conversation',
+            listingImage: row.listing_image || '',
+            unread: Boolean(row.unread),
+            messages: [],
+          };
+          setThreads((prev) => [
+            mappedThread,
+            ...prev.filter((thread) => thread.id !== mappedThread.id),
+          ]);
+          setActiveThreadId((prev) => prev || mappedThread.id);
+        }
+      } else if (payload.eventType === 'DELETE') {
+        const id = String(payload.old?.id || '');
+        if (id) setThreads((prev) => prev.filter((thread) => thread.id !== id));
+      }
+    });
+
+    const unsubMessages = subscribeToSupabaseTable('messages', (payload) => {
+      if (payload.eventType !== 'INSERT') return;
+      const row = payload.new;
+      if (!row?.thread_id || !row?.id) return;
+      setThreads((prev) =>
+        prev.map((thread) => {
+          if (thread.id !== String(row.thread_id)) return thread;
+          if (thread.messages.some((message) => message.id === String(row.id))) return thread;
+          return {
+            ...thread,
+            messages: [
+              ...thread.messages,
+              {
+                id: String(row.id),
+                sender: row.sender === 'host' ? 'host' : 'guest',
+                text: row.text || '',
+                time: row.time || row.created_at || 'Just now',
+              },
+            ],
+          };
+        })
+      );
+    });
+
     return () => {
       active = false;
       unsubListings();
       unsubBookings();
+      unsubThreads();
+      unsubMessages();
     };
   }, [profile.email]);
 
@@ -498,44 +623,9 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
   useEffect(() => {
     if (!hydrated) return;
     try {
-      localStorage.setItem(STORAGE_KEYS.bookings, JSON.stringify(bookings));
-    } catch {}
-  }, [bookings, hydrated]);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    try {
-      localStorage.setItem(STORAGE_KEYS.threads, JSON.stringify(threads));
-    } catch {}
-  }, [threads, hydrated]);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    try {
-      localStorage.setItem(STORAGE_KEYS.notifications, JSON.stringify(notifications));
-    } catch {}
-  }, [notifications, hydrated]);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    try {
-      localStorage.setItem(STORAGE_KEYS.customListings, JSON.stringify(dbListings));
-    } catch {}
-  }, [dbListings, hydrated]);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    try {
       localStorage.setItem(STORAGE_KEYS.currency, currency);
     } catch {}
   }, [currency, hydrated]);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    try {
-      localStorage.setItem(STORAGE_KEYS.profile, JSON.stringify(profile));
-    } catch {}
-  }, [profile, hydrated]);
 
   // Global Escape handler for modals & popovers
   useEffect(() => {
@@ -560,13 +650,14 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
 
   const handleUpdateBranding = useCallback(
     async (next: SiteBranding, toastMsg?: string) => {
-      setBranding(next);
-      brandingRef.current = next;
-      const saved = await persistBrandingEverywhere(next);
-      setBranding(saved);
-      brandingRef.current = saved;
-      if (toastMsg) {
-        showToast({ message: toastMsg });
+      try {
+        const saved = await persistBrandingEverywhere(next);
+        setBranding(saved);
+        brandingRef.current = saved;
+        if (toastMsg) showToast({ message: toastMsg });
+      } catch (error: any) {
+        showToast({ message: error?.message || 'Branding could not be saved.' });
+        throw error;
       }
     },
     [showToast]
@@ -577,29 +668,31 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
       ...brandingRef.current,
       logoUrl: null,
     };
-    setBranding(removed);
-    brandingRef.current = removed;
-    const savedRemoved = await persistBrandingEverywhere(removed);
-    setBranding(savedRemoved);
-    brandingRef.current = savedRemoved;
+    try {
+      const savedRemoved = await persistBrandingEverywhere(removed);
+      setBranding(savedRemoved);
+      brandingRef.current = savedRemoved;
 
-    showToast({
-      message: 'Logo removed permanently',
-      undoLabel: 'Restore',
-      onUndo: () => {
-        const restored: SiteBranding = {
-          ...brandingRef.current,
-          logoUrl: DEFAULT_BRANDING.logoUrl,
-        };
-        setBranding(restored);
-        brandingRef.current = restored;
-        persistBrandingEverywhere(restored).then((saved) => {
-          setBranding(saved);
-          brandingRef.current = saved;
-        });
-        setToast(null);
-      },
-    });
+      showToast({
+        message: 'Logo removed permanently',
+        undoLabel: 'Restore',
+        onUndo: () => {
+          const restored: SiteBranding = {
+            ...brandingRef.current,
+            logoUrl: DEFAULT_BRANDING.logoUrl,
+          };
+          persistBrandingEverywhere(restored).then((saved) => {
+            setBranding(saved);
+            brandingRef.current = saved;
+            setToast(null);
+          }).catch((error: any) => {
+            showToast({ message: error?.message || 'Logo restore failed.' });
+          });
+        },
+      });
+    } catch (error: any) {
+      showToast({ message: error?.message || 'Logo could not be removed.' });
+    }
   }, [showToast]);
 
   const handleRestoreDefaultLogo = useCallback(async () => {
@@ -607,13 +700,16 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
       ...brandingRef.current,
       logoUrl: DEFAULT_BRANDING.logoUrl,
     };
-    setBranding(restored);
-    brandingRef.current = restored;
-    const saved = await persistBrandingEverywhere(restored);
-    setBranding(saved);
-    brandingRef.current = saved;
-    showToast({ message: 'Restored official qaaga.com logo' });
+    try {
+      const saved = await persistBrandingEverywhere(restored);
+      setBranding(saved);
+      brandingRef.current = saved;
+      showToast({ message: 'Restored official qaaga.com logo' });
+    } catch (error: any) {
+      showToast({ message: error?.message || 'Default logo could not be restored.' });
+    }
   }, [showToast]);
+
 
   /* ======================================================================= */
   /* COMPUTED DATA & PRICE FORMATTER                                         */
@@ -895,6 +991,50 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
     }
   };
 
+  const toLocalIsoDate = (value: Date) => {
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, '0');
+    const day = String(value.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const formatDateRange = (startIso: string, endIso: string) => {
+    const start = new Date(`${startIso}T00:00:00`);
+    const end = new Date(`${endIso}T00:00:00`);
+    const fmt = (value: Date) =>
+      value.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return `${fmt(start)} – ${fmt(end)}`;
+  };
+
+  const handleSelectDatePreset = (option: (typeof DATE_OPTIONS)[number]) => {
+    setSelectedDates(option);
+    if (!option.nights || option.id === 'default-2') {
+      setCheckInIso(null);
+      setCheckOutIso(null);
+      return;
+    }
+
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() + 1);
+    const end = new Date(start);
+    end.setDate(end.getDate() + option.nights);
+    const startIso = toLocalIsoDate(start);
+    const endIso = toLocalIsoDate(end);
+    const display = formatDateRange(startIso, endIso);
+
+    setCheckInIso(startIso);
+    setCheckOutIso(endIso);
+    setCustomCheckInDay(start.getDate());
+    setCustomCheckOutDay(end.getDate());
+    setSelectedDates({
+      ...option,
+      label: display,
+      display,
+      tag: `${display} · ${option.nights} nights`,
+    });
+  };
+
   const handleSelectDateRange = (
     start: string | null,
     end: string | null,
@@ -921,35 +1061,49 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
   };
 
   const handleSelectCalendarDay = (day: number) => {
-    if (customCheckInDay === null || (customCheckInDay !== null && customCheckOutDay !== null)) {
-      setCustomCheckInDay(day);
-      setCustomCheckOutDay(null);
-      const nextDisplay = `${calendarMonth} ${day} – ${calendarMonth} ${Math.min(
-        calendarMonth === 'Nov' ? 30 : 31,
-        day + 2
-      )}`;
-      setSelectedDates({
-        id: `custom-${calendarMonth}-${day}`,
-        label: nextDisplay,
-        display: nextDisplay,
-        nights: 2,
-        tag: `${nextDisplay} · 2 nights`,
-      });
-    } else if (day > customCheckInDay) {
-      setCustomCheckOutDay(day);
-      const nights = Math.max(1, day - customCheckInDay);
-      const nextDisplay = `${calendarMonth} ${customCheckInDay} – ${calendarMonth} ${day}`;
-      setSelectedDates({
-        id: `custom-${calendarMonth}-${customCheckInDay}-${day}`,
-        label: nextDisplay,
-        display: nextDisplay,
-        nights,
-        tag: `${nextDisplay} · ${nights} night${nights > 1 ? 's' : ''}`,
-      });
-    } else {
-      setCustomCheckInDay(day);
-      setCustomCheckOutDay(null);
+    const now = new Date();
+    const monthIndex = calendarMonth === 'Nov' ? 10 : 11;
+    let year = now.getFullYear();
+    if (monthIndex < now.getMonth()) year += 1;
+
+    const candidate = new Date(year, monthIndex, day);
+    candidate.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (candidate < today) {
+      showToast({ message: 'Past dates cannot be selected. Choose a future date.' });
+      return;
     }
+
+    const candidateIso = toLocalIsoDate(candidate);
+    if (!checkInIso || checkOutIso || candidateIso <= checkInIso) {
+      setCheckInIso(candidateIso);
+      setCheckOutIso(null);
+      setCustomCheckInDay(day);
+      setCustomCheckOutDay(null);
+      setSelectedDates({
+        id: `custom-${candidateIso}`,
+        label: `${calendarMonth} ${day} – Select check-out`,
+        display: '',
+        nights: 2,
+        tag: 'Choose your check-out date',
+      });
+      return;
+    }
+
+    const start = new Date(`${checkInIso}T00:00:00`);
+    const nights = Math.round((candidate.getTime() - start.getTime()) / 86400000);
+    const display = formatDateRange(checkInIso, candidateIso);
+    setCheckOutIso(candidateIso);
+    setCustomCheckOutDay(day);
+    setSelectedDates({
+      id: `custom-${checkInIso}-${candidateIso}`,
+      label: display,
+      display,
+      nights,
+      tag: `${display} · ${nights} night${nights > 1 ? 's' : ''}`,
+    });
   };
 
   const handleChangeGuestCount = (
@@ -1039,130 +1193,140 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
     [navigateTo]
   );
 
-  const handleConfirmBooking = (nights: number, guestsCount: number) => {
+  const handleConfirmBooking = async (nights: number, guestsCount: number) => {
     if (!selectedListing) return;
-    const code = `QG-KL${Math.floor(1000 + Math.random() * 9000)}`;
-    const totalUsd = Math.round((selectedListing.twoNightPriceUsd / 2) * nights);
-    const dateRange = selectedDates.display || 'Nov 14 – Nov 16';
 
+    if (!profile.email) {
+      setIsAuthModalOpen(true);
+      showToast({ message: 'Sign in before sending a booking request.' });
+      return;
+    }
+    if (!checkInIso || !checkOutIso) {
+      showToast({ message: 'Choose a valid check-in and check-out date first.' });
+      setActivePopover('when');
+      return;
+    }
+    const start = new Date(`${checkInIso}T00:00:00`);
+    const end = new Date(`${checkOutIso}T00:00:00`);
+    const actualNights = Math.round((end.getTime() - start.getTime()) / 86400000);
+    if (!Number.isFinite(actualNights) || actualNights < 1 || end <= start) {
+      showToast({ message: 'The selected date range is invalid.' });
+      return;
+    }
+
+    const confirmationCode = `QG-${Date.now().toString().slice(-8)}`;
+    const totalUsd = Math.round((selectedListing.twoNightPriceUsd / 2) * actualNights);
+    const dateRange = formatDateRange(checkInIso, checkOutIso);
     const newBooking: BookingRecord = {
-      id: `bk-${Date.now()}`,
-      confirmationCode: code,
+      id: `bk-${crypto.randomUUID()}`,
+      confirmationCode,
       listingId: selectedListing.id,
+      checkInDate: checkInIso,
+      checkOutDate: checkOutIso,
       title: selectedListing.title,
       area: `${selectedListing.area}, ${selectedListing.city}`,
       image: selectedListing.image,
       checkInLabel: dateRange,
-      nights,
+      nights: actualNights,
       guests: guestsCount,
       totalUsd,
       hostName: selectedListing.hostName,
-      status: 'Confirmed',
+      status: 'Pending',
     };
 
-    setBookings((prev) => [newBooking, ...prev]);
-    insertBookingToDatabase(newBooking, profile.email, profile.fullName).catch((err) =>
-      console.warn('Booking sync notice:', err)
-    );
-
-    setNotifications((prev) => [
-      {
-        id: `notif-${Date.now()}`,
-        title: `Reservation confirmed · ${code}`,
-        body: `${selectedListing.title} (${dateRange} · ${nights} night${
-          nights > 1 ? 's' : ''
-        }) is confirmed.`,
-        time: 'Just now',
-        unread: true,
-        actionType: 'trips',
-      },
-      ...prev,
-    ]);
-    setBookingSuccessCode(code);
-    showToast({ message: `Reservation confirmed! Code: ${code}` });
+    try {
+      const savedBooking = await insertBookingToDatabase(
+        newBooking,
+        profile.email,
+        profile.fullName
+      );
+      setBookings((prev) => [savedBooking, ...prev]);
+      setNotifications((prev) => [
+        {
+          id: `notif-${Date.now()}`,
+          title: `Booking request sent · ${confirmationCode}`,
+          body: `${selectedListing.title} (${dateRange}) is awaiting host approval.`,
+          time: 'Just now',
+          unread: true,
+          actionType: 'trips',
+        },
+        ...prev,
+      ]);
+      setBookingSuccessCode(confirmationCode);
+      showToast({ message: `Booking request sent. Awaiting host approval · ${confirmationCode}` });
+    } catch (error: any) {
+      showToast({ message: error?.message || 'Booking could not be saved. Please try again.' });
+    }
   };
 
-  const handleMessageHostFromListing = (item: QaagaListing) => {
-    const existing = threads.find((t) => t.listingTitle === item.title);
+  const handleMessageHostFromListing = async (item: QaagaListing) => {
+    if (!profile.email) {
+      setIsAuthModalOpen(true);
+      showToast({ message: 'Sign in before messaging a host.' });
+      return;
+    }
+    const existing = threads.find((thread) => thread.listingTitle === item.title);
     if (existing) {
       setActiveThreadId(existing.id);
-    } else {
-      const created: HostThread = {
-        id: `thread-${Date.now()}`,
-        hostName: item.hostName,
-        listingTitle: item.title,
-        listingImage: item.image,
-        unread: false,
-        messages: [
-          {
-            id: `msg-${Date.now()}`,
-            sender: 'host',
-            text: `Hi ${profile.fullName.split(' ')[0]}! Let me know any questions about ${item.title} in ${item.area}.`,
-            time: 'Just now',
-          },
-        ],
-      };
+      setSelectedListing(null);
+      setIsMessagesOpen(true);
+      return;
+    }
+
+    try {
+      const created = await createThreadInDatabase({ propertyId: item.id });
       setThreads((prev) => [created, ...prev]);
       setActiveThreadId(created.id);
+      setSelectedListing(null);
+      setIsMessagesOpen(true);
+    } catch (error: any) {
+      showToast({ message: error?.message || 'Could not start this conversation.' });
     }
-    setSelectedListing(null);
-    setIsMessagesOpen(true);
   };
 
-  const handleSendMessage = (text: string) => {
+  const handleSendMessage = async (text: string) => {
     const targetId = activeThreadId || threads[0]?.id;
-    if (!targetId) return;
+    if (!targetId || !profile.email) {
+      showToast({ message: 'Sign in and open a conversation before sending a message.' });
+      return;
+    }
 
-    sendMessageToDatabase(targetId, {
+    const cleanText = text.trim();
+    if (!cleanText) return;
+
+    const sent = await sendMessageToDatabase(targetId, {
       sender: 'guest',
-      text,
-      time: 'Just now',
-    }).catch((err) => console.warn('Message sync notice:', err));
-
-    const activeThread = threads.find((t) => t.id === targetId);
-    const hostName = activeThread?.hostName || 'Host';
-    const listingTitle = activeThread?.listingTitle || 'your stay';
-
-    setNotifications((prev) => [
-      {
-        id: `notif-${Date.now()}`,
-        title: `Host reply from ${hostName}`,
-        body: `"${listingTitle}": Dates are available and smart-lock self check-in is ready whenever you arrive.`,
-        time: 'Just now',
-        unread: true,
-        actionType: 'messages',
-      },
-      ...prev,
-    ]);
+      text: cleanText,
+      time: new Date().toISOString(),
+    });
+    if (!sent) {
+      showToast({ message: 'Message was not sent. Check your connection and try again.' });
+      return;
+    }
 
     setThreads((prev) =>
-      prev.map((t) =>
-        t.id === targetId
+      prev.map((thread) =>
+        thread.id === targetId
           ? {
-              ...t,
+              ...thread,
               unread: false,
               messages: [
-                ...t.messages,
+                ...thread.messages,
                 {
-                  id: `msg-${Date.now()}`,
+                  id: `msg-${crypto.randomUUID()}`,
                   sender: 'guest',
-                  text,
-                  time: 'Just now',
-                },
-                {
-                  id: `msg-reply-${Date.now() + 1}`,
-                  sender: 'host',
-                  text: 'Thanks for reaching out! Dates are available and smart-lock self check-in is ready whenever you arrive.',
+                  text: cleanText,
                   time: 'Just now',
                 },
               ],
             }
-          : t
+          : thread
       )
     );
+    showToast({ message: 'Message sent.' });
   };
 
-  const handlePublishHostListing = (data: {
+  const handlePublishHostListing = async (data: {
     title: string;
     area: string;
     category: 'stay' | 'experiences' | 'services';
@@ -1170,84 +1334,80 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
     photo: string;
     guestFav: boolean;
   }) => {
+    if (!profile.email) {
+      setIsAuthModalOpen(true);
+      showToast({ message: 'Sign in before publishing a property.' });
+      return;
+    }
+
     const newItem: QaagaListing = {
-      id: `host-${Date.now()}`,
+      id: `host-${crypto.randomUUID()}`,
+      hostEmail: profile.email,
       title: data.title,
       area: data.area,
-      city: 'Kuala Lumpur',
-      subType:
-        data.category === 'stay'
-          ? 'apartments'
-          : data.category === 'experiences'
-          ? 'culture'
-          : 'concierge',
+      city: profile.city || 'Dhaka',
+      subType: data.category === 'stay' ? 'Apartment' : data.category,
       twoNightPriceUsd: data.twoNightUsd,
-      rating: '5.0',
-      reviewsCount: 1,
-      guestFavorite: data.guestFav,
+      rating: '0.0',
+      reviewsCount: 0,
+      guestFavorite: false,
       image: data.photo,
-      gallery: [data.photo, '/assets/clean-rooms/room-gulshan-studio.jpg'],
+      gallery: [data.photo],
       category: data.category,
       maxGuests: 4,
-      bedrooms:
-        data.category === 'stay'
-          ? '1 bedroom · 2 beds · 1 bath'
-          : 'Hosted session · Up to 4 guests',
+      bedrooms: data.category === 'stay' ? '1 bedroom · 1 bed · 1 bath' : 'Hosted session · Up to 4 guests',
       hostName: profile.fullName,
-      hostYears: 2,
-      amenities: [
-        'Verified qaaga.com Host',
-        'Instant Confirmation',
-        'High-Speed Wi-Fi',
-        'QaagaCover Included',
-      ],
-      description: `Hosted by ${profile.fullName} in ${data.area}, Kuala Lumpur. Thoughtfully prepared space with seamless check-in and skyline neighborhood access.`,
-      inInitialRecent: true,
-      inPopularKL: true,
+      hostYears: 0,
+      amenities: [],
+      description: `Hosted by ${profile.fullName} in ${data.area}, ${profile.city || 'Dhaka'}.`,
+      inPopularKL: false,
     };
 
-    setDbListings((prev) => [newItem, ...prev]);
-    setRecentlyViewedIds((prev) => [newItem.id, ...prev]);
-    insertListingToDatabase(newItem).catch((err) =>
-      console.warn('Listing sync notice:', err)
-    );
-
-    setIsHostModalOpen(false);
-    if (data.category !== 'stay' && activeCategory !== 'all') {
-      setActiveCategory(data.category);
+    try {
+      const saved = await insertListingToDatabase(newItem);
+      setDbListings((prev) => [saved, ...prev]);
+      setRecentlyViewedIds((prev) => [saved.id, ...prev]);
+      setIsHostModalOpen(false);
+      if (data.category !== 'stay' && activeCategory !== 'all') {
+        setActiveCategory(data.category);
+      }
+      showToast({ message: `"${saved.title}" submitted for QAAGA review. It will appear publicly after approval.` });
+    } catch (error: any) {
+      showToast({ message: error?.message || 'Listing was not saved. Please try again.' });
     }
-    showToast({ message: `Published "${newItem.title}" live on qaaga.com` });
   };
 
-  const handleDeleteCustomListing = (id: string) => {
+  const handleDeleteCustomListing = async (id: string) => {
+    const deleted = await deleteListingFromDatabase(id);
+    if (!deleted) {
+      showToast({ message: 'Listing could not be deleted. Check your account permissions.' });
+      return;
+    }
     setDbListings((prev) => prev.filter((item) => item.id !== id));
     setWishlistIds((prev) => prev.filter((wId) => wId !== id));
     setRecentlyViewedIds((prev) => prev.filter((rId) => rId !== id));
-    deleteListingFromDatabase(id).catch((err) =>
-      console.warn('Listing delete sync notice:', err)
-    );
-    showToast({ message: 'Removed host listing' });
+    showToast({ message: 'Listing removed successfully.' });
   };
 
-  const handleAddReview = (rating: number, comment: string) => {
-    if (!selectedListing) return;
-    const rev: ListingReview = {
-      id: `rev-${Date.now()}`,
-      author: profile.fullName || 'Verified Guest',
-      date: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
-      rating,
-      comment,
-    };
-    setReviewsByListing((prev) => ({
-      ...prev,
-      [selectedListing.id]: [rev, ...(prev[selectedListing.id] || [])],
-    }));
-    insertReviewToDatabase(selectedListing.id, {
-      author: profile.fullName || 'Verified Guest',
-      rating,
-      comment,
-    }).catch((err) => console.warn('Review sync notice:', err));
-    showToast({ message: 'Your guest review has been posted' });
+  const handleAddReview = async (rating: number, comment: string) => {
+    if (!selectedListing || !profile.email) {
+      showToast({ message: 'Sign in before submitting a review.' });
+      return;
+    }
+    try {
+      const savedReview = await insertReviewToDatabase(selectedListing.id, {
+        author: profile.fullName,
+        rating,
+        comment,
+      });
+      setReviewsByListing((prev) => ({
+        ...prev,
+        [selectedListing.id]: [savedReview, ...(prev[selectedListing.id] || [])],
+      }));
+      showToast({ message: 'Your review has been saved.' });
+    } catch (error: any) {
+      showToast({ message: error?.message || 'Your review could not be saved.' });
+    }
   };
 
   const handleClickNotification = (notif: AppNotification) => {
@@ -1286,7 +1446,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
           if (!val) setSearchSubmitted(false);
         }}
         selectedDates={selectedDates}
-        onSelectDates={setSelectedDates}
+        onSelectDates={handleSelectDatePreset}
         calendarMonth={calendarMonth}
         onToggleCalendarMonth={() =>
           setCalendarMonth((prev) => (prev === 'Nov' ? 'Dec' : 'Nov'))
@@ -1385,7 +1545,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
                 </h2>
                 <p className="text-[13px] text-slate-500 mt-0.5">
                   {[
-                    whereQuery ? `Destination: ${whereQuery}` : 'All Kuala Lumpur',
+                    whereQuery ? `Destination: ${whereQuery}` : 'All Dhaka',
                     selectedDates.display || '2 nights',
                     guestSummaryText || 'Any group size',
                   ].join(' · ')}
@@ -1409,7 +1569,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
                   No exact matches found for those filters
                 </p>
                 <p className="text-xs text-slate-500 max-w-md mx-auto">
-                  Try searching Bukit Bintang, Kampung Bahru, KLCC, Mont Kiara, or reset
+                  Try searching Gulshan, Banani, Dhanmondi, Uttara, or Mirpur, or reset
                   guest counts to explore all available stays and experiences.
                 </p>
                 <button
@@ -1611,7 +1771,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
                   )}
                 </section>
 
-                {/* ROW 3: Popular homes in Kuala Lumpur */}
+                {/* ROW 3: Popular homes in Dhaka */}
                 {popularKLListings.length > 0 && (
                   <section aria-labelledby="heading-popular-kl" className="space-y-3.5">
                     <div className="flex items-start justify-between gap-4">
@@ -1623,7 +1783,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
                             setExplorerSort('recommended');
                             setExplorerCollection({
                               mode: 'popular-kl',
-                              title: 'Popular homes in Kuala Lumpur',
+                              title: 'Popular homes in Dhaka',
                             });
                           }}
                           className="group inline-flex items-center gap-2 text-left cursor-pointer"
@@ -1632,14 +1792,14 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
                             id="heading-popular-kl"
                             className="text-[20px] sm:text-[22px] font-bold text-slate-950 tracking-[-0.02em] group-hover:text-[#C72B62] transition-colors"
                           >
-                            Popular homes in Kuala Lumpur
+                            Popular homes in Dhaka
                           </h2>
                           <span className="w-7 h-7 rounded-full bg-slate-100 group-hover:bg-[#C72B62] group-hover:text-white text-slate-800 flex items-center justify-center transition-colors shrink-0">
                             <ArrowRight size={15} strokeWidth={2.3} />
                           </span>
                         </button>
                         <p className="text-[13px] sm:text-[13.5px] text-slate-500 mt-0.5">
-                          Malaysian capital with skyline views
+                          Dhaka city stays and furnished apartments
                         </p>
                       </div>
 
@@ -1701,7 +1861,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
                             setExplorerSort('recommended');
                             setExplorerCollection({
                               mode: 'experiences-services',
-                              title: 'Experiences & services in Kuala Lumpur',
+                              title: 'Experiences & services in Dhaka',
                             });
                           }}
                           className="group inline-flex items-center gap-2 text-left cursor-pointer"
@@ -1710,14 +1870,14 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
                             id="heading-experiences-services"
                             className="text-[20px] sm:text-[22px] font-bold text-slate-950 tracking-[-0.02em] group-hover:text-[#C72B62] transition-colors"
                           >
-                            Experiences & services in Kuala Lumpur
+                            Experiences & services in Dhaka
                           </h2>
                           <span className="w-7 h-7 rounded-full bg-slate-100 group-hover:bg-[#C72B62] group-hover:text-white text-slate-800 flex items-center justify-center transition-colors shrink-0">
                             <ArrowRight size={15} strokeWidth={2.3} />
                           </span>
                         </button>
                         <p className="text-[13px] sm:text-[13.5px] text-slate-500 mt-0.5">
-                          Local night-market tours, private chefs, airport chauffeurs & spa care
+                          Local food walks, private chefs, airport transfers and wellness services
                         </p>
                       </div>
 
@@ -1777,10 +1937,10 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
               <div>
                 <h1 className="text-2xl sm:text-[26px] font-bold text-slate-950 tracking-[-0.02em]">
                   {activeCategory === 'stay'
-                    ? 'Stays in Kuala Lumpur'
+                    ? 'Stays in Dhaka'
                     : activeCategory === 'experiences'
-                    ? 'Experiences in Kuala Lumpur'
-                    : 'Hospitality Services in Kuala Lumpur'}
+                    ? 'Experiences in Dhaka'
+                    : 'Hospitality Services in Dhaka'}
                 </h1>
                 <p className="text-xs sm:text-sm text-slate-500 mt-1">
                   {activeCategory === 'stay'
@@ -1889,15 +2049,15 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
                 <BrandLogo branding={branding} variant="footer" />
               </button>
               <p className="leading-relaxed text-slate-500">
-                Stays, local experiences, and hospitality services across Kuala Lumpur —
-                from Bukit Bintang penthouses to Kampung Bahru skyline condos.
+                Stays, local experiences, and hospitality services across Dhaka —
+                from furnished Gulshan apartments to family stays in Uttara.
               </p>
             </div>
 
             <div className="space-y-2">
-              <p className="font-bold text-slate-900">Explore Kuala Lumpur</p>
+              <p className="font-bold text-slate-900">Explore Dhaka</p>
               <ul className="space-y-1.5">
-                {['Bukit Bintang', 'Kampung Bahru', 'KLCC', 'Mont Kiara'].map((hood) => (
+                {['Gulshan', 'Banani', 'Dhanmondi', 'Uttara', 'Mirpur'].map((hood) => (
                   <li key={hood}>
                     <button
                       type="button"
@@ -2011,7 +2171,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
             <div className="flex items-center gap-3">
               <span className="inline-flex items-center gap-1 text-slate-700 font-semibold">
                 <Globe size={14} className="text-[#C72B62]" />
-                <span>English (US)</span>
+                <span>English</span>
               </span>
               <span aria-hidden="true">·</span>
               <div className="flex items-center gap-1">
@@ -2239,12 +2399,16 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
         <TripsModal
           bookings={bookings}
           formatPrice={formatPrice}
-          onCancelBooking={(id) => {
-            setBookings((prev) => prev.filter((b) => b.id !== id));
-            cancelBookingInDatabase(id).catch((err) =>
-              console.warn('Cancel booking sync notice:', err)
-            );
-            showToast({ message: 'Reservation cancelled' });
+          onCancelBooking={async (id) => {
+            const saved = await updateBookingStatus(id, 'Cancelled', 'Cancelled by administrator');
+            if (!saved) {
+              showToast({ message: 'Reservation could not be cancelled.' });
+              return;
+            }
+            setBookings((prev) => prev.map((booking) =>
+              booking.id === id ? { ...booking, status: 'Cancelled' } : booking
+            ));
+            showToast({ message: 'Reservation cancelled.' });
           }}
           onOpenListingById={(listingId) => {
             const match = allListings.find((item) => item.id === listingId);
@@ -2295,24 +2459,35 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
             navigateTo('/host');
           }}
           onSave={async (updated) => {
-            setProfile(updated);
             try {
-              await saveUserProfileToDatabase(updated);
-            } catch {}
-            showToast({ message: 'Account profile updated successfully' });
+              const saved = await saveUserProfileToDatabase(updated);
+              setProfile(saved);
+              showToast({ message: 'Account profile updated successfully' });
+            } catch (error: any) {
+              showToast({ message: error?.message || 'Profile could not be saved.' });
+            }
           }}
-          onLogout={() => {
+          onLogout={async () => {
+            const supabase = getSupabase();
+            if (supabase) {
+              const { error } = await supabase.auth.signOut();
+              if (error) {
+                showToast({ message: 'Sign out failed. Please try again.' });
+                return;
+              }
+            }
             const guest: GuestProfile = {
               fullName: 'Guest User',
               email: '',
-              city: 'Kuala Lumpur',
+              city: 'Dhaka',
               verified: false,
               role: 'guest',
             };
             setProfile(guest);
-            try {
-              localStorage.removeItem(STORAGE_KEYS.profile);
-            } catch {}
+            setBookings([]);
+            setThreads([]);
+            setNotifications([]);
+            setWishlistIds([]);
             showToast({ message: 'Signed out successfully' });
             setIsProfileOpen(false);
             navigateTo('/');
@@ -2373,11 +2548,6 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
           profile={profile}
           onUpdateProfile={(updated) => {
             setProfile(updated);
-            try {
-              localStorage.setItem(STORAGE_KEYS.profile, JSON.stringify(updated));
-            } catch {
-              // ignore
-            }
           }}
           onOpenAdminModal={() => {
             setIsAdminOpen(true);

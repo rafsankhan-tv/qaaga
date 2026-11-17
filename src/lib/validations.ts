@@ -4,11 +4,11 @@ export const ListingSchema = z.object({
   id: z.string().min(1),
   title: z.string().min(3, 'Title must be at least 3 characters').max(120),
   area: z.string().min(2, 'Area is required'),
-  city: z.string().default('Kuala Lumpur'),
+  city: z.string().default('Dhaka'),
   subType: z.string().default('Apartment'),
   category: z.enum(['stay', 'experiences', 'services']),
   twoNightPriceUsd: z.number().positive('Price must be greater than 0').max(10000),
-  rating: z.string().default('5.0'),
+  rating: z.string().default('0'),
   reviewsCount: z.number().int().nonnegative().default(0),
   guestFavorite: z.boolean().default(false),
   image: z.string().min(1, 'An image is required'),
@@ -16,7 +16,7 @@ export const ListingSchema = z.object({
   maxGuests: z.number().int().min(1).max(30).default(2),
   bedrooms: z.string().default('1 bedroom'),
   hostName: z.string().min(2).default('Host'),
-  hostYears: z.number().int().nonnegative().default(1),
+  hostYears: z.number().int().nonnegative().default(0),
   amenities: z.array(z.string()).default([]),
   description: z.string().default(''),
 });
@@ -35,7 +35,7 @@ export const BookingSchema = z.object({
   guests: z.number().int().min(1).max(30),
   totalUsd: z.number().positive(),
   hostName: z.string().min(1),
-  status: z.enum(['Confirmed', 'Upcoming', 'Completed', 'Cancelled']).default('Confirmed'),
+  status: z.enum(['Pending', 'Confirmed', 'Accepted', 'Rejected', 'Upcoming', 'Completed', 'Cancelled']).default('Pending'),
 });
 
 export const ReviewSchema = z.object({
@@ -55,10 +55,12 @@ export const MessageSchema = z.object({
 export const ProfileSchema = z.object({
   fullName: z.string().min(2, 'Name must be at least 2 characters').max(60),
   email: z.string().email('Please enter a valid email address'),
-  city: z.string().min(2).max(60).default('Kuala Lumpur'),
-  phone: z.string().optional(),
-  verified: z.boolean().default(false),
-  role: z.enum(['guest', 'host', 'admin']).default('guest'),
+  city: z.string().min(2).max(60).default('Dhaka'),
+  phone: z.string().trim().max(30).optional(),
+  avatarUrl: z.string().url().optional(),
+  bio: z.string().trim().max(500).optional(),
+  // Admin is never a self-service role; it must be granted in trusted server-side metadata.
+  role: z.enum(['guest', 'host']).default('guest'),
 });
 
 export type ValidatedListing = z.infer<typeof ListingSchema>;

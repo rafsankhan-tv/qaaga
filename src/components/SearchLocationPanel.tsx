@@ -27,60 +27,60 @@ export interface LocationItem {
 
 export const POPULAR_LOCATIONS: LocationItem[] = [
   {
-    id: 'all-kl',
-    name: 'All Kuala Lumpur',
-    subtitle: 'Explore all skyline neighborhoods across KL',
+    id: 'all-dhaka',
+    name: 'All Dhaka',
+    subtitle: 'Explore furnished stays across Dhaka',
     category: 'all',
     iconType: 'city',
   },
   {
-    id: 'klcc',
-    name: 'KLCC',
-    subtitle: 'Petronas Twin Towers, KLCC Park & luxury skyline suites',
+    id: 'gulshan',
+    name: 'Gulshan',
+    subtitle: 'Furnished apartments, business stays and city dining',
     category: 'city',
     iconType: 'landmark',
   },
   {
-    id: 'bukit-bintang',
-    name: 'Bukit Bintang',
-    subtitle: 'Golden Triangle, Pavilion KL, luxury shopping & nightlife',
-    category: 'lifestyle',
-    iconType: 'shopping',
-  },
-  {
-    id: 'bangsar',
-    name: 'Bangsar & South',
-    subtitle: 'Trendy artisanal cafes, nightlife & expat community',
+    id: 'banani',
+    name: 'Banani',
+    subtitle: 'Serviced apartments, cafes and convenient city access',
     category: 'lifestyle',
     iconType: 'cafe',
   },
   {
-    id: 'mont-kiara',
-    name: 'Mont Kiara',
-    subtitle: 'Upscale leafy residential enclave & international dining',
-    category: 'suburb',
-    iconType: 'nature',
-  },
-  {
-    id: 'kampung-bahru',
-    name: 'Kampung Bahru',
-    subtitle: 'Heritage Malay enclave, traditional street food & skyline views',
-    category: 'heritage',
-    iconType: 'food',
-  },
-  {
-    id: 'damansara',
-    name: 'Damansara & TTDI',
-    subtitle: 'Lush greenery, cafes, upscale boutiques & quiet retreats',
+    id: 'dhanmondi',
+    name: 'Dhanmondi',
+    subtitle: 'Residential apartments and local neighbourhood amenities',
     category: 'suburb',
     iconType: 'home',
   },
   {
-    id: 'chinatown',
-    name: 'Chinatown & Petaling Street',
-    subtitle: 'Cultural heritage, bustling night markets & boutique hostels',
+    id: 'uttara',
+    name: 'Uttara',
+    subtitle: 'Family-friendly stays and airport-area accommodation',
+    category: 'suburb',
+    iconType: 'nature',
+  },
+  {
+    id: 'mirpur',
+    name: 'Mirpur',
+    subtitle: 'Residential stays with access to local shopping and transit',
+    category: 'suburb',
+    iconType: 'home',
+  },
+  {
+    id: 'bashundhara',
+    name: 'Bashundhara',
+    subtitle: 'Modern residential stays and shopping access',
+    category: 'lifestyle',
+    iconType: 'shopping',
+  },
+  {
+    id: 'old-dhaka',
+    name: 'Old Dhaka',
+    subtitle: 'Historic streets, culture and traditional food',
     category: 'heritage',
-    iconType: 'culture',
+    iconType: 'food',
   },
 ];
 
@@ -112,7 +112,7 @@ export const SearchLocationPanel: React.FC<SearchLocationPanelProps> = ({
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed)) {
-          setRecentSearches(parsed.slice(0, 4));
+          setRecentSearches(parsed.filter((item) => !/kuala lumpur|bukit bintang|kampung bahru|klcc|mont kiara|bangsar/i.test(String(item))).slice(0, 4));
         }
       }
     } catch {
@@ -121,7 +121,7 @@ export const SearchLocationPanel: React.FC<SearchLocationPanelProps> = ({
   }, []);
 
   const saveToRecent = (destName: string) => {
-    if (!destName || destName === 'All Kuala Lumpur') return;
+    if (!destName || destName === 'All Dhaka') return;
     try {
       const updated = [destName, ...recentSearches.filter((item) => item !== destName)].slice(0, 4);
       setRecentSearches(updated);
@@ -132,7 +132,7 @@ export const SearchLocationPanel: React.FC<SearchLocationPanelProps> = ({
   };
 
   const handleSelect = (name: string) => {
-    const chosen = name === 'All Kuala Lumpur' ? '' : name;
+    const chosen = name === 'All Dhaka' ? '' : name;
     if (chosen) {
       saveToRecent(chosen);
     }
@@ -202,7 +202,7 @@ export const SearchLocationPanel: React.FC<SearchLocationPanelProps> = ({
               onClose();
             }
           }}
-          placeholder="Search destinations in Kuala Lumpur"
+          placeholder="Search destinations in Dhaka"
           className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-10 pr-10 py-2.5 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-[#C72B62] focus:bg-white transition-all shadow-inner"
           autoFocus
         />
@@ -264,11 +264,11 @@ export const SearchLocationPanel: React.FC<SearchLocationPanelProps> = ({
         </div>
       )}
 
-      {/* Popular Locations in Kuala Lumpur */}
+      {/* Popular destinations in Dhaka */}
       <div className="space-y-1">
         <div className="flex items-center justify-between px-2 pb-1">
           <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-            {searchInput.trim() ? `Matching destinations (${filteredLocations.length})` : 'Popular destinations in Kuala Lumpur'}
+            {searchInput.trim() ? `Matching destinations (${filteredLocations.length})` : 'Popular destinations in Dhaka'}
           </span>
           {whereQuery && (
             <button
@@ -284,7 +284,7 @@ export const SearchLocationPanel: React.FC<SearchLocationPanelProps> = ({
         <div className="space-y-1 max-h-[300px] sm:max-h-[340px] overflow-y-auto scrollbar-none pr-0.5">
           {filteredLocations.map((loc) => {
             const isSelected =
-              (whereQuery === '' && loc.name === 'All Kuala Lumpur') ||
+              (whereQuery === '' && loc.name === 'All Dhaka') ||
               whereQuery.toLowerCase() === loc.name.toLowerCase();
 
             return (
@@ -292,7 +292,8 @@ export const SearchLocationPanel: React.FC<SearchLocationPanelProps> = ({
                 key={loc.id}
                 type="button"
                 onClick={() => handleSelect(loc.name)}
-                className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-2xl transition-all text-left cursor-pointer group ${
+                data-testid={`destination-option-${loc.id}`}
+                className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-2xl transition-colors text-left cursor-pointer group ${
                   isSelected
                     ? 'bg-[#C72B62]/10 border border-[#C72B62]/30 text-slate-900'
                     : 'hover:bg-slate-50 border border-transparent'
@@ -300,7 +301,7 @@ export const SearchLocationPanel: React.FC<SearchLocationPanelProps> = ({
               >
                 <div className="flex items-center gap-3.5 min-w-0">
                   <span
-                    className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 ${
+                    className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
                       isSelected ? 'bg-[#C72B62] text-white' : 'bg-slate-100 group-hover:bg-[#C72B62]/10'
                     }`}
                   >
@@ -331,14 +332,14 @@ export const SearchLocationPanel: React.FC<SearchLocationPanelProps> = ({
             <div className="py-8 text-center space-y-2">
               <p className="text-xs font-bold text-slate-700">No destination matching "{searchInput}"</p>
               <p className="text-[11px] text-slate-400">
-                You can search for any property by name or click below to explore all Kuala Lumpur stays.
+                Search for a property by name or explore all available stays in Dhaka.
               </p>
               <button
                 type="button"
-                onClick={() => handleSelect('All Kuala Lumpur')}
+                onClick={() => handleSelect('All Dhaka')}
                 className="mt-2 px-3.5 py-1.5 rounded-full bg-slate-900 text-white text-xs font-semibold cursor-pointer"
               >
-                Explore All Kuala Lumpur
+                Explore All Dhaka
               </button>
             </div>
           )}

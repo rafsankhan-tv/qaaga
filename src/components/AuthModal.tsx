@@ -25,7 +25,6 @@ import {
   testSupabaseConnection,
   SupabaseTestResult,
 } from '@/lib/supabaseClient';
-import { saveUserProfileToDatabase } from '@/lib/supabaseService';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -49,7 +48,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [emailOrPhone, setEmailOrPhone] = useState('');
   const [step, setStep] = useState<'input' | 'otp' | 'complete_profile' | 'success'>('input');
   const [otpDigits, setOtpDigits] = useState(['', '', '', '', '', '']);
-  const [generatedCode, setGeneratedCode] = useState('123456');
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [resendCooldown, setResendCooldown] = useState(0);
@@ -58,7 +56,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [fullNameInput, setFullNameInput] = useState('');
   const [phoneInput, setPhoneInput] = useState('');
   const [cityInput, setCityInput] = useState('Dhaka');
-  const [roleInput, setRoleInput] = useState<'guest' | 'host' | 'admin'>('guest');
+  const [roleInput, setRoleInput] = useState<'guest' | 'host'>('guest');
   const [bioInput, setBioInput] = useState('');
   const [avatarIndex, setAvatarIndex] = useState(0);
 
@@ -102,11 +100,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   const validateInput = (val: string) => {
     const trimmed = val.trim();
-    if (!trimmed) return 'Please enter an email or phone number';
-    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed);
-    const isPhone = /^[0-9+\s\-()]{7,16}$/.test(trimmed);
-    if (!isEmail && !isPhone) {
-      return 'Please enter a valid email address or phone number';
+    if (!trimmed) return 'Please enter your email address';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      return 'Please enter a valid email address';
     }
     return '';
   };
@@ -122,8 +118,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     setLoading(true);
 
-    const isEmail = emailOrPhone.includes('@');
-    const cleanTarget = emailOrPhone.trim();
+    const cleanTarget = emailOrPhone.trim().toLowerCase();
 
     try {
       // 1. Trigger server-side OTP dispatcher
@@ -134,24 +129,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       });
       const data = await res.json();
 
-      if (data?.code) {
-        setGeneratedCode(String(data.code));
-      } else {
-        const fallbackCode = Math.floor(100000 + Math.random() * 900000).toString();
-        setGeneratedCode(fallbackCode);
-      }
-
-      // 2. Also invoke client-side Supabase if available
-      const supabase = getSupabase();
-      if (supabase && isEmail) {
-        try {
-          await supabase.auth.signInWithOtp({
-            email: cleanTarget,
-            options: { shouldCreateUser: true },
-          });
-        } catch {
-          // Handled via server OTP route
-        }
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || 'Unable to send verification email.');
       }
 
       setLoading(false);
@@ -159,16 +138,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setResendCooldown(30);
 
       // Pre-populate name prediction for Complete Profile step
-      if (isEmail) {
+      {
         const prefix = cleanTarget.split('@')[0].replace(/[._-]/g, ' ');
         const cap = prefix
           .split(' ')
           .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
           .join(' ');
         setFullNameInput(cap || 'Guest User');
-      } else {
-        setFullNameInput('User ' + cleanTarget.slice(-4));
-        setPhoneInput(cleanTarget);
       }
 
       onShowToast({
@@ -176,13 +152,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       });
 
       setTimeout(() => digitRefs.current[0]?.focus(), 120);
-    } catch {
+    } catch (err: any) {
       setLoading(false);
-      const fallbackCode = Math.floor(100000 + Math.random() * 900000).toString();
-      setGeneratedCode(fallbackCode);
-      setStep('otp');
-      setResendCooldown(30);
-      setTimeout(() => digitRefs.current[0]?.focus(), 120);
+      setErrorMessage(err?.message || 'Unable to send verification email. Please try again.');
     }
   };
 
@@ -234,85 +206,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     let isVerified = false;
 
     try {
-      // 1. Call server verification API
-      const res = await fetch('/api/auth/otp/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: cleanTarget, code }),
-      });
-      const data = await res.json();
-      if (res.ok && data?.verified) {
-        isVerified = true;
-      }
-    } catch {
-      // Fallback local check
-    }
-
-    // 2. Client-side Supabase verification or local match
-    if (!isVerified) {
       const supabase = getSupabase();
-      if (supabase && cleanTarget.includes('@')) {
-        try {
-          const { data, error } = await supabase.auth.verifyOtp({
-            email: cleanTarget,
-            token: code,
-            type: 'email',
-          });
-          if (!error && data?.user) {
-            isVerified = true;
-          }
-        } catch {
-          // fallback
-        }
-      }
-    }
-
-    if (code === generatedCode || code === '123456') {
-      isVerified = true;
+      if (!supabase) throw new Error('Authentication service is not configured.');
+      const { data, error } = await supabase.auth.verifyOtp({
+        email: cleanTarget,
+        token: code,
+        type: 'email',
+      });
+      if (!error && data?.user) isVerified = true;
+      else if (error) setErrorMessage('Invalid or expired verification code. Please try again.');
+    } catch {
+      setErrorMessage('Unable to verify the code. Please try again.');
     }
 
     if (isVerified) {
       setLoading(false);
-
-      const isAdminEmail = cleanTarget.toLowerCase() === 'rafsankhan.tv@gmail.com';
-      if (isAdminEmail) {
-        // Super Admin account detected: immediately configure and launch Admin Dashboard
-        const adminProfile: GuestProfile = {
-          fullName: 'Rafsan Khan',
-          email: 'rafsankhan.tv@gmail.com',
-          city: 'Dhaka',
-          phone: '+880 1711-000000',
-          role: 'admin',
-          bio: 'Super Admin & Owner of qaaga.com platform.',
-          avatarUrl: AVATAR_OPTIONS[0],
-          verified: true,
-          joinedDate: 'Nov 2026',
-          status: 'active',
-        };
-
-        try {
-          await saveUserProfileToDatabase(adminProfile);
-          await fetch('/api/auth/profile', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(adminProfile),
-          });
-        } catch {
-          // graceful fallback
-        }
-
-        onUpdateProfile(adminProfile);
-        setStep('success');
-        onShowToast({
-          message: '👑 Super Admin verification successful! Opening Admin Dashboard...',
-        });
-
-        setTimeout(() => {
-          onClose();
-          onOpenAdminModal?.();
-        }, 1100);
-        return;
-      }
 
       // Standard user flow: transition to Complete Profile step!
       setStep('complete_profile');
@@ -333,9 +241,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
 
     setLoading(true);
-    const isEmail = emailOrPhone.includes('@');
-    const finalEmail = isEmail ? emailOrPhone.trim() : `${emailOrPhone.replace(/\D/g, '')}@qaaga.com`;
+    setErrorMessage('');
 
+    const finalEmail = emailOrPhone.trim().toLowerCase();
     const completedProfile: GuestProfile = {
       fullName: fullNameInput.trim(),
       email: finalEmail,
@@ -345,44 +253,73 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       bio: bioInput.trim() || undefined,
       avatarUrl: AVATAR_OPTIONS[avatarIndex],
       verified: true,
-      joinedDate: 'Nov 2026',
+      joinedDate: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
       status: 'active',
     };
 
-    // Save to database & local persistence
     try {
-      await saveUserProfileToDatabase(completedProfile);
-      await fetch('/api/auth/profile', {
+      const supabase = getSupabase();
+      if (!supabase) throw new Error('Authentication service is not configured.');
+
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (sessionError || !accessToken) {
+        throw new Error('Your login session has expired. Please verify your email again.');
+      }
+
+      const response = await fetch('/api/auth/profile', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
         body: JSON.stringify(completedProfile),
       });
-    } catch {
-      // graceful local fallback
+      const result = await response.json();
+
+      if (!response.ok || !result?.success) {
+        throw new Error(result?.error || 'Unable to save your profile. Please try again.');
+      }
+
+      const savedProfile: GuestProfile = {
+        ...completedProfile,
+        role: result.profile?.role === 'host' ? 'host' : 'guest',
+        verified: Boolean(result.profile?.verified),
+      };
+
+      onUpdateProfile(savedProfile);
+      setLoading(false);
+      setStep('success');
+      onShowToast({
+        message: `Profile complete! Welcome to qaaga.com, ${savedProfile.fullName}.`,
+      });
+
+      setTimeout(() => {
+        onClose();
+      }, 1500);
+    } catch (err: any) {
+      setLoading(false);
+      setErrorMessage(err?.message || 'Unable to save your profile. Please try again.');
     }
-
-    onUpdateProfile(completedProfile);
-    setLoading(false);
-    setStep('success');
-
-    onShowToast({
-      message: `Profile complete! Welcome to qaaga.com, ${completedProfile.fullName}.`,
-    });
-
-    setTimeout(() => {
-      onClose();
-    }, 1500);
   };
 
-  const handleSocialLogin = (provider: 'google' | 'apple') => {
+  const handleSocialLogin = async (provider: 'google' | 'apple') => {
     setLoading(true);
-    setTimeout(() => {
+    setErrorMessage('');
+    const supabase = getSupabase();
+    if (!supabase) {
       setLoading(false);
-      const isGoogle = provider === 'google';
-      setFullNameInput(isGoogle ? 'Google Member' : 'Apple Member');
-      setEmailOrPhone(isGoogle ? 'guest.google@qaaga.com' : 'guest.apple@qaaga.com');
-      setStep('complete_profile');
-    }, 500);
+      setErrorMessage('Authentication service is not configured.');
+      return;
+    }
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo: window.location.origin },
+    });
+    if (error) {
+      setLoading(false);
+      setErrorMessage(error.message);
+    }
   };
 
   const handleTestConnection = async () => {
@@ -456,7 +393,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <form onSubmit={handleSendOtp} className="space-y-4 pt-1">
             <div className="space-y-1.5 text-left">
               <label htmlFor="qaaga-auth-input" className="block text-xs font-semibold text-slate-700">
-                Email or phone number
+                Email address
               </label>
               <div className="relative">
                 <input
@@ -467,7 +404,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     setEmailOrPhone(e.target.value);
                     if (errorMessage) setErrorMessage('');
                   }}
-                  placeholder="name@example.com or phone"
+                  placeholder="name@example.com"
                   autoFocus
                   className={`w-full px-4 py-3.5 sm:py-4 rounded-xl border text-sm sm:text-base text-slate-900 placeholder:text-slate-400 focus:outline-none transition-all ${
                     errorMessage
@@ -607,42 +544,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         {/* STEP 2: OTP Verification Screen */}
         {step === 'otp' && (
           <div className="space-y-4 pt-2 text-center">
-            {emailOrPhone.trim().toLowerCase() === 'rafsankhan.tv@gmail.com' && (
-              <div className="p-3.5 rounded-2xl bg-gradient-to-r from-amber-50 via-rose-50 to-pink-50 border border-amber-300 text-xs text-left flex items-start gap-3 shadow-2xs">
-                <span className="w-8 h-8 rounded-xl bg-[#C72B62] text-white flex items-center justify-center font-bold text-sm shrink-0 shadow-xs">
-                  👑
-                </span>
-                <div>
-                  <p className="font-bold text-slate-900 text-xs">
-                    Super Admin Account: rafsankhan.tv@gmail.com
-                  </p>
-                  <p className="text-[11px] text-slate-600 mt-0.5 leading-relaxed">
-                    OTP ভেরিফাই হওয়ার সাথে সাথে <strong>Admin Dashboard</strong> সরাসরি খুলে যাবে। অ্যাডমিন প্যানেল থেকে লিস্টিং, ব্র্যান্ডিং, ইউজার এবং সমস্ত ফাংশন Add, Edit ও Remove করতে পারবেন।
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* OTP Hint Card */}
-            <button
-              type="button"
-              onClick={() => {
-                const digits = generatedCode.split('');
-                setOtpDigits(digits);
-                handleVerifyOtp(generatedCode);
-              }}
-              className="w-full p-2.5 rounded-xl bg-[#C72B62]/[0.08] border border-[#C72B62]/25 text-xs text-slate-700 hover:bg-[#C72B62]/[0.14] transition-colors cursor-pointer text-center"
-              title="Click to auto-fill verification code"
-            >
-              <span className="font-bold text-[#C72B62]">Your 6-digit OTP code: </span>
-              <span className="font-mono font-bold tracking-widest text-slate-950 text-sm ml-1 bg-white px-2 py-0.5 rounded border border-slate-200 shadow-2xs">
-                {generatedCode}
-              </span>
-              <span className="block text-[10px] text-slate-500 mt-0.5">
-                (Click to auto-fill & verify instantly)
-              </span>
-            </button>
-
             {/* 6 Digit Input Boxes */}
             <div className="flex items-center justify-center gap-2 sm:gap-2.5">
               {otpDigits.map((digit, idx) => (
@@ -796,11 +697,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             {/* Account Role */}
             <div className="space-y-1">
               <label className="block text-xs font-semibold text-slate-700">Primary Role</label>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 {[
                   { id: 'guest' as const, label: 'Guest', desc: 'Book stays' },
                   { id: 'host' as const, label: 'Host', desc: 'List stays' },
-                  { id: 'admin' as const, label: 'Admin', desc: 'Manage site' },
                 ].map((r) => (
                   <button
                     key={r.id}

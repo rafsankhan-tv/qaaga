@@ -40,6 +40,7 @@ import {
 import { BrandLogo } from './BrandLogo';
 import { ListingImage } from './ListingCard';
 import {
+  getSupabase,
   getSupabaseConfig,
   saveSupabaseConfig,
   testSupabaseConnection,
@@ -51,7 +52,6 @@ import {
   getAllUsersFromDatabase,
   updateUserRoleInDatabase,
   uploadBrandingAssetToSupabase,
-  saveBrandingToSupabase,
 } from '@/lib/supabaseService';
 
 interface AdminPanelProps {
@@ -259,6 +259,7 @@ const AdminPanelModalInner: React.FC<AdminPanelProps> = ({
   standalone = false,
   onClose,
 }) => {
+  const [adminAccess, setAdminAccess] = useState<'checking' | 'authorized' | 'denied'>('checking');
   const [activeTab, setActiveTab] = useState<
     'overview' | 'users' | 'database' | 'branding' | 'listings' | 'bookings'
   >('overview');
@@ -303,25 +304,62 @@ const AdminPanelModalInner: React.FC<AdminPanelProps> = ({
 
   useEffect(() => {
     let mounted = true;
-    setLoadingUsers(true);
-    setLoadingStats(true);
+    const supabase = getSupabase();
 
-    Promise.all([getAllUsersFromDatabase(), getAdminPlatformStats(), testSupabaseConnection()])
-      .then(([dbUsers, stats, conn]) => {
-        if (!mounted) return;
-        setUsers(dbUsers || []);
-        setPlatformStats(stats);
-        setTestResult(conn);
-      })
-      .finally(() => {
-        if (!mounted) return;
+    const verifyAdministrator = async () => {
+      if (!supabase) {
+        if (mounted) setAdminAccess('denied');
+        return;
+      }
+
+      const { data, error } = await supabase.auth.getUser();
+      const isAdmin = !error && data.user?.app_metadata?.role === 'admin';
+
+      if (!mounted) return;
+      if (!isAdmin) {
+        setAdminAccess('denied');
         setLoadingUsers(false);
         setLoadingStats(false);
-      });
+        return;
+      }
 
-    const cfg = getSupabaseConfig();
-    setSupabaseUrl(cfg.url);
-    setSupabaseKey(cfg.key);
+      setAdminAccess('authorized');
+      setLoadingUsers(true);
+      setLoadingStats(true);
+
+      let dbUsers: GuestProfile[] = [];
+      let stats: AdminPlatformStats | null = null;
+      let conn: SupabaseTestResult | null = null;
+      try {
+        [dbUsers, stats, conn] = await Promise.all([
+          getAllUsersFromDatabase(),
+          getAdminPlatformStats(),
+          testSupabaseConnection(),
+        ]);
+      } catch {
+        // Preserve an empty state and show connection diagnostics in the admin tools.
+      }
+
+      if (!mounted) return;
+      setUsers(dbUsers);
+      setPlatformStats(stats);
+      setTestResult(conn);
+
+      const cfg = getSupabaseConfig();
+      setSupabaseUrl(cfg.url);
+      setSupabaseKey(cfg.key);
+      setLoadingUsers(false);
+      setLoadingStats(false);
+    };
+
+    verifyAdministrator().catch(() => {
+      if (!mounted) return;
+      setAdminAccess('denied');
+      setLoadingUsers(false);
+      setLoadingStats(false);
+    });
+
+
 
     return () => {
       mounted = false;
@@ -353,7 +391,15 @@ const AdminPanelModalInner: React.FC<AdminPanelProps> = ({
     email: string,
     nextRole: 'guest' | 'host' | 'admin'
   ) => {
-    await updateUserRoleInDatabase(email, nextRole);
+    if (nextRole === 'admin') {
+      flashBanner('Grant administrator privileges only through Supabase Auth app_metadata.');
+      return;
+    }
+    const saved = await updateUserRoleInDatabase(email, nextRole);
+    if (!saved) {
+      flashBanner('Role update failed. Check administrator permissions.');
+      return;
+    }
     setUsers((prev) =>
       prev.map((u) => (u.email === email ? { ...u, role: nextRole } : u))
     );
@@ -363,7 +409,11 @@ const AdminPanelModalInner: React.FC<AdminPanelProps> = ({
   const handleToggleUserStatus = async (email: string) => {
     const user = users.find((u) => u.email === email);
     const nextStatus = user?.status === 'suspended' ? 'active' : 'suspended';
-    await updateUserRoleInDatabase(email, user?.role || 'guest', nextStatus);
+    const saved = await updateUserRoleInDatabase(email, user?.role || 'guest', nextStatus);
+    if (!saved) {
+      flashBanner(`User ${email} status could not be changed.`);
+      return;
+    }
     setUsers((prev) =>
       prev.map((u) => (u.email === email ? { ...u, status: nextStatus } : u))
     );
@@ -392,32 +442,13 @@ const AdminPanelModalInner: React.FC<AdminPanelProps> = ({
     setIsProcessing(true);
     setProcessingMessage('Uploading Logo to Supabase...');
     try {
-      // Step 1: Upload to Supabase Storage or read image
-      const sbResult = await uploadBrandingAssetToSupabase(file, 'logo');
-      let finalLogoUrl = sbResult.url;
-
-      // Fallback to high-quality optimized image reader if Supabase Storage is offline/not provisioned
-      if (sbResult.storageType !== 'supabase-storage' || !finalLogoUrl) {
-        finalLogoUrl = await readImageFileOptimized(file);
-      }
-
-      // Step 2: Commit branding update locally and to server
+      const uploaded = await uploadBrandingAssetToSupabase(file, 'logo');
+      if (!uploaded.url) throw new Error('Logo was not uploaded to Supabase Storage.');
       await commitBrandingPatch(
-        { logoUrl: finalLogoUrl },
-        `Logo "${file.name}" saved to Supabase & active`
+        { logoUrl: uploaded.url },
+        `Logo "${file.name}" uploaded and saved.`
       );
-
-      // Step 3: Explicitly sync to Supabase database table
-      await saveBrandingToSupabase({
-        ...latestBrandingRef.current,
-        logoUrl: finalLogoUrl,
-      });
-
-      flashBanner(
-        sbResult.storageType === 'supabase-storage'
-          ? `Logo "${file.name}" uploaded to Supabase Storage & synced!`
-          : `Logo "${file.name}" uploaded & saved to Supabase permanently!`
-      );
+      flashBanner(`Logo "${file.name}" uploaded to private-authorized branding storage and saved.`);
     } catch {
       flashBanner('Could not process that image file. Please try another file.');
     } finally {
@@ -434,22 +465,21 @@ const AdminPanelModalInner: React.FC<AdminPanelProps> = ({
     setProcessingMessage('Processing & saving logo...');
     try {
       const editedDataUrl = await processLogoCanvas(activeLogo, mode);
+      const editedBlob = await (await fetch(editedDataUrl)).blob();
+      const editedFile = new File([editedBlob], 'qaaga-logo-edited.png', { type: 'image/png' });
+      const uploaded = await uploadBrandingAssetToSupabase(editedFile, 'logo');
       await commitBrandingPatch(
         {
-          logoUrl: editedDataUrl,
+          logoUrl: uploaded.url,
           blendMultiply:
             mode === 'transparent-bg'
               ? false
               : latestBrandingRef.current.blendMultiply,
         },
         mode === 'trim'
-          ? 'Cropped excess logo whitespace permanently'
-          : 'Removed white background permanently'
+          ? 'Cropped excess logo whitespace and uploaded the new image'
+          : 'Removed the white background and uploaded the new image'
       );
-      await saveBrandingToSupabase({
-        ...latestBrandingRef.current,
-        logoUrl: editedDataUrl,
-      });
       flashBanner(
         mode === 'trim'
           ? 'Auto-cropped logo margins and saved to Supabase!'
@@ -470,10 +500,6 @@ const AdminPanelModalInner: React.FC<AdminPanelProps> = ({
     setIsProcessing(true);
     try {
       await commitBrandingPatch({ logoUrl: trimmed }, 'Updated logo image URL');
-      await saveBrandingToSupabase({
-        ...latestBrandingRef.current,
-        logoUrl: trimmed,
-      });
       flashBanner('Custom logo URL saved to Supabase permanently!');
     } finally {
       setIsProcessing(false);
@@ -490,12 +516,6 @@ const AdminPanelModalInner: React.FC<AdminPanelProps> = ({
       },
       'Saved brand text & edit settings'
     );
-    await saveBrandingToSupabase({
-      ...latestBrandingRef.current,
-      altText: altText.trim() || 'qaaga.com',
-      fallbackText: fallbackText.trim() || 'qaaga',
-      fallbackDomain: fallbackDomain.trim(),
-    });
     flashBanner('Brand settings saved to Supabase permanently!');
   };
 
@@ -511,27 +531,17 @@ const AdminPanelModalInner: React.FC<AdminPanelProps> = ({
     setProcessingMessage('Uploading Favicon to Supabase...');
     try {
       const squareDataUrl = await readFaviconFileSquare(file);
-      const sbResult = await uploadBrandingAssetToSupabase(file, 'favicon');
-      const finalFaviconUrl =
-        sbResult.storageType === 'supabase-storage' && sbResult.url
-          ? sbResult.url
-          : squareDataUrl;
+      const squareBlob = await (await fetch(squareDataUrl)).blob();
+      const squareFile = new File([squareBlob], 'qaaga-favicon.png', { type: 'image/png' });
+      const uploaded = await uploadBrandingAssetToSupabase(squareFile, 'favicon');
 
       await commitBrandingPatch(
-        { faviconUrl: finalFaviconUrl },
-        `Favicon "${file.name}" saved to Supabase & active`
+        { faviconUrl: uploaded.url },
+        `Favicon "${file.name}" uploaded and saved.`
       );
 
-      await saveBrandingToSupabase({
-        ...latestBrandingRef.current,
-        faviconUrl: finalFaviconUrl,
-      });
 
-      flashBanner(
-        sbResult.storageType === 'supabase-storage'
-          ? `Favicon "${file.name}" uploaded to Supabase Storage & browser tab updated!`
-          : `Favicon "${file.name}" uploaded & saved to Supabase permanently!`
-      );
+      flashBanner(`Favicon "${file.name}" uploaded and saved.`);
     } catch {
       flashBanner('Could not process that favicon file. Please try another image.');
     } finally {
@@ -548,10 +558,6 @@ const AdminPanelModalInner: React.FC<AdminPanelProps> = ({
     setIsProcessing(true);
     try {
       await commitBrandingPatch({ faviconUrl: trimmed }, 'Updated site favicon URL');
-      await saveBrandingToSupabase({
-        ...latestBrandingRef.current,
-        faviconUrl: trimmed,
-      });
       flashBanner('Custom favicon URL saved to Supabase permanently!');
     } finally {
       setIsProcessing(false);
@@ -565,10 +571,6 @@ const AdminPanelModalInner: React.FC<AdminPanelProps> = ({
         { faviconUrl: null },
         'Favicon removed permanently'
       );
-      await saveBrandingToSupabase({
-        ...latestBrandingRef.current,
-        faviconUrl: null,
-      });
       flashBanner('Favicon removed & synced to Supabase!');
     } finally {
       setIsProcessing(false);
@@ -582,10 +584,6 @@ const AdminPanelModalInner: React.FC<AdminPanelProps> = ({
         { faviconUrl: DEFAULT_FAVICON_URL },
         'Restored official qaaga.com favicon'
       );
-      await saveBrandingToSupabase({
-        ...latestBrandingRef.current,
-        faviconUrl: DEFAULT_FAVICON_URL,
-      });
       flashBanner('Restored official qaaga.com Q-pin favicon & synced to Supabase!');
     } finally {
       setIsProcessing(false);
@@ -1074,7 +1072,7 @@ const AdminPanelModalInner: React.FC<AdminPanelProps> = ({
                             </div>
                           </td>
                           <td className="p-3.5 text-slate-600">
-                            <p className="font-medium text-slate-800">{u.city || 'Kuala Lumpur'}</p>
+                            <p className="font-medium text-slate-800">{u.city || 'Dhaka'}</p>
                             <p className="text-[11px] text-slate-400">{u.phone || 'No phone'}</p>
                           </td>
                           <td className="p-3.5">
@@ -1367,10 +1365,6 @@ const AdminPanelModalInner: React.FC<AdminPanelProps> = ({
                       disabled={isProcessing}
                       onClick={async () => {
                         await onRemoveLogo();
-                        await saveBrandingToSupabase({
-                          ...latestBrandingRef.current,
-                          logoUrl: null,
-                        });
                         flashBanner('Logo removed & synced to Supabase!');
                       }}
                       className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-rose-300 bg-rose-50/70 hover:bg-rose-100 text-rose-700 text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50"
@@ -1386,10 +1380,6 @@ const AdminPanelModalInner: React.FC<AdminPanelProps> = ({
                       disabled={isProcessing}
                       onClick={async () => {
                         await onRestoreDefaultLogo();
-                        await saveBrandingToSupabase({
-                          ...latestBrandingRef.current,
-                          logoUrl: DEFAULT_SITE_LOGO_URL,
-                        });
                         flashBanner('Restored official qaaga.com logo & synced to Supabase!');
                       }}
                       className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-300 hover:border-slate-900 bg-white text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
@@ -1527,11 +1517,7 @@ const AdminPanelModalInner: React.FC<AdminPanelProps> = ({
                               { size: opt.id },
                               `Logo size set to ${opt.label}`
                             );
-                            await saveBrandingToSupabase({
-                              ...latestBrandingRef.current,
-                              size: opt.id,
-                            });
-                          }}
+                            }}
                           className={`py-2 px-2.5 rounded-xl border text-left transition-colors cursor-pointer ${
                             active
                               ? 'border-[#C72B62] bg-[#C72B62]/[0.07] text-[#C72B62]'
@@ -1563,11 +1549,7 @@ const AdminPanelModalInner: React.FC<AdminPanelProps> = ({
                       onChange={async (e) => {
                         const nextVal = e.target.checked;
                         await commitBrandingPatch({ blendMultiply: nextVal });
-                        await saveBrandingToSupabase({
-                          ...latestBrandingRef.current,
-                          blendMultiply: nextVal,
-                        });
-                      }}
+                        }}
                       className="w-4 h-4 accent-[#C72B62] cursor-pointer"
                     />
                   </div>
@@ -1588,11 +1570,7 @@ const AdminPanelModalInner: React.FC<AdminPanelProps> = ({
                       onChange={async (e) => {
                         const nextVal = e.target.checked;
                         await commitBrandingPatch({ showTextWhenRemoved: nextVal });
-                        await saveBrandingToSupabase({
-                          ...latestBrandingRef.current,
-                          showTextWhenRemoved: nextVal,
-                        });
-                      }}
+                        }}
                       className="w-4 h-4 accent-[#C72B62] cursor-pointer"
                     />
                   </div>
@@ -1954,6 +1932,32 @@ const AdminPanelModalInner: React.FC<AdminPanelProps> = ({
       </div>
     </div>
   );
+
+  if (adminAccess !== 'authorized') {
+    const message = adminAccess === 'checking'
+      ? 'Checking administrator access…'
+      : 'Administrator access is restricted. Sign in with an account explicitly granted the admin role in Supabase Auth app_metadata.';
+    const gateCard = (
+      <div className="w-full max-w-md rounded-3xl bg-white p-8 shadow-xl text-center">
+        <Shield className="mx-auto mb-4 h-10 w-10 text-slate-500" />
+        <h1 className="text-lg font-bold text-slate-900">QAAGA Administration</h1>
+        <p className="mt-2 text-sm text-slate-600">{message}</p>
+        {adminAccess === 'denied' && (
+          <a href="/login" className="mt-5 inline-flex rounded-full bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white">
+            Sign in
+          </a>
+        )}
+        {onClose && (
+          <button type="button" onClick={onClose} className="mt-3 block w-full text-sm text-slate-500">
+            Close
+          </button>
+        )}
+      </div>
+    );
+    return standalone
+      ? <div className="min-h-screen bg-slate-50 px-4 py-6 flex items-center justify-center">{gateCard}</div>
+      : <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">{gateCard}</div>;
+  }
 
   if (standalone) {
     return (
