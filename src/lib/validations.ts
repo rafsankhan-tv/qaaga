@@ -56,9 +56,11 @@ export const ProfileSchema = z.object({
   fullName: z.string().min(2, 'Name must be at least 2 characters').max(60),
   email: z.string().email('Please enter a valid email address'),
   city: z.string().min(2).max(60).default('Kuala Lumpur'),
-  phone: z.string().optional(),
-  verified: z.boolean().default(false),
-  role: z.enum(['guest', 'host', 'admin']).default('guest'),
+  phone: z.string().trim().max(30).optional(),
+  avatarUrl: z.string().url().optional(),
+  bio: z.string().trim().max(500).optional(),
+  // Admin is never a self-service role; it must be granted in trusted server-side metadata.
+  role: z.enum(['guest', 'host']).default('guest'),
 });
 
 export type ValidatedListing = z.infer<typeof ListingSchema>;
