@@ -45,6 +45,7 @@ import {
   reconcileBrandingOnLoad,
 } from '@/lib/brandingStorage.client';
 import { smoothScrollTo } from './SmoothScrollProvider';
+import { getSupabase } from '@/lib/supabaseClient';
 import {
   cancelBookingInDatabase,
   deleteListingFromDatabase,
@@ -58,6 +59,7 @@ import {
   insertReviewToDatabase,
   saveUserProfileToDatabase,
   sendMessageToDatabase,
+  createThreadInDatabase,
   subscribeToSupabaseTable,
 } from '@/lib/supabaseService';
 
@@ -204,7 +206,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
   const [profile, setProfile] = useState<GuestProfile>({
     fullName: 'Guest User',
     email: '',
-    city: 'Kuala Lumpur',
+    city: 'Dhaka',
     verified: false,
     role: 'guest',
   });
@@ -277,34 +279,9 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
         const parsed = JSON.parse(savedWish);
         if (Array.isArray(parsed)) setWishlistIds(parsed);
       }
-      const savedBookings = localStorage.getItem(STORAGE_KEYS.bookings);
-      if (savedBookings) {
-        const parsed = JSON.parse(savedBookings);
-        if (Array.isArray(parsed)) setBookings(parsed);
-      }
-      const savedThreads = localStorage.getItem(STORAGE_KEYS.threads);
-      if (savedThreads) {
-        const parsed = JSON.parse(savedThreads);
-        if (Array.isArray(parsed) && parsed.length > 0) setThreads(parsed);
-      }
-      const savedNotifs = localStorage.getItem(STORAGE_KEYS.notifications);
-      if (savedNotifs) {
-        const parsed = JSON.parse(savedNotifs);
-        if (Array.isArray(parsed)) setNotifications(parsed);
-      }
-      const savedCustom = localStorage.getItem(STORAGE_KEYS.customListings);
-      if (savedCustom) {
-        const parsed = JSON.parse(savedCustom);
-        if (Array.isArray(parsed) && parsed.length > 0) setDbListings(parsed);
-      }
       const savedCurrency = localStorage.getItem(STORAGE_KEYS.currency) as CurrencyCode | null;
       if (savedCurrency && CURRENCY_CONFIG[savedCurrency]) {
         setCurrency(savedCurrency);
-      }
-      const savedProfile = localStorage.getItem(STORAGE_KEYS.profile);
-      if (savedProfile) {
-        const parsed = JSON.parse(savedProfile);
-        if (parsed && typeof parsed.fullName === 'string') setProfile(parsed);
       }
       const syncLocal = readSyncLocalBranding();
       if (syncLocal && syncLocal.revision >= (initialBranding?.revision || 0)) {
@@ -498,44 +475,9 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
   useEffect(() => {
     if (!hydrated) return;
     try {
-      localStorage.setItem(STORAGE_KEYS.bookings, JSON.stringify(bookings));
-    } catch {}
-  }, [bookings, hydrated]);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    try {
-      localStorage.setItem(STORAGE_KEYS.threads, JSON.stringify(threads));
-    } catch {}
-  }, [threads, hydrated]);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    try {
-      localStorage.setItem(STORAGE_KEYS.notifications, JSON.stringify(notifications));
-    } catch {}
-  }, [notifications, hydrated]);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    try {
-      localStorage.setItem(STORAGE_KEYS.customListings, JSON.stringify(dbListings));
-    } catch {}
-  }, [dbListings, hydrated]);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    try {
       localStorage.setItem(STORAGE_KEYS.currency, currency);
     } catch {}
   }, [currency, hydrated]);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    try {
-      localStorage.setItem(STORAGE_KEYS.profile, JSON.stringify(profile));
-    } catch {}
-  }, [profile, hydrated]);
 
   // Global Escape handler for modals & popovers
   useEffect(() => {
@@ -895,6 +837,50 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
     }
   };
 
+  const toLocalIsoDate = (value: Date) => {
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, '0');
+    const day = String(value.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const formatDateRange = (startIso: string, endIso: string) => {
+    const start = new Date(`${startIso}T00:00:00`);
+    const end = new Date(`${endIso}T00:00:00`);
+    const fmt = (value: Date) =>
+      value.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return `${fmt(start)} – ${fmt(end)}`;
+  };
+
+  const handleSelectDatePreset = (option: (typeof DATE_OPTIONS)[number]) => {
+    setSelectedDates(option);
+    if (!option.nights || option.id === 'default-2') {
+      setCheckInIso(null);
+      setCheckOutIso(null);
+      return;
+    }
+
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() + 1);
+    const end = new Date(start);
+    end.setDate(end.getDate() + option.nights);
+    const startIso = toLocalIsoDate(start);
+    const endIso = toLocalIsoDate(end);
+    const display = formatDateRange(startIso, endIso);
+
+    setCheckInIso(startIso);
+    setCheckOutIso(endIso);
+    setCustomCheckInDay(start.getDate());
+    setCustomCheckOutDay(end.getDate());
+    setSelectedDates({
+      ...option,
+      label: display,
+      display,
+      tag: `${display} · ${option.nights} nights`,
+    });
+  };
+
   const handleSelectDateRange = (
     start: string | null,
     end: string | null,
@@ -921,35 +907,49 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
   };
 
   const handleSelectCalendarDay = (day: number) => {
-    if (customCheckInDay === null || (customCheckInDay !== null && customCheckOutDay !== null)) {
-      setCustomCheckInDay(day);
-      setCustomCheckOutDay(null);
-      const nextDisplay = `${calendarMonth} ${day} – ${calendarMonth} ${Math.min(
-        calendarMonth === 'Nov' ? 30 : 31,
-        day + 2
-      )}`;
-      setSelectedDates({
-        id: `custom-${calendarMonth}-${day}`,
-        label: nextDisplay,
-        display: nextDisplay,
-        nights: 2,
-        tag: `${nextDisplay} · 2 nights`,
-      });
-    } else if (day > customCheckInDay) {
-      setCustomCheckOutDay(day);
-      const nights = Math.max(1, day - customCheckInDay);
-      const nextDisplay = `${calendarMonth} ${customCheckInDay} – ${calendarMonth} ${day}`;
-      setSelectedDates({
-        id: `custom-${calendarMonth}-${customCheckInDay}-${day}`,
-        label: nextDisplay,
-        display: nextDisplay,
-        nights,
-        tag: `${nextDisplay} · ${nights} night${nights > 1 ? 's' : ''}`,
-      });
-    } else {
-      setCustomCheckInDay(day);
-      setCustomCheckOutDay(null);
+    const now = new Date();
+    const monthIndex = calendarMonth === 'Nov' ? 10 : 11;
+    let year = now.getFullYear();
+    if (monthIndex < now.getMonth()) year += 1;
+
+    const candidate = new Date(year, monthIndex, day);
+    candidate.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (candidate < today) {
+      showToast({ message: 'Past dates cannot be selected. Choose a future date.' });
+      return;
     }
+
+    const candidateIso = toLocalIsoDate(candidate);
+    if (!checkInIso || checkOutIso || candidateIso <= checkInIso) {
+      setCheckInIso(candidateIso);
+      setCheckOutIso(null);
+      setCustomCheckInDay(day);
+      setCustomCheckOutDay(null);
+      setSelectedDates({
+        id: `custom-${candidateIso}`,
+        label: `${calendarMonth} ${day} – Select check-out`,
+        display: '',
+        nights: 2,
+        tag: 'Choose your check-out date',
+      });
+      return;
+    }
+
+    const start = new Date(`${checkInIso}T00:00:00`);
+    const nights = Math.round((candidate.getTime() - start.getTime()) / 86400000);
+    const display = formatDateRange(checkInIso, candidateIso);
+    setCheckOutIso(candidateIso);
+    setCustomCheckOutDay(day);
+    setSelectedDates({
+      id: `custom-${checkInIso}-${candidateIso}`,
+      label: display,
+      display,
+      nights,
+      tag: `${display} · ${nights} night${nights > 1 ? 's' : ''}`,
+    });
   };
 
   const handleChangeGuestCount = (
@@ -1039,130 +1039,157 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
     [navigateTo]
   );
 
-  const handleConfirmBooking = (nights: number, guestsCount: number) => {
+  const handleConfirmBooking = async (nights: number, guestsCount: number) => {
     if (!selectedListing) return;
-    const code = `QG-KL${Math.floor(1000 + Math.random() * 9000)}`;
-    const totalUsd = Math.round((selectedListing.twoNightPriceUsd / 2) * nights);
-    const dateRange = selectedDates.display || 'Nov 14 – Nov 16';
 
+    if (!profile.email) {
+      setIsAuthModalOpen(true);
+      showToast({ message: 'Sign in before sending a booking request.' });
+      return;
+    }
+    if (!checkInIso || !checkOutIso) {
+      showToast({ message: 'Choose a valid check-in and check-out date first.' });
+      setActivePopover('when');
+      return;
+    }
+    if (!selectedListing.hostEmail) {
+      showToast({ message: 'This listing is missing its verified host account. Booking is unavailable.' });
+      return;
+    }
+
+    const start = new Date(`${checkInIso}T00:00:00`);
+    const end = new Date(`${checkOutIso}T00:00:00`);
+    const actualNights = Math.round((end.getTime() - start.getTime()) / 86400000);
+    if (!Number.isFinite(actualNights) || actualNights < 1 || end <= start) {
+      showToast({ message: 'The selected date range is invalid.' });
+      return;
+    }
+
+    const confirmationCode = `QG-${Date.now().toString().slice(-8)}`;
+    const totalUsd = Math.round((selectedListing.twoNightPriceUsd / 2) * actualNights);
+    const dateRange = formatDateRange(checkInIso, checkOutIso);
     const newBooking: BookingRecord = {
-      id: `bk-${Date.now()}`,
-      confirmationCode: code,
+      id: `bk-${crypto.randomUUID()}`,
+      confirmationCode,
       listingId: selectedListing.id,
+      checkInDate: checkInIso,
+      checkOutDate: checkOutIso,
       title: selectedListing.title,
       area: `${selectedListing.area}, ${selectedListing.city}`,
       image: selectedListing.image,
       checkInLabel: dateRange,
-      nights,
+      nights: actualNights,
       guests: guestsCount,
       totalUsd,
       hostName: selectedListing.hostName,
-      status: 'Confirmed',
+      status: 'Pending',
     };
 
-    setBookings((prev) => [newBooking, ...prev]);
-    insertBookingToDatabase(newBooking, profile.email, profile.fullName).catch((err) =>
-      console.warn('Booking sync notice:', err)
-    );
-
-    setNotifications((prev) => [
-      {
-        id: `notif-${Date.now()}`,
-        title: `Reservation confirmed · ${code}`,
-        body: `${selectedListing.title} (${dateRange} · ${nights} night${
-          nights > 1 ? 's' : ''
-        }) is confirmed.`,
-        time: 'Just now',
-        unread: true,
-        actionType: 'trips',
-      },
-      ...prev,
-    ]);
-    setBookingSuccessCode(code);
-    showToast({ message: `Reservation confirmed! Code: ${code}` });
+    try {
+      const savedBooking = await insertBookingToDatabase(
+        newBooking,
+        profile.email,
+        profile.fullName,
+        selectedListing.hostEmail
+      );
+      setBookings((prev) => [savedBooking, ...prev]);
+      setNotifications((prev) => [
+        {
+          id: `notif-${Date.now()}`,
+          title: `Booking request sent · ${confirmationCode}`,
+          body: `${selectedListing.title} (${dateRange}) is awaiting host approval.`,
+          time: 'Just now',
+          unread: true,
+          actionType: 'trips',
+        },
+        ...prev,
+      ]);
+      setBookingSuccessCode(confirmationCode);
+      showToast({ message: `Booking request sent. Awaiting host approval · ${confirmationCode}` });
+    } catch (error: any) {
+      showToast({ message: error?.message || 'Booking could not be saved. Please try again.' });
+    }
   };
 
-  const handleMessageHostFromListing = (item: QaagaListing) => {
-    const existing = threads.find((t) => t.listingTitle === item.title);
+  const handleMessageHostFromListing = async (item: QaagaListing) => {
+    if (!profile.email) {
+      setIsAuthModalOpen(true);
+      showToast({ message: 'Sign in before messaging a host.' });
+      return;
+    }
+    if (!item.hostEmail) {
+      showToast({ message: 'This listing has no verified host contact yet.' });
+      return;
+    }
+
+    const existing = threads.find((thread) => thread.listingTitle === item.title);
     if (existing) {
       setActiveThreadId(existing.id);
-    } else {
-      const created: HostThread = {
-        id: `thread-${Date.now()}`,
+      setSelectedListing(null);
+      setIsMessagesOpen(true);
+      return;
+    }
+
+    try {
+      const created = await createThreadInDatabase({
+        propertyId: item.id,
+        hostEmail: item.hostEmail,
         hostName: item.hostName,
         listingTitle: item.title,
         listingImage: item.image,
-        unread: false,
-        messages: [
-          {
-            id: `msg-${Date.now()}`,
-            sender: 'host',
-            text: `Hi ${profile.fullName.split(' ')[0]}! Let me know any questions about ${item.title} in ${item.area}.`,
-            time: 'Just now',
-          },
-        ],
-      };
+      });
       setThreads((prev) => [created, ...prev]);
       setActiveThreadId(created.id);
+      setSelectedListing(null);
+      setIsMessagesOpen(true);
+    } catch (error: any) {
+      showToast({ message: error?.message || 'Could not start this conversation.' });
     }
-    setSelectedListing(null);
-    setIsMessagesOpen(true);
   };
 
-  const handleSendMessage = (text: string) => {
+  const handleSendMessage = async (text: string) => {
     const targetId = activeThreadId || threads[0]?.id;
-    if (!targetId) return;
+    if (!targetId || !profile.email) {
+      showToast({ message: 'Sign in and open a conversation before sending a message.' });
+      return;
+    }
 
-    sendMessageToDatabase(targetId, {
+    const cleanText = text.trim();
+    if (!cleanText) return;
+
+    const sent = await sendMessageToDatabase(targetId, {
       sender: 'guest',
-      text,
-      time: 'Just now',
-    }).catch((err) => console.warn('Message sync notice:', err));
-
-    const activeThread = threads.find((t) => t.id === targetId);
-    const hostName = activeThread?.hostName || 'Host';
-    const listingTitle = activeThread?.listingTitle || 'your stay';
-
-    setNotifications((prev) => [
-      {
-        id: `notif-${Date.now()}`,
-        title: `Host reply from ${hostName}`,
-        body: `"${listingTitle}": Dates are available and smart-lock self check-in is ready whenever you arrive.`,
-        time: 'Just now',
-        unread: true,
-        actionType: 'messages',
-      },
-      ...prev,
-    ]);
+      text: cleanText,
+      time: new Date().toISOString(),
+    });
+    if (!sent) {
+      showToast({ message: 'Message was not sent. Check your connection and try again.' });
+      return;
+    }
 
     setThreads((prev) =>
-      prev.map((t) =>
-        t.id === targetId
+      prev.map((thread) =>
+        thread.id === targetId
           ? {
-              ...t,
+              ...thread,
               unread: false,
               messages: [
-                ...t.messages,
+                ...thread.messages,
                 {
-                  id: `msg-${Date.now()}`,
+                  id: `msg-${crypto.randomUUID()}`,
                   sender: 'guest',
-                  text,
-                  time: 'Just now',
-                },
-                {
-                  id: `msg-reply-${Date.now() + 1}`,
-                  sender: 'host',
-                  text: 'Thanks for reaching out! Dates are available and smart-lock self check-in is ready whenever you arrive.',
+                  text: cleanText,
                   time: 'Just now',
                 },
               ],
             }
-          : t
+          : thread
       )
     );
+    showToast({ message: 'Message sent.' });
   };
 
-  const handlePublishHostListing = (data: {
+  const handlePublishHostListing = async (data: {
     title: string;
     area: string;
     category: 'stay' | 'experiences' | 'services';
@@ -1170,53 +1197,47 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
     photo: string;
     guestFav: boolean;
   }) => {
+    if (!profile.email) {
+      setIsAuthModalOpen(true);
+      showToast({ message: 'Sign in before publishing a property.' });
+      return;
+    }
+
     const newItem: QaagaListing = {
-      id: `host-${Date.now()}`,
+      id: `host-${crypto.randomUUID()}`,
+      hostEmail: profile.email,
       title: data.title,
       area: data.area,
-      city: 'Kuala Lumpur',
-      subType:
-        data.category === 'stay'
-          ? 'apartments'
-          : data.category === 'experiences'
-          ? 'culture'
-          : 'concierge',
+      city: profile.city || 'Dhaka',
+      subType: data.category === 'stay' ? 'Apartment' : data.category,
       twoNightPriceUsd: data.twoNightUsd,
-      rating: '5.0',
-      reviewsCount: 1,
-      guestFavorite: data.guestFav,
+      rating: '0.0',
+      reviewsCount: 0,
+      guestFavorite: false,
       image: data.photo,
-      gallery: [data.photo, '/assets/clean-rooms/room-gulshan-studio.jpg'],
+      gallery: [data.photo],
       category: data.category,
       maxGuests: 4,
-      bedrooms:
-        data.category === 'stay'
-          ? '1 bedroom · 2 beds · 1 bath'
-          : 'Hosted session · Up to 4 guests',
+      bedrooms: data.category === 'stay' ? '1 bedroom · 1 bed · 1 bath' : 'Hosted session · Up to 4 guests',
       hostName: profile.fullName,
-      hostYears: 2,
-      amenities: [
-        'Verified qaaga.com Host',
-        'Instant Confirmation',
-        'High-Speed Wi-Fi',
-        'QaagaCover Included',
-      ],
-      description: `Hosted by ${profile.fullName} in ${data.area}, Kuala Lumpur. Thoughtfully prepared space with seamless check-in and skyline neighborhood access.`,
-      inInitialRecent: true,
-      inPopularKL: true,
+      hostYears: 0,
+      amenities: [],
+      description: `Hosted by ${profile.fullName} in ${data.area}, ${profile.city || 'Dhaka'}.`,
+      inPopularKL: false,
     };
 
-    setDbListings((prev) => [newItem, ...prev]);
-    setRecentlyViewedIds((prev) => [newItem.id, ...prev]);
-    insertListingToDatabase(newItem).catch((err) =>
-      console.warn('Listing sync notice:', err)
-    );
-
-    setIsHostModalOpen(false);
-    if (data.category !== 'stay' && activeCategory !== 'all') {
-      setActiveCategory(data.category);
+    try {
+      const saved = await insertListingToDatabase(newItem);
+      setDbListings((prev) => [saved, ...prev]);
+      setRecentlyViewedIds((prev) => [saved.id, ...prev]);
+      setIsHostModalOpen(false);
+      if (data.category !== 'stay' && activeCategory !== 'all') {
+        setActiveCategory(data.category);
+      }
+      showToast({ message: `"${saved.title}" submitted for QAAGA review. It will appear publicly after approval.` });
+    } catch (error: any) {
+      showToast({ message: error?.message || 'Listing was not saved. Please try again.' });
     }
-    showToast({ message: `Published "${newItem.title}" live on qaaga.com` });
   };
 
   const handleDeleteCustomListing = (id: string) => {
@@ -1286,7 +1307,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
           if (!val) setSearchSubmitted(false);
         }}
         selectedDates={selectedDates}
-        onSelectDates={setSelectedDates}
+        onSelectDates={handleSelectDatePreset}
         calendarMonth={calendarMonth}
         onToggleCalendarMonth={() =>
           setCalendarMonth((prev) => (prev === 'Nov' ? 'Dec' : 'Nov'))
