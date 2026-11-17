@@ -39,11 +39,11 @@ export const HostStudioModal: React.FC<{
   onDeleteCustomListing: (id: string) => void;
 }> = ({ customListings, onClose, onPublish, onDeleteCustomListing }) => {
   const [title, setTitle] = useState('');
-  const [area, setArea] = useState('Bukit Bintang');
+  const [area, setArea] = useState('Gulshan');
   const [category, setCategory] = useState<'stay' | 'experiences' | 'services'>('stay');
-  const [twoNightUsd, setTwoNightUsd] = useState('120');
-  const [photo, setPhoto] = useState('/assets/kl-ui/kl-1.jpg');
-  const [guestFav, setGuestFav] = useState(true);
+  const [twoNightUsd, setTwoNightUsd] = useState('');
+  const [photo, setPhoto] = useState('');
+  const [guestFav, setGuestFav] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -69,17 +69,31 @@ export const HostStudioModal: React.FC<{
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) return;
-    const parsedPrice = Math.max(20, parseInt(twoNightUsd.replace(/\D/g, ''), 10) || 120);
+    const parsedPrice = Number(twoNightUsd);
+    if (!title.trim()) {
+      setUploadError('Enter a listing title.');
+      return;
+    }
+    if (!Number.isFinite(parsedPrice) || parsedPrice <= 0) {
+      setUploadError('Enter a valid two-night base price in USD.');
+      return;
+    }
+    if (!photo) {
+      setUploadError('Upload a real property photo before submitting.');
+      return;
+    }
     onPublish({
       title: title.trim(),
       area,
       category,
-      twoNightUsd: parsedPrice,
+      twoNightUsd: Math.round(parsedPrice * 100) / 100,
       photo,
       guestFav,
     });
     setTitle('');
+    setTwoNightUsd('');
+    setPhoto('');
+    setUploadError('');
   };
 
   return (
@@ -95,7 +109,7 @@ export const HostStudioModal: React.FC<{
           <div>
             <h3 className="text-lg font-bold text-slate-950">Become a host on qaaga.com</h3>
             <p className="text-xs text-slate-500">
-              Publish a stay, experience, or hospitality service in Kuala Lumpur
+              Publish a stay, experience, or hospitality service in Dhaka
             </p>
           </div>
           <button
@@ -118,7 +132,7 @@ export const HostStudioModal: React.FC<{
               required
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g., Skyline Loft in Bukit Bintang"
+              placeholder="e.g., Furnished Apartment in Gulshan"
               className="w-full h-11 px-3.5 rounded-xl border border-slate-300 text-sm focus:outline-none focus:border-[#C72B62]"
             />
           </div>
@@ -150,11 +164,11 @@ export const HostStudioModal: React.FC<{
                 onChange={(e) => setArea(e.target.value)}
                 className="w-full h-11 px-3 rounded-xl border border-slate-300 text-sm bg-white focus:outline-none focus:border-[#C72B62]"
               >
-                <option value="Bukit Bintang">Bukit Bintang</option>
-                <option value="Kampung Bahru">Kampung Bahru</option>
-                <option value="KLCC">KLCC</option>
-                <option value="Mont Kiara">Mont Kiara</option>
-                <option value="Bangsar">Bangsar</option>
+                <option value="Gulshan">Gulshan</option>
+                <option value="Banani">Banani</option>
+                <option value="Dhanmondi">Dhanmondi</option>
+                <option value="Uttara">Uttara</option>
+                <option value="Mirpur">Mirpur</option>
               </select>
             </div>
           </div>
@@ -162,12 +176,12 @@ export const HostStudioModal: React.FC<{
           <div className="grid grid-cols-2 gap-3 items-end">
             <div>
               <label className="block text-xs font-bold text-slate-800 mb-1">
-                Price for 2 nights ($ USD)
+                Base price for 2 nights (USD)
               </label>
               <input
                 type="number"
-                min={20}
-                max={5000}
+                min={1}
+                max={100000}
                 required
                 value={twoNightUsd}
                 onChange={(e) => setTwoNightUsd(e.target.value)}
@@ -478,7 +492,7 @@ export const TripsModal: React.FC<{
               Trips & Reservations ({bookings.length})
             </h3>
             <p className="text-xs text-slate-500">
-              Manage your Kuala Lumpur stays, experiences & host check-ins
+              Manage your Dhaka stays, experiences & host check-ins
             </p>
           </div>
           <button
@@ -687,7 +701,7 @@ export const ProfileModal: React.FC<{
     onSave({
       fullName: fullName.trim(),
       email: email.trim(),
-      city: city.trim() || 'Kuala Lumpur',
+      city: city.trim() || 'Dhaka',
       phone: phone.trim() || undefined,
       role,
       bio: bio.trim() || undefined,
