@@ -74,7 +74,7 @@ export async function GET(req: NextRequest) {
       fullName: data.full_name || 'Member',
       email: data.email,
       city: data.city || 'Dhaka',
-      role: data.role || 'guest',
+      role: authenticated.user.app_metadata?.role === 'admin' ? 'admin' : (data.role === 'host' ? 'host' : 'guest'),
       verified: Boolean(authenticated.user.email_confirmed_at),
       phone: data.phone || undefined,
       avatarUrl: data.avatar_url || undefined,
