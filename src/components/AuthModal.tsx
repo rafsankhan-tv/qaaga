@@ -102,7 +102,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const validateInput = (val: string) => {
     const trimmed = val.trim();
     if (!trimmed) return 'Please enter your email address';
-    if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(trimmed)) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
       return 'Please enter a valid email address';
     }
     return '';
