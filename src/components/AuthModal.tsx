@@ -228,46 +228,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     if (isVerified) {
       setLoading(false);
 
-      const isAdminEmail = cleanTarget.toLowerCase() === 'rafsankhan.tv@gmail.com';
-      if (isAdminEmail) {
-        // Super Admin account detected: immediately configure and launch Admin Dashboard
-        const adminProfile: GuestProfile = {
-          fullName: 'Rafsan Khan',
-          email: 'rafsankhan.tv@gmail.com',
-          city: 'Dhaka',
-          phone: '+880 1711-000000',
-          role: 'admin',
-          bio: 'Super Admin & Owner of qaaga.com platform.',
-          avatarUrl: AVATAR_OPTIONS[0],
-          verified: true,
-          joinedDate: 'Nov 2026',
-          status: 'active',
-        };
-
-        try {
-          await saveUserProfileToDatabase(adminProfile);
-          await fetch('/api/auth/profile', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(adminProfile),
-          });
-        } catch {
-          // graceful fallback
-        }
-
-        onUpdateProfile(adminProfile);
-        setStep('success');
-        onShowToast({
-          message: '👑 Super Admin verification successful! Opening Admin Dashboard...',
-        });
-
-        setTimeout(() => {
-          onClose();
-          onOpenAdminModal?.();
-        }, 1100);
-        return;
-      }
-
       // Standard user flow: transition to Complete Profile step!
       setStep('complete_profile');
       onShowToast({
@@ -418,7 +378,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <form onSubmit={handleSendOtp} className="space-y-4 pt-1">
             <div className="space-y-1.5 text-left">
               <label htmlFor="qaaga-auth-input" className="block text-xs font-semibold text-slate-700">
-                Email or phone number
+                Email address
               </label>
               <div className="relative">
                 <input
@@ -429,7 +389,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     setEmailOrPhone(e.target.value);
                     if (errorMessage) setErrorMessage('');
                   }}
-                  placeholder="name@example.com or phone"
+                  placeholder="name@example.com"
                   autoFocus
                   className={`w-full px-4 py-3.5 sm:py-4 rounded-xl border text-sm sm:text-base text-slate-900 placeholder:text-slate-400 focus:outline-none transition-all ${
                     errorMessage
