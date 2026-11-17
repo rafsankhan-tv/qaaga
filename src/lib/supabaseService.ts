@@ -286,10 +286,14 @@ export async function deleteListingFromDatabase(id: string): Promise<boolean> {
   if (!supabase) return false;
 
   const { data: authData, error: authError } = await supabase.auth.getUser();
+  const email = authData.user?.email?.trim().toLowerCase();
   if (authError || !authData.user) return false;
+  const isAdmin = authData.user.app_metadata?.role === 'admin';
 
-  const { error } = await supabase.from('properties').delete().eq('id', id);
-  return !error;
+  const query = supabase.from('properties').delete().eq('id', id);
+  if (!isAdmin) query.eq('host_email', email || '');
+  const { data, error } = await query.select('id').maybeSingle();
+  return !error && Boolean(data);
 }
 
 /* ========================================================================= */
@@ -1169,15 +1173,18 @@ export async function updatePropertyStatus(
   const supabase = getSupabase();
   if (!supabase) return false;
 
-  try {
-    const { error } = await supabase
-      .from('properties')
-      .update({ status, updated_at: new Date().toISOString() })
-      .eq('id', id);
-    return !error;
-  } catch {
-    return false;
-  }
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  const email = authData.user?.email?.trim().toLowerCase();
+  if (authError || !authData.user) return false;
+
+  const query = supabase
+    .from('properties')
+    .update({ status, updated_at: new Date().toISOString() })
+    .eq('id', id);
+  if (authData.user.app_metadata?.role !== 'admin') query.eq('host_email', email || '');
+
+  const { data, error } = await query.select('id').maybeSingle();
+  return !error && Boolean(data);
 }
 
 export async function checkPropertyAvailability(
@@ -1292,26 +1299,26 @@ export async function updateBookingStatus(
   const supabase = getSupabase();
   if (!supabase) return false;
 
-  try {
-    const payload: Record<string, any> = {
-      status,
-      updated_at: new Date().toISOString(),
-    };
-    if (reason) payload.cancellation_reason = reason;
-    if (cancelledBy) {
-      payload.cancelled_by = cancelledBy;
-      payload.cancelled_at = new Date().toISOString();
-    }
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  const email = authData.user?.email?.trim().toLowerCase();
+  if (authError || !email) return false;
+  const isAdmin = authData.user?.app_metadata?.role === 'admin';
 
-    const { error } = await supabase
-      .from('bookings')
-      .update(payload)
-      .eq('id', bookingId);
-
-    return !error;
-  } catch {
-    return false;
+  const payload: Record<string, any> = {
+    status,
+    updated_at: new Date().toISOString(),
+  };
+  if (reason) payload.cancellation_reason = reason;
+  if (cancelledBy && isAdmin) {
+    payload.cancelled_by = cancelledBy;
+    payload.cancelled_at = new Date().toISOString();
   }
+
+  const query = supabase.from('bookings').update(payload).eq('id', bookingId);
+  if (!isAdmin) query.eq('host_email', email);
+
+  const { data, error } = await query.select('id').maybeSingle();
+  return !error && Boolean(data);
 }
 
 /* ========================================================================= */
@@ -1450,7 +1457,11 @@ export async function updatePaymentProofStatus(
   if (!supabase) return false;
 
   try {
-    const { error } = await supabase
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    const email = authData.user?.email?.trim().toLowerCase();
+    if (authError || !email) return false;
+
+    const { data, error } = await supabase
       .from('payment_records')
       .update({
         status,
@@ -1458,8 +1469,11 @@ export async function updatePaymentProofStatus(
         verified_at: status === 'verified' ? new Date().toISOString() : null,
         updated_at: new Date().toISOString(),
       })
-      .eq('id', id);
-    return !error;
+      .eq('id', id)
+      .select('id')
+      .maybeSingle();
+
+    return !error && Boolean(data);
   } catch {
     return false;
   }
@@ -1583,43 +1597,46 @@ export async function updateIdentityVerificationStatus(
   userEmail: string,
   status: 'approved' | 'rejected',
   rejectionReason?: string,
-  reviewedBy: string = 'Super Admin'
+  reviewedBy?: string
 ): Promise<boolean> {
   const cleanEmail = userEmail.trim().toLowerCase();
-  invalidateServiceCache(`idv:${cleanEmail}`);
+  invalidateServiceCache('idv:' + cleanEmail);
   invalidateServiceCache('idv:all');
-  invalidateServiceCache(`profile:${cleanEmail}`);
+  invalidateServiceCache('profile:' + cleanEmail);
   invalidateServiceCache('admin:stats');
   const supabase = getSupabase();
   if (!supabase) return false;
 
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError || authData.user?.app_metadata?.role !== 'admin') return false;
+
   const now = new Date().toISOString();
+  const { data: verification, error: verificationError } = await supabase
+    .from('identity_verifications')
+    .update({
+      status,
+      rejection_reason: rejectionReason || null,
+      reviewed_by: reviewedBy || authData.user.email,
+      reviewed_at: now,
+      updated_at: now,
+    })
+    .eq('id', id)
+    .eq('user_email', cleanEmail)
+    .select('id')
+    .maybeSingle();
 
-  try {
-    await supabase
-      .from('identity_verifications')
-      .update({
-        status,
-        rejection_reason: rejectionReason || null,
-        reviewed_by: reviewedBy,
-        reviewed_at: now,
-        updated_at: now,
-      })
-      .eq('id', id);
+  if (verificationError || !verification) return false;
 
-    await supabase
-      .from('profiles')
-      .update({
-        identity_status: status === 'approved' ? 'verified' : 'rejected',
-        verified: status === 'approved',
-        updated_at: now,
-      })
-      .eq('email', cleanEmail);
+  const { error: profileError } = await supabase
+    .from('profiles')
+    .update({
+      identity_status: status === 'approved' ? 'verified' : 'rejected',
+      verified: status === 'approved',
+      updated_at: now,
+    })
+    .eq('email', cleanEmail);
 
-    return true;
-  } catch {
-    return false;
-  }
+  return !profileError;
 }
 
 /* ========================================================================= */
