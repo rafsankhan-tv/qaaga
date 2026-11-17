@@ -681,7 +681,7 @@ async function resolvePrivateStorageReference(
 
 export async function uploadFileToSupabaseStorage(
   file: File,
-  bucket: 'qaaga-listings' | 'qaaga-branding' | 'qaaga-avatars' = 'qaaga-listings'
+  bucket: 'qaaga-listings' | 'qaaga-avatars' = 'qaaga-listings'
 ): Promise<{ url: string; error?: string }> {
   const supabase = getSupabase();
   if (!supabase) return { url: '', error: 'Supabase Storage is not configured.' };
@@ -1223,7 +1223,7 @@ export async function getBookingsForHost(hostEmail: string): Promise<any[]> {
           checkInLabel: b.check_in_label,
           nights: Number(b.nights) || 1,
           guests: Number(b.guests) || 1,
-          totalUsd: Number(b.total_usd) || 100,
+          totalUsd: Number(b.total_usd) || 0,
           status: b.status || 'Pending',
           cancellationReason: b.cancellation_reason,
           createdAt: b.created_at,
@@ -1351,7 +1351,7 @@ export async function submitPaymentProof(data: {
     currency: inserted.currency,
     paymentMethod: inserted.payment_method,
     transactionReference: inserted.transaction_reference,
-    proofImageUrl: data.proofImageUrl,
+    proofImageUrl: await resolvePrivateStorageReference(supabase, data.proofImageUrl),
     payerName: inserted.payer_name,
     payerEmail: inserted.payer_email,
     status: inserted.status,
@@ -1360,9 +1360,11 @@ export async function submitPaymentProof(data: {
 }
 
 export async function getPaymentProofs(bookingId?: string): Promise<PaymentProofRecord[]> {
-  return dedupFetch('payments:' + (bookingId || 'all'), async () => {
+  return dedupFetch('payments:' + authData.user.id + ':' + (bookingId || 'all'), async () => {
     const supabase = getSupabase();
     if (!supabase) return [];
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    if (authError || !authData.user) return [];
 
     try {
       let query = supabase
@@ -1495,9 +1497,9 @@ export async function submitIdentityVerification(data: {
     userEmail: inserted.user_email,
     userName: inserted.user_name,
     documentType: inserted.document_type,
-    documentFrontUrl: inserted.document_front_url,
-    documentBackUrl: inserted.document_back_url,
-    selfieUrl: inserted.selfie_url,
+    documentFrontUrl: await resolvePrivateStorageReference(supabase, inserted.document_front_url),
+    documentBackUrl: await resolvePrivateStorageReference(supabase, inserted.document_back_url),
+    selfieUrl: await resolvePrivateStorageReference(supabase, inserted.selfie_url),
     status: inserted.status,
     createdAt: inserted.created_at,
   };
@@ -1507,9 +1509,13 @@ export async function getIdentityVerifications(
   userEmail?: string
 ): Promise<IdentityVerificationRecord[]> {
   const cleanEmail = userEmail ? userEmail.trim().toLowerCase() : 'all';
-  return dedupFetch('idv:' + cleanEmail, async () => {
-    const supabase = getSupabase();
-    if (!supabase) return [];
+  const supabase = getSupabase();
+  if (!supabase) return [];
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError || !authData.user) return [];
+  const currentEmail = authData.user.email?.trim().toLowerCase();
+  if (userEmail && currentEmail !== cleanEmail && authData.user.app_metadata?.role !== 'admin') return [];
+  return dedupFetch('idv:' + authData.user.id + ':' + cleanEmail, async () => {
 
     try {
       let query = supabase
