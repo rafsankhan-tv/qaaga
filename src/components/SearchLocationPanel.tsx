@@ -268,7 +268,7 @@ export const SearchLocationPanel: React.FC<SearchLocationPanelProps> = ({
       <div className="space-y-1">
         <div className="flex items-center justify-between px-2 pb-1">
           <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-            {searchInput.trim() ? `Matching destinations (${filteredLocations.length})` : 'Popular destinations in Kuala Lumpur'}
+            {searchInput.trim() ? `Matching destinations (${filteredLocations.length})` : 'Popular destinations in Dhaka'}
           </span>
           {whereQuery && (
             <button
