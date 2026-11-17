@@ -30,6 +30,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { BrandLogo } from '@/components/BrandLogo';
+import { getSupabase } from '@/lib/supabaseClient';
 import { ListingImage } from '@/components/ListingCard';
 import {
   DEFAULT_BRANDING,
@@ -40,6 +41,7 @@ import {
 import {
   getPropertiesByHost,
   insertListingToDatabase,
+  updateListingInDatabase,
   deleteListingFromDatabase,
   updatePropertyStatus,
   getBookingsForHost,
@@ -74,13 +76,15 @@ export default function HostDashboard({
 }: HostDashboardProps) {
   const [activeTab, setActiveTab] = useState<'listings' | 'requests' | 'payments' | 'calendar' | 'profile'>('listings');
   const [hostProfile, setHostProfile] = useState<GuestProfile>({
-    fullName: 'Verified Apartment Host',
-    email: 'host@qaaga.com',
-    city: 'Kuala Lumpur',
-    role: 'host',
-    verified: true,
+    fullName: '',
+    email: '',
+    city: 'Dhaka',
+    role: 'guest',
+    verified: false,
   });
 
+  const [authState, setAuthState] = useState<'checking' | 'authorized' | 'denied'>('checking');
+  const [dashboardError, setDashboardError] = useState<string | null>(null);
   const [properties, setProperties] = useState<PropertyRecord[]>([]);
   const [loadingProps, setLoadingProps] = useState(true);
   const [bookings, setBookings] = useState<any[]>([]);
@@ -94,17 +98,17 @@ export default function HostDashboard({
   const [editingPropertyId, setEditingPropertyId] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [area, setArea] = useState('Bukit Bintang');
+  const [area, setArea] = useState('');
   const [propertyType, setPropertyType] = useState('Apartment');
   const [roomType, setRoomType] = useState('Entire place');
-  const [priceDaily, setPriceDaily] = useState('65');
-  const [priceWeekly, setPriceWeekly] = useState('400');
-  const [priceMonthly, setPriceMonthly] = useState('1450');
+  const [priceDaily, setPriceDaily] = useState('');
+  const [priceWeekly, setPriceWeekly] = useState('');
+  const [priceMonthly, setPriceMonthly] = useState('');
   const [maxGuests, setMaxGuests] = useState(2);
   const [bedrooms, setBedrooms] = useState('1 bedroom');
   const [bathrooms, setBathrooms] = useState(1);
-  const [mainPhoto, setMainPhoto] = useState('/assets/kl-ui/kl-1.jpg');
-  const [gallery, setGallery] = useState<string[]>(['/assets/kl-ui/kl-1.jpg']);
+  const [mainPhoto, setMainPhoto] = useState('');
+  const [gallery, setGallery] = useState<string[]>([]);
   const [facilities, setFacilities] = useState<Record<string, boolean>>({
     wifi: true,
     ac: true,
@@ -121,57 +125,100 @@ export default function HostDashboard({
   const [rejectBookingId, setRejectBookingId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState<string>('');
 
-  // Hydration
+  // Restore the current Supabase user and enforce host role before loading data.
   useEffect(() => {
-    let currentEmail = 'host@qaaga.com';
-    try {
-      const stored = localStorage.getItem('qaaga_v3_profile');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed.email) {
-          currentEmail = parsed.email;
-          setHostProfile({ ...parsed, role: 'host' });
-        }
-      }
-    } catch {}
-
-    getUserProfileFromDatabase(currentEmail).then((p) => {
-      if (p) setHostProfile({ ...p, role: 'host' });
-    });
-
-    // Fetch Host Properties, Incoming Bookings & Payments in parallel
-    setLoadingProps(true);
-    setLoadingBookings(true);
-    setLoadingPayments(true);
     let active = true;
 
-    Promise.all([
-      getPropertiesByHost(currentEmail),
-      getBookingsForHost(currentEmail),
-      getPaymentProofs(),
-    ])
-      .then(([res, bks, allPays]) => {
-        if (!active) return;
-        setProperties(res || []);
-        setBookings(bks || []);
-        setPayments(allPays || []);
-      })
-      .finally(() => {
-        if (!active) return;
-        setLoadingProps(false);
-        setLoadingBookings(false);
-        setLoadingPayments(false);
-      });
+    const loadDashboard = async () => {
+      const supabase = getSupabase();
+      if (!supabase) {
+        if (active) {
+          setAuthState('denied');
+          setDashboardError('Supabase authentication is not configured.');
+        }
+        return;
+      }
 
-    return () => {
-      active = false;
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      const session = sessionData.session;
+      if (sessionError || !session?.access_token || !session.user.email) {
+        if (active) setAuthState('denied');
+        return;
+      }
+
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      const email = authData.user?.email?.trim().toLowerCase();
+      if (authError || !email) {
+        if (active) setAuthState('denied');
+        return;
+      }
+
+      const response = await fetch(
+        '/api/auth/profile?email=' + encodeURIComponent(email),
+        { headers: { Authorization: 'Bearer ' + session.access_token } }
+      );
+      const result = await response.json().catch(() => ({}));
+      const account = result.profile;
+
+      if (!response.ok || !account || !['host', 'admin'].includes(account.role)) {
+        if (active) {
+          setAuthState('denied');
+          setDashboardError('This dashboard is available only to approved host accounts.');
+        }
+        return;
+      }
+
+      if (!active) return;
+      setHostProfile({
+        fullName: account.fullName,
+        email,
+        city: account.city || 'Dhaka',
+        role: account.role,
+        verified: Boolean(account.verified),
+        phone: account.phone,
+      });
+      setAuthState('authorized');
+      setLoadingProps(true);
+      setLoadingBookings(true);
+      setLoadingPayments(true);
+
+      const [props, bookingsData, paymentsData] = await Promise.all([
+        getPropertiesByHost(email),
+        getBookingsForHost(email),
+        getPaymentProofs(),
+      ]);
+
+      if (!active) return;
+      setProperties(props || []);
+      setBookings(bookingsData || []);
+      setPayments((paymentsData || []).filter((payment) => payment && payment.bookingId));
+      setLoadingProps(false);
+      setLoadingBookings(false);
+      setLoadingPayments(false);
     };
+
+    loadDashboard().catch((error: any) => {
+      if (!active) return;
+      setAuthState('denied');
+      setDashboardError(error?.message || 'Unable to load host dashboard.');
+      setLoadingProps(false);
+      setLoadingBookings(false);
+      setLoadingPayments(false);
+    });
+
+    return () => { active = false; };
   }, []);
+
+
 
   // Toggle Property Availability (Active / Inactive)
   const handleToggleStatus = async (prop: PropertyRecord) => {
-    const nextStatus = prop.status === 'active' ? 'inactive' : 'active';
-    await updatePropertyStatus(prop.id, nextStatus);
+    const nextStatus = prop.status === 'active' ? 'inactive' : 'pending_approval';
+    const updated = await updatePropertyStatus(prop.id, nextStatus);
+    if (!updated) {
+      setDashboardError('Listing status could not be updated. Check your host permissions.');
+      return;
+    }
     setProperties((prev) =>
       prev.map((p) => (p.id === prop.id ? { ...p, status: nextStatus } : p))
     );
@@ -180,7 +227,11 @@ export default function HostDashboard({
   // Delete Property
   const handleConfirmDeleteProperty = async () => {
     if (!deleteConfirmId) return;
-    await deleteListingFromDatabase(deleteConfirmId);
+    const deleted = await deleteListingFromDatabase(deleteConfirmId);
+    if (!deleted) {
+      setDashboardError('Listing could not be deleted.');
+      return;
+    }
     setProperties((prev) => prev.filter((p) => p.id !== deleteConfirmId));
     setDeleteConfirmId(null);
   };
@@ -204,55 +255,77 @@ export default function HostDashboard({
   // Save / Publish Property
   const handleSaveProperty = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) return;
-    setIsSavingProperty(true);
+    if (!hostProfile.email || !title.trim() || !area.trim() || !mainPhoto) {
+      setDashboardError('Add a title, area, nightly price and property photo before submitting.');
+      return;
+    }
 
-    const propId = editingPropertyId || `host-prop-${Date.now()}`;
-    const pDaily = parseInt(priceDaily, 10) || 65;
-    const pWeekly = parseInt(priceWeekly, 10) || pDaily * 6;
-    const pMonthly = parseInt(priceMonthly, 10) || pDaily * 24;
+    const daily = Number(priceDaily);
+    if (!Number.isFinite(daily) || daily <= 0) {
+      setDashboardError('Enter a valid nightly price greater than zero.');
+      return;
+    }
+
+    setIsSavingProperty(true);
+    setDashboardError(null);
 
     const payload: QaagaListing = {
-      id: propId,
+      id: editingPropertyId || 'host-' + crypto.randomUUID(),
+      hostEmail: hostProfile.email,
       title: title.trim(),
-      description: description.trim() || 'Modern fully furnished apartment with skyline views.',
-      area,
-      city: 'Kuala Lumpur',
+      description: description.trim(),
+      area: area.trim(),
+      city: hostProfile.city || 'Dhaka',
       subType: propertyType,
       category: 'stay',
-      twoNightPriceUsd: pDaily * 2,
-      rating: '5.0',
-      reviewsCount: 1,
-      guestFavorite: true,
+      twoNightPriceUsd: daily * 2,
+      rating: '0',
+      reviewsCount: 0,
+      guestFavorite: false,
       image: mainPhoto,
       gallery,
       maxGuests,
       bedrooms,
       hostName: hostProfile.fullName,
-      hostYears: 2,
-      amenities: Object.keys(facilities).filter((k) => facilities[k]),
-      inPopularKL: true,
+      hostYears: 0,
+      amenities: Object.keys(facilities).filter((key) => facilities[key]),
+      inPopularKL: false,
     };
 
-    const saved = await insertListingToDatabase(payload);
-    const fullSaved: PropertyRecord = {
-      ...saved,
-      hostEmail: hostProfile.email,
-      propertyType,
-      roomType,
-      priceDaily: pDaily,
-      priceWeekly: pWeekly,
-      priceMonthly: pMonthly,
-      status: 'active',
-      facilities,
-    };
+    try {
+      const saved = editingPropertyId
+        ? await updateListingInDatabase(payload)
+        : await insertListingToDatabase(payload);
 
-    setProperties((prev) => [fullSaved, ...prev.filter((p) => p.id !== propId)]);
-    setIsSavingProperty(false);
-    setIsAddModalOpen(false);
-    setEditingPropertyId(null);
-    setTitle('');
-    setDescription('');
+      const fullSaved: PropertyRecord = {
+        ...saved,
+        hostEmail: hostProfile.email,
+        propertyType,
+        roomType,
+        priceDaily: daily,
+        priceWeekly: Number(priceWeekly) || daily * 6,
+        priceMonthly: Number(priceMonthly) || daily * 30,
+        status: 'pending_approval',
+        facilities,
+      };
+
+      setProperties((prev) => [fullSaved, ...prev.filter((item) => item.id !== fullSaved.id)]);
+      setIsAddModalOpen(false);
+      setEditingPropertyId(null);
+      setTitle('');
+      setDescription('');
+      setArea('');
+      setPriceDaily('');
+      setPriceWeekly('');
+      setPriceMonthly('');
+      setMainPhoto('');
+      setGallery([]);
+      setDashboardError('Your listing has been submitted and is waiting for QAAGA review.');
+    } catch (error: any) {
+      setDashboardError(error?.message || 'Listing could not be saved.');
+    } finally {
+      setIsSavingProperty(false);
+    }
   };
 
   // Open Edit Modal
@@ -274,20 +347,26 @@ export default function HostDashboard({
 
   // Accept Booking Request
   const handleAcceptBooking = async (bId: string) => {
-    await updateBookingStatus(bId, 'Accepted');
-    setBookings((prev) =>
-      prev.map((b) => (b.id === bId ? { ...b, status: 'Accepted' } : b))
-    );
+    const updated = await updateBookingStatus(bId, 'Accepted');
+    if (!updated) {
+      setDashboardError('Booking could not be accepted.');
+      return;
+    }
+    setBookings((prev) => prev.map((b) => (b.id === bId ? { ...b, status: 'Accepted' } : b)));
   };
 
   // Reject Booking Request
   const handleConfirmReject = async () => {
     if (!rejectBookingId) return;
-    await updateBookingStatus(
+    const updated = await updateBookingStatus(
       rejectBookingId,
       'Rejected',
       rejectReason || 'Unavailable for requested dates'
     );
+    if (!updated) {
+      setDashboardError('Booking could not be rejected.');
+      return;
+    }
     setBookings((prev) =>
       prev.map((b) =>
         b.id === rejectBookingId
@@ -301,12 +380,30 @@ export default function HostDashboard({
 
   // Verify Payment
   const handleVerifyPayment = async (pId: string) => {
-    await updatePaymentProofStatus(pId, 'verified', 'Verified by Apartment Host');
-    setPayments((prev) =>
-      prev.map((p) => (p.id === pId ? { ...p, status: 'verified' } : p))
-    );
+    const updated = await updatePaymentProofStatus(pId, 'verified', 'Verified by host');
+    if (!updated) {
+      setDashboardError('Payment status could not be updated.');
+      return;
+    }
+    setPayments((prev) => prev.map((p) => (p.id === pId ? { ...p, status: 'verified' } : p)));
     setViewPaymentProof(null);
   };
+
+  if (authState !== 'authorized') {
+    return (
+      <main className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+        <section className="w-full max-w-md rounded-3xl bg-white border border-slate-200 p-8 text-center shadow-sm">
+          <Shield className="mx-auto h-10 w-10 text-slate-400" />
+          <h1 className="mt-4 text-xl font-bold text-slate-900">Host Dashboard</h1>
+          <p className="mt-2 text-sm text-slate-600">
+            {authState === 'checking' ? 'Checking your QAAGA host account…' : (dashboardError || 'Sign in with an approved host account to continue.')}
+          </p>
+          {authState === 'denied' && <Link href="/login" className="mt-5 inline-flex rounded-full bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white">Sign in</Link>}
+          <Link href="/" className="mt-4 block text-sm text-slate-500">Back to marketplace</Link>
+        </section>
+      </main>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col">
