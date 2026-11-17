@@ -77,25 +77,23 @@ function mapDbListingToModel(row: any): QaagaListing {
     id: String(row.id),
     hostEmail: row.host_email || undefined,
     title: row.title || 'Untitled Listing',
-    area: row.area || 'Kuala Lumpur',
+    area: row.area || '',
     city: row.city || 'Dhaka',
     subType: row.sub_type || row.property_type || 'Apartment',
     category: row.category || 'stay',
-    twoNightPriceUsd:
-      Number(row.two_night_price_usd) ||
-      (Number(row.price_daily) ? Number(row.price_daily) * 2 : 120),
-    rating: String(row.rating || '5.0'),
+    twoNightPriceUsd: Number(row.two_night_price_usd ?? (Number(row.price_daily) * 2)) || 0,
+    rating: String(row.rating ?? '0'),
     reviewsCount: Number(row.reviews_count) || 0,
     guestFavorite: Boolean(row.guest_favorite ?? row.is_featured),
-    image: row.image || '/assets/kl-ui/kl-1.jpg',
+    image: row.image || '',
     gallery:
       Array.isArray(row.gallery) && row.gallery.length > 0
         ? row.gallery
-        : [row.image || '/assets/kl-ui/kl-1.jpg'],
+        : (row.image ? [row.image] : []),
     maxGuests: Number(row.max_guests) || 2,
     bedrooms: row.bedrooms || '1 bedroom',
     hostName: row.host_name || 'Host',
-    hostYears: Number(row.host_years) || 1,
+    hostYears: Number(row.host_years) || 0,
     amenities: Array.isArray(row.amenities) ? row.amenities : [],
     description: row.description || '',
     inPopularKL: Boolean(row.in_popular_kl),
@@ -296,13 +294,13 @@ export async function fetchBookingsWithStatus(
         listingId: row.listing_id || row.property_id,
         title: row.title,
         area: row.area,
-        image: row.image || '/assets/kl-ui/kl-1.jpg',
+        image: row.image || '',
         checkInLabel: row.check_in_label,
-        nights: Number(row.nights) || 2,
+        nights: Number(row.nights) || 0,
         guests: Number(row.guests) || 1,
-        totalUsd: Number(row.total_usd) || 100,
+        totalUsd: Number(row.total_usd) || 0,
         hostName: row.host_name || 'Host',
-        status: row.status || 'Confirmed',
+        status: row.status || 'Pending',
       }));
       return { data: mapped, status: 'ok' };
     } catch (err: any) {
@@ -450,7 +448,7 @@ export async function getReviewsFromDatabase(
             month: 'short',
             year: 'numeric',
           }),
-          rating: Number(r.rating) || 5,
+          rating: Number(r.rating) || 0,
           comment: r.comment,
         }));
       }
@@ -642,6 +640,50 @@ export async function sendMessageToDatabase(
 /* ========================================================================= */
 /* 5. STORAGE FILE UPLOAD (SUPABASE STORAGE)                                 */
 /* ========================================================================= */
+export async function uploadPrivateFileToSupabaseStorage(
+  file: File,
+  purpose: 'payment' | 'identity'
+): Promise<{ url: string; error?: string }> {
+  const supabase = getSupabase();
+  if (!supabase) return { url: '', error: 'Supabase Storage is not configured.' };
+
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  const userId = authData.user?.id;
+  if (authError || !userId) return { url: '', error: 'Sign in before uploading a private document.' };
+
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/avif', 'application/pdf'];
+  if (!allowedTypes.includes(file.type)) return { url: '', error: 'Unsupported document format.' };
+  if (!file.size || file.size > 10 * 1024 * 1024) return { url: '', error: 'File must be smaller than 10 MB.' };
+
+  const extension = file.type === 'application/pdf' ? 'pdf' : file.type.split('/')[1].replace('jpeg', 'jpg');
+  const filePath = userId + '/' + purpose + '/' + crypto.randomUUID() + '.' + extension;
+  const { data, error } = await supabase.storage
+    .from('qaaga-private')
+    .upload(filePath, file, {
+      cacheControl: '3600',
+      upsert: false,
+      contentType: file.type,
+    });
+
+  if (error || !data) return { url: '', error: 'Private document upload failed.' };
+  return { url: 'storage://qaaga-private/' + data.path };
+}
+
+async function resolvePrivateStorageReference(
+  supabase: ReturnType<typeof getSupabase>,
+  reference: string | null | undefined
+): Promise<string> {
+  if (!reference?.startsWith('storage://qaaga-private/')) return reference || '';
+  if (!supabase) return '';
+
+  const path = reference.slice('storage://qaaga-private/'.length);
+  const { data, error } = await supabase.storage
+    .from('qaaga-private')
+    .createSignedUrl(path, 15 * 60);
+
+  return error || !data?.signedUrl ? '' : data.signedUrl;
+}
+
 export async function uploadFileToSupabaseStorage(
   file: File,
   bucket: 'qaaga-listings' | 'qaaga-branding' | 'qaaga-avatars' = 'qaaga-listings'
@@ -690,62 +732,39 @@ export async function uploadFileToSupabaseStorage(
 export async function uploadBrandingAssetToSupabase(
   file: File,
   type: 'logo' | 'favicon'
-): Promise<{ url: string; storageType: 'supabase-storage' | 'optimized-base64'; error?: string }> {
+): Promise<{ url: string; storageType: 'supabase-storage'; error?: string }> {
   const supabase = getSupabase();
+  if (!supabase) throw new Error('Supabase is not configured.');
 
-  if (supabase) {
-    const bucketsToTry = ['qaaga-branding', 'branding', 'public-assets', 'public'];
-    const fileExt = (file.name.split('.').pop() || (type === 'favicon' ? 'ico' : 'png')).toLowerCase();
-    const cleanFileName = `${type}-${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
-
-    for (const b of bucketsToTry) {
-      try {
-        const { data, error } = await supabase.storage
-          .from(b)
-          .upload(cleanFileName, file, {
-            cacheControl: '31536000',
-            upsert: true,
-            contentType: file.type || (fileExt === 'svg' ? 'image/svg+xml' : 'image/png'),
-          });
-
-        if (!error && data) {
-          const { data: pubData } = supabase.storage.from(b).getPublicUrl(cleanFileName);
-          if (pubData?.publicUrl) {
-            return {
-              url: pubData.publicUrl,
-              storageType: 'supabase-storage',
-            };
-          }
-        }
-      } catch {
-        // Try next bucket
-      }
-    }
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError || authData.user?.app_metadata?.role !== 'admin') {
+    throw new Error('Only a trusted platform administrator can upload branding assets.');
   }
 
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      resolve({
-        url: String(reader.result || ''),
-        storageType: 'optimized-base64',
-      });
-    };
-    reader.onerror = () => {
-      resolve({
-        url: '',
-        storageType: 'optimized-base64',
-        error: 'Failed to read branding image file',
-      });
-    };
-    reader.readAsDataURL(file);
-  });
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/avif', 'image/svg+xml'];
+  if (!allowedTypes.includes(file.type)) throw new Error('Unsupported branding file type.');
+  if (!file.size || file.size > 5 * 1024 * 1024) throw new Error('Branding images must be smaller than 5 MB.');
+
+  const ext = file.type === 'image/svg+xml' ? 'svg' : file.type.split('/')[1].replace('jpeg', 'jpg');
+  const path = authData.user.id + '/' + type + '/' + crypto.randomUUID() + '.' + ext;
+  const { data, error } = await supabase.storage
+    .from('qaaga-branding')
+    .upload(path, file, {
+      cacheControl: '31536000',
+      upsert: false,
+      contentType: file.type,
+    });
+
+  if (error || !data) throw new Error('Branding asset upload failed. Check the qaaga-branding bucket.');
+  const { data: publicData } = supabase.storage.from('qaaga-branding').getPublicUrl(data.path);
+
+  return { url: publicData.publicUrl, storageType: 'supabase-storage' };
 }
 
 export async function saveBrandingToSupabase(branding: any): Promise<any> {
   invalidateServiceCache('branding:');
   const supabase = getSupabase();
-  if (!supabase) return branding;
+  if (!supabase) throw new Error('Supabase is not configured.');
 
   try {
     const payload = {
@@ -786,7 +805,7 @@ export async function saveBrandingToSupabase(branding: any): Promise<any> {
     console.warn('Notice: Remote Supabase branding save notice:', err);
   }
 
-  return branding;
+  throw new Error('Branding could not be saved to Supabase.');
 }
 
 export async function getBrandingFromSupabase(): Promise<any | null> {
@@ -877,7 +896,7 @@ export async function getUserProfileFromDatabase(email: string): Promise<GuestPr
         return {
           fullName: data.full_name || 'Verified Member',
           email: data.email,
-          city: data.city || 'Kuala Lumpur',
+          city: data.city || 'Dhaka',
           verified: Boolean(data.verified),
           role: data.role || 'guest',
           identity_status: data.identity_status || (data.verified ? 'verified' : 'unverified'),
@@ -1082,10 +1101,10 @@ export async function getPropertiesByHost(hostEmail: string): Promise<PropertyRe
           hostEmail: row.host_email,
           propertyType: row.property_type,
           roomType: row.room_type,
-          priceDaily: Number(row.price_daily) || Math.round((Number(row.two_night_price_usd) || 120) / 2),
+          priceDaily: Number(row.price_daily ?? (Number(row.two_night_price_usd) / 2)) || 0,
           priceWeekly: Number(row.price_weekly) || undefined,
           priceMonthly: Number(row.price_monthly) || undefined,
-          status: row.status || 'active',
+          status: row.status || 'pending_approval',
           isFeatured: Boolean(row.is_featured),
           facilities: row.facilities || {},
           createdAt: row.created_at,
@@ -1125,7 +1144,7 @@ export async function checkPropertyAvailability(
   checkOutDate: string
 ): Promise<{ isAvailable: boolean; conflictReason?: string }> {
   const supabase = getSupabase();
-  if (!supabase) return { isAvailable: true };
+  if (!supabase) return { isAvailable: false, conflictReason: 'Availability cannot be verified because the database is unavailable.' };
 
   try {
     const { data: bookings, error: bookingErr } = await supabase
@@ -1134,7 +1153,8 @@ export async function checkPropertyAvailability(
       .eq('property_id', propertyId)
       .in('status', ['Confirmed', 'Accepted', 'Pending']);
 
-    if (!bookingErr && Array.isArray(bookings)) {
+    if (bookingErr || !Array.isArray(bookings)) return { isAvailable: false, conflictReason: 'Unable to verify existing reservations. Please try again.' };
+    if (Array.isArray(bookings)) {
       const inTime = new Date(checkInDate).getTime();
       const outTime = new Date(checkOutDate).getTime();
 
@@ -1159,7 +1179,8 @@ export async function checkPropertyAvailability(
       .gte('date', checkInDate)
       .lte('date', checkOutDate);
 
-    if (!blockErr && Array.isArray(blocked) && blocked.length > 0) {
+    if (blockErr) return { isAvailable: false, conflictReason: 'Unable to verify host availability. Please try again.' };
+    if (Array.isArray(blocked) && blocked.length > 0) {
       return {
         isAvailable: false,
         conflictReason: 'Selected dates include dates manually blocked by the host.',
@@ -1168,7 +1189,7 @@ export async function checkPropertyAvailability(
 
     return { isAvailable: true };
   } catch {
-    return { isAvailable: true };
+    return { isAvailable: false, conflictReason: 'Availability could not be verified. Please try again.' };
   }
 }
 
@@ -1185,7 +1206,7 @@ export async function getBookingsForHost(hostEmail: string): Promise<any[]> {
       const { data, error } = await supabase
         .from('bookings')
         .select('*')
-        .or(`host_email.eq.${cleanEmail},host_name.ilike.%${cleanEmail}%`)
+         .eq('host_email', cleanEmail)
         .order('created_at', { ascending: false });
 
       if (!error && Array.isArray(data)) {
@@ -1285,43 +1306,59 @@ export async function submitPaymentProof(data: {
   const supabase = getSupabase();
   if (!supabase) return null;
 
-  try {
-    const { data: inserted, error } = await supabase
-      .from('payment_records')
-      .insert({
-        booking_id: data.bookingId,
-        amount: data.amount,
-        currency: data.currency || 'USD',
-        payment_method: data.paymentMethod,
-        transaction_reference: data.transactionReference,
-        proof_image_url: data.proofImageUrl,
-        payer_name: data.payerName,
-        payer_email: data.payerEmail,
-        status: 'pending_review',
-      })
-      .select()
-      .single();
-
-    if (!error && inserted) {
-      return {
-        id: inserted.id,
-        bookingId: inserted.booking_id,
-        amount: Number(inserted.amount),
-        currency: inserted.currency,
-        paymentMethod: inserted.payment_method,
-        transactionReference: inserted.transaction_reference,
-        proofImageUrl: inserted.proof_image_url,
-        payerName: inserted.payer_name,
-        payerEmail: inserted.payer_email,
-        status: inserted.status,
-        createdAt: inserted.created_at,
-      };
-    }
-  } catch (err) {
-    console.warn('Notice: Supabase payment record insert error:', err);
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  const currentEmail = authData.user?.email?.trim().toLowerCase();
+  if (authError || !currentEmail || currentEmail !== data.payerEmail.trim().toLowerCase()) {
+    throw new Error('Payment proof must be submitted from the booking customer account.');
+  }
+  if (!data.proofImageUrl.startsWith('storage://qaaga-private/')) {
+    throw new Error('Payment proof must be uploaded to private QAAGA storage.');
   }
 
-  return null;
+  const { data: booking, error: bookingError } = await supabase
+    .from('bookings')
+    .select('id,customer_email,total_usd,status')
+    .eq('id', data.bookingId)
+    .eq('customer_email', currentEmail)
+    .maybeSingle();
+
+  if (bookingError || !booking || ['Cancelled', 'Rejected'].includes(booking.status)) {
+    throw new Error('This booking is not eligible for payment proof submission.');
+  }
+
+  const { data: inserted, error } = await supabase
+    .from('payment_records')
+    .insert({
+      booking_id: data.bookingId,
+      amount: Number(booking.total_usd),
+      currency: data.currency || 'USD',
+      payment_method: data.paymentMethod,
+      transaction_reference: data.transactionReference,
+      proof_image_url: data.proofImageUrl,
+      payer_name: data.payerName,
+      payer_email: currentEmail,
+      status: 'pending_review',
+    })
+    .select()
+    .single();
+
+  if (error || !inserted) {
+    throw new Error('Payment proof could not be saved. Please try again.');
+  }
+
+  return {
+    id: inserted.id,
+    bookingId: inserted.booking_id,
+    amount: Number(inserted.amount),
+    currency: inserted.currency,
+    paymentMethod: inserted.payment_method,
+    transactionReference: inserted.transaction_reference,
+    proofImageUrl: data.proofImageUrl,
+    payerName: inserted.payer_name,
+    payerEmail: inserted.payer_email,
+    status: inserted.status,
+    createdAt: inserted.created_at,
+  };
 }
 
 export async function getPaymentProofs(bookingId?: string): Promise<PaymentProofRecord[]> {
@@ -1413,53 +1450,53 @@ export async function submitIdentityVerification(data: {
   documentBackUrl?: string;
   selfieUrl?: string;
 }): Promise<IdentityVerificationRecord | null> {
-  const cleanEmail = data.userEmail.trim().toLowerCase();
-  invalidateServiceCache(`idv:${cleanEmail}`);
-  invalidateServiceCache('idv:all');
-  invalidateServiceCache('admin:stats');
   const supabase = getSupabase();
   if (!supabase) return null;
 
-  const now = new Date().toISOString();
-
-  try {
-    const { data: inserted, error } = await supabase
-      .from('identity_verifications')
-      .insert({
-        user_email: cleanEmail,
-        user_name: data.userName,
-        document_type: data.documentType,
-        document_front_url: data.documentFrontUrl,
-        document_back_url: data.documentBackUrl || null,
-        selfie_url: data.selfieUrl || null,
-        status: 'pending',
-      })
-      .select()
-      .single();
-
-    if (!error && inserted) {
-      await supabase
-        .from('profiles')
-        .update({ identity_status: 'pending', updated_at: now })
-        .eq('email', cleanEmail);
-
-      return {
-        id: inserted.id,
-        userEmail: inserted.user_email,
-        userName: inserted.user_name,
-        documentType: inserted.document_type,
-        documentFrontUrl: inserted.document_front_url,
-        documentBackUrl: inserted.document_back_url,
-        selfieUrl: inserted.selfie_url,
-        status: inserted.status,
-        createdAt: inserted.created_at,
-      };
-    }
-  } catch (err) {
-    console.warn('Notice: Supabase identity verification submit error:', err);
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  const cleanEmail = authData.user?.email?.trim().toLowerCase();
+  if (authError || !cleanEmail || cleanEmail !== data.userEmail.trim().toLowerCase()) {
+    throw new Error('Identity documents can only be submitted for your signed-in account.');
   }
 
-  return null;
+  const privateRefs = [data.documentFrontUrl, data.documentBackUrl, data.selfieUrl].filter(Boolean);
+  if (privateRefs.some((value) => !value?.startsWith('storage://qaaga-private/'))) {
+    throw new Error('Identity documents must be uploaded to private QAAGA storage.');
+  }
+
+  invalidateServiceCache('idv:' + cleanEmail);
+  invalidateServiceCache('idv:all');
+  invalidateServiceCache('admin:stats');
+
+  const { data: inserted, error } = await supabase
+    .from('identity_verifications')
+    .insert({
+      user_email: cleanEmail,
+      user_name: data.userName,
+      document_type: data.documentType,
+      document_front_url: data.documentFrontUrl,
+      document_back_url: data.documentBackUrl || null,
+      selfie_url: data.selfieUrl || null,
+      status: 'pending',
+    })
+    .select()
+    .single();
+
+  if (error || !inserted) {
+    throw new Error('Identity verification request could not be submitted.');
+  }
+
+  return {
+    id: inserted.id,
+    userEmail: inserted.user_email,
+    userName: inserted.user_name,
+    documentType: inserted.document_type,
+    documentFrontUrl: inserted.document_front_url,
+    documentBackUrl: inserted.document_back_url,
+    selfieUrl: inserted.selfie_url,
+    status: inserted.status,
+    createdAt: inserted.created_at,
+  };
 }
 
 export async function getIdentityVerifications(
