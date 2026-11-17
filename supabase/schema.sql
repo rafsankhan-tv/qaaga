@@ -165,6 +165,8 @@ CREATE INDEX IF NOT EXISTS idx_bookings_status ON public.bookings(status);
 -- Prevent two active booking requests from taking the same property/date range.
 CREATE EXTENSION IF NOT EXISTS btree_gist;
 ALTER TABLE public.bookings
+  DROP CONSTRAINT IF EXISTS bookings_no_overlapping_active_stays;
+ALTER TABLE public.bookings
   ADD CONSTRAINT bookings_no_overlapping_active_stays
   EXCLUDE USING gist (
     property_id WITH =,
@@ -324,7 +326,32 @@ $$;
 REVOKE ALL ON FUNCTION public.current_user_email() FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.is_platform_admin() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.current_user_email() TO anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.is_platform_admin() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.is_platform_admin() TO anon, authenticated;
+
+-- Drop every existing policy on the objects managed by this schema so the file
+-- can be safely re-applied after a partial setup or during a controlled migration.
+DO $
+DECLARE
+  policy_row RECORD;
+BEGIN
+  FOR policy_row IN
+    SELECT schemaname, tablename, policyname
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename IN (
+        'profiles', 'identity_verifications', 'properties',
+        'property_availability', 'bookings', 'payment_records',
+        'reviews', 'threads', 'messages', 'notifications',
+        'site_branding', 'admin_activity_logs'
+      )
+  LOOP
+    EXECUTE format(
+      'DROP POLICY IF EXISTS %I ON %I.%I',
+      policy_row.policyname, policy_row.schemaname, policy_row.tablename
+    );
+  END LOOP;
+END
+$;
 
 -- Remove the old SECURITY DEFINER email-based admin helper.
 DROP FUNCTION IF EXISTS public.is_super_admin(TEXT);
@@ -626,6 +653,39 @@ CREATE POLICY "payments_update_host_or_admin" ON public.payment_records
         AND b.host_email = public.current_user_email()
     )
   );
+
+CREATE OR REPLACE FUNCTION public.guard_payment_record_insert()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = ''
+AS $
+DECLARE
+  booking_row public.bookings%ROWTYPE;
+BEGIN
+  SELECT * INTO booking_row
+  FROM public.bookings
+  WHERE id = NEW.booking_id
+    AND customer_email = public.current_user_email();
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Payment proof must belong to your own booking';
+  END IF;
+
+  NEW.payer_email := public.current_user_email();
+  NEW.amount := booking_row.total_usd;
+  NEW.currency := booking_row.currency;
+  NEW.status := 'pending_review';
+  NEW.verified_at := NULL;
+  NEW.admin_notes := NULL;
+  NEW.host_notes := NULL;
+  RETURN NEW;
+END;
+$;
+
+DROP TRIGGER IF EXISTS trg_guard_payment_record_insert ON public.payment_records;
+CREATE TRIGGER trg_guard_payment_record_insert
+  BEFORE INSERT ON public.payment_records
+  FOR EACH ROW EXECUTE FUNCTION public.guard_payment_record_insert();
 
 -- Identity documents: private to the owner and trusted admins.
 CREATE POLICY "identity_read_own_or_admin" ON public.identity_verifications
