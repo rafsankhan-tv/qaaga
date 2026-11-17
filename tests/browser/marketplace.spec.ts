@@ -78,8 +78,10 @@ test.describe('QAAGA public marketplace', () => {
     const destinationInput = page.getByPlaceholder('Search destinations in Dhaka');
     await expect(destinationInput).toBeVisible();
     await destinationInput.fill('Gulshan');
-    await expect(page.getByRole('button', { name: /^Gulshan/ })).toBeVisible();
-    await page.getByRole('button', { name: /^Gulshan/ }).click();
+    const gulshanOption = page.getByRole('button', { name: /^Gulshan/ });
+    await expect(gulshanOption).toBeVisible();
+    await page.waitForTimeout(250);
+    await gulshanOption.click();
 
     await page.getByTestId('search-when-segment').click();
     const weekendPreset = page.getByRole('button', { name: 'This weekend' });
