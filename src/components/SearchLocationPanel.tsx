@@ -292,7 +292,8 @@ export const SearchLocationPanel: React.FC<SearchLocationPanelProps> = ({
                 key={loc.id}
                 type="button"
                 onClick={() => handleSelect(loc.name)}
-                className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-2xl transition-all text-left cursor-pointer group ${
+                data-testid={`destination-option-${loc.id}`}
+                className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-2xl transition-colors text-left cursor-pointer group ${
                   isSelected
                     ? 'bg-[#C72B62]/10 border border-[#C72B62]/30 text-slate-900'
                     : 'hover:bg-slate-50 border border-transparent'
@@ -300,7 +301,7 @@ export const SearchLocationPanel: React.FC<SearchLocationPanelProps> = ({
               >
                 <div className="flex items-center gap-3.5 min-w-0">
                   <span
-                    className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 ${
+                    className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
                       isSelected ? 'bg-[#C72B62] text-white' : 'bg-slate-100 group-hover:bg-[#C72B62]/10'
                     }`}
                   >
