@@ -162,6 +162,17 @@ CREATE INDEX IF NOT EXISTS idx_bookings_host ON public.bookings(host_email);
 CREATE INDEX IF NOT EXISTS idx_bookings_property ON public.bookings(property_id);
 CREATE INDEX IF NOT EXISTS idx_bookings_status ON public.bookings(status);
 
+-- Prevent two active booking requests from taking the same property/date range.
+CREATE EXTENSION IF NOT EXISTS btree_gist;
+ALTER TABLE public.bookings
+  ADD CONSTRAINT bookings_no_overlapping_active_stays
+  EXCLUDE USING gist (
+    property_id WITH =,
+    daterange(check_in, check_out, '[)') WITH &&
+  )
+  WHERE (status IN ('Pending', 'Confirmed', 'Accepted'));
+
+
 -- -------------------------------------------------------------------------
 -- 6. PAYMENT RECORDS & PROOFS (Direct Guest-to-Provider Payments)
 -- -------------------------------------------------------------------------
