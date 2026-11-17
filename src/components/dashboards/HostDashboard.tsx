@@ -482,7 +482,7 @@ export default function HostDashboard({
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-1">
-                Kuala Lumpur Furnished Apartment & Room Management Hub
+                Dhaka Furnished Apartment & Room Management Hub
               </p>
             </div>
           </div>
@@ -914,7 +914,7 @@ export default function HostDashboard({
               <div>
                 <h2 className="text-base font-bold text-slate-900">Availability & Seasonal Pricing</h2>
                 <p className="text-xs text-slate-500">
-                  Manage blocked dates and weekend surcharge for Kuala Lumpur properties
+                  Manage blocked dates and weekend pricing for Dhaka properties
                 </p>
               </div>
             </div>
@@ -1035,7 +1035,7 @@ export default function HostDashboard({
                   required
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="e.g. Luxury 2BR Sky Suite at Bukit Bintang with Infinity Pool"
+                  placeholder="e.g. Premium 2-bedroom furnished apartment in Gulshan"
                   className="w-full h-11 px-3.5 rounded-xl border border-slate-200 text-xs font-semibold focus:outline-none focus:border-[#C72B62]"
                 />
               </div>
@@ -1061,12 +1061,13 @@ export default function HostDashboard({
                     onChange={(e) => setArea(e.target.value)}
                     className="w-full h-10 px-3 rounded-xl border border-slate-200 text-xs font-semibold bg-white"
                   >
-                    <option value="Bukit Bintang">Bukit Bintang (Golden Triangle)</option>
-                    <option value="KLCC">KLCC (Petronas Twin Towers)</option>
-                    <option value="Mont Kiara">Mont Kiara (Expat Enclave)</option>
-                    <option value="Bangsar">Bangsar (Dining & Boutiques)</option>
-                    <option value="Chinatown">Chinatown & Petaling Street</option>
-                    <option value="KL Sentral">KL Sentral & Brickfields</option>
+                    <option value="Gulshan">Gulshan</option>
+                    <option value="Banani">Banani</option>
+                    <option value="Dhanmondi">Dhanmondi</option>
+                    <option value="Uttara">Uttara</option>
+                    <option value="Mirpur">Mirpur</option>
+                    <option value="Bashundhara">Bashundhara</option>
+                    <option value="Mohammadpur">Mohammadpur</option>
                   </select>
                 </div>
 
