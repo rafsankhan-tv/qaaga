@@ -52,7 +52,6 @@ import {
   getAllUsersFromDatabase,
   updateUserRoleInDatabase,
   uploadBrandingAssetToSupabase,
-  saveBrandingToSupabase,
 } from '@/lib/supabaseService';
 
 interface AdminPanelProps {
@@ -353,15 +352,10 @@ const AdminPanelModalInner: React.FC<AdminPanelProps> = ({
       setLoadingStats(false);
     });
 
-    const authSubscription = supabase?.auth.onAuthStateChange(() => {
-      queueMicrotask(() => {
-        if (mounted) setAdminAccess('checking');
-      });
-    });
+
 
     return () => {
       mounted = false;
-      authSubscription?.data.subscription.unsubscribe();
     };
   }, []);
 
@@ -437,32 +431,13 @@ const AdminPanelModalInner: React.FC<AdminPanelProps> = ({
     setIsProcessing(true);
     setProcessingMessage('Uploading Logo to Supabase...');
     try {
-      // Step 1: Upload to Supabase Storage or read image
-      const sbResult = await uploadBrandingAssetToSupabase(file, 'logo');
-      let finalLogoUrl = sbResult.url;
-
-      // Fallback to high-quality optimized image reader if Supabase Storage is offline/not provisioned
-      if (sbResult.storageType !== 'supabase-storage' || !finalLogoUrl) {
-        finalLogoUrl = await readImageFileOptimized(file);
-      }
-
-      // Step 2: Commit branding update locally and to server
+      const uploaded = await uploadBrandingAssetToSupabase(file, 'logo');
+      if (!uploaded.url) throw new Error('Logo was not uploaded to Supabase Storage.');
       await commitBrandingPatch(
-        { logoUrl: finalLogoUrl },
-        `Logo "${file.name}" saved to Supabase & active`
+        { logoUrl: uploaded.url },
+        `Logo "${file.name}" uploaded and saved.`
       );
-
-      // Step 3: Explicitly sync to Supabase database table
-      await saveBrandingToSupabase({
-        ...latestBrandingRef.current,
-        logoUrl: finalLogoUrl,
-      });
-
-      flashBanner(
-        sbResult.storageType === 'supabase-storage'
-          ? `Logo "${file.name}" uploaded to Supabase Storage & synced!`
-          : `Logo "${file.name}" uploaded & saved to Supabase permanently!`
-      );
+      flashBanner(`Logo "${file.name}" uploaded to private-authorized branding storage and saved.`);
     } catch {
       flashBanner('Could not process that image file. Please try another file.');
     } finally {
@@ -479,22 +454,21 @@ const AdminPanelModalInner: React.FC<AdminPanelProps> = ({
     setProcessingMessage('Processing & saving logo...');
     try {
       const editedDataUrl = await processLogoCanvas(activeLogo, mode);
+      const editedBlob = await (await fetch(editedDataUrl)).blob();
+      const editedFile = new File([editedBlob], 'qaaga-logo-edited.png', { type: 'image/png' });
+      const uploaded = await uploadBrandingAssetToSupabase(editedFile, 'logo');
       await commitBrandingPatch(
         {
-          logoUrl: editedDataUrl,
+          logoUrl: uploaded.url,
           blendMultiply:
             mode === 'transparent-bg'
               ? false
               : latestBrandingRef.current.blendMultiply,
         },
         mode === 'trim'
-          ? 'Cropped excess logo whitespace permanently'
-          : 'Removed white background permanently'
+          ? 'Cropped excess logo whitespace and uploaded the new image'
+          : 'Removed the white background and uploaded the new image'
       );
-      await saveBrandingToSupabase({
-        ...latestBrandingRef.current,
-        logoUrl: editedDataUrl,
-      });
       flashBanner(
         mode === 'trim'
           ? 'Auto-cropped logo margins and saved to Supabase!'
@@ -515,10 +489,6 @@ const AdminPanelModalInner: React.FC<AdminPanelProps> = ({
     setIsProcessing(true);
     try {
       await commitBrandingPatch({ logoUrl: trimmed }, 'Updated logo image URL');
-      await saveBrandingToSupabase({
-        ...latestBrandingRef.current,
-        logoUrl: trimmed,
-      });
       flashBanner('Custom logo URL saved to Supabase permanently!');
     } finally {
       setIsProcessing(false);
@@ -535,12 +505,6 @@ const AdminPanelModalInner: React.FC<AdminPanelProps> = ({
       },
       'Saved brand text & edit settings'
     );
-    await saveBrandingToSupabase({
-      ...latestBrandingRef.current,
-      altText: altText.trim() || 'qaaga.com',
-      fallbackText: fallbackText.trim() || 'qaaga',
-      fallbackDomain: fallbackDomain.trim(),
-    });
     flashBanner('Brand settings saved to Supabase permanently!');
   };
 
@@ -556,21 +520,15 @@ const AdminPanelModalInner: React.FC<AdminPanelProps> = ({
     setProcessingMessage('Uploading Favicon to Supabase...');
     try {
       const squareDataUrl = await readFaviconFileSquare(file);
-      const sbResult = await uploadBrandingAssetToSupabase(file, 'favicon');
-      const finalFaviconUrl =
-        sbResult.storageType === 'supabase-storage' && sbResult.url
-          ? sbResult.url
-          : squareDataUrl;
+      const squareBlob = await (await fetch(squareDataUrl)).blob();
+      const squareFile = new File([squareBlob], 'qaaga-favicon.png', { type: 'image/png' });
+      const uploaded = await uploadBrandingAssetToSupabase(squareFile, 'favicon');
 
       await commitBrandingPatch(
-        { faviconUrl: finalFaviconUrl },
-        `Favicon "${file.name}" saved to Supabase & active`
+        { faviconUrl: uploaded.url },
+        `Favicon "${file.name}" uploaded and saved.`
       );
 
-      await saveBrandingToSupabase({
-        ...latestBrandingRef.current,
-        faviconUrl: finalFaviconUrl,
-      });
 
       flashBanner(
         sbResult.storageType === 'supabase-storage'
@@ -593,10 +551,6 @@ const AdminPanelModalInner: React.FC<AdminPanelProps> = ({
     setIsProcessing(true);
     try {
       await commitBrandingPatch({ faviconUrl: trimmed }, 'Updated site favicon URL');
-      await saveBrandingToSupabase({
-        ...latestBrandingRef.current,
-        faviconUrl: trimmed,
-      });
       flashBanner('Custom favicon URL saved to Supabase permanently!');
     } finally {
       setIsProcessing(false);
@@ -610,10 +564,6 @@ const AdminPanelModalInner: React.FC<AdminPanelProps> = ({
         { faviconUrl: null },
         'Favicon removed permanently'
       );
-      await saveBrandingToSupabase({
-        ...latestBrandingRef.current,
-        faviconUrl: null,
-      });
       flashBanner('Favicon removed & synced to Supabase!');
     } finally {
       setIsProcessing(false);
@@ -627,10 +577,6 @@ const AdminPanelModalInner: React.FC<AdminPanelProps> = ({
         { faviconUrl: DEFAULT_FAVICON_URL },
         'Restored official qaaga.com favicon'
       );
-      await saveBrandingToSupabase({
-        ...latestBrandingRef.current,
-        faviconUrl: DEFAULT_FAVICON_URL,
-      });
       flashBanner('Restored official qaaga.com Q-pin favicon & synced to Supabase!');
     } finally {
       setIsProcessing(false);
