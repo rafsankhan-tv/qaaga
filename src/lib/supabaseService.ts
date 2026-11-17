@@ -1080,36 +1080,35 @@ export interface PropertyRecord extends QaagaListing {
 
 export async function getPropertiesByHost(hostEmail: string): Promise<PropertyRecord[]> {
   const cleanEmail = hostEmail.trim().toLowerCase();
-  return dedupFetch(`host_props:${cleanEmail}`, async () => {
-    const supabase = getSupabase();
-    if (!supabase) return [];
+  const supabase = getSupabase();
+  if (!supabase || !cleanEmail) return [];
 
-    try {
-      const { data, error } = await supabase
-        .from('properties')
-        .select('*')
-        .eq('host_email', cleanEmail)
-        .order('created_at', { ascending: false });
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  const currentEmail = authData.user?.email?.trim().toLowerCase();
+  const isAdmin = authData.user?.app_metadata?.role === 'admin';
+  if (authError || !authData.user || (!isAdmin && currentEmail !== cleanEmail)) return [];
 
-      if (!error && Array.isArray(data)) {
-        return data.map((row) => ({
-          ...mapDbListingToModel(row),
-          hostEmail: row.host_email,
-          propertyType: row.property_type,
-          roomType: row.room_type,
-          priceDaily: Number(row.price_daily ?? (Number(row.two_night_price_usd) / 2)) || 0,
-          priceWeekly: Number(row.price_weekly) || undefined,
-          priceMonthly: Number(row.price_monthly) || undefined,
-          status: row.status || 'pending_approval',
-          isFeatured: Boolean(row.is_featured),
-          facilities: row.facilities || {},
-          createdAt: row.created_at,
-        }));
-      }
-    } catch (err) {
-      console.warn('Notice: Properties by host query error:', err);
-    }
-    return [];
+  return dedupFetch('host_props:' + authData.user.id + ':' + cleanEmail, async () => {
+    const { data, error } = await supabase
+      .from('properties')
+      .select('*')
+      .eq('host_email', cleanEmail)
+      .order('created_at', { ascending: false });
+
+    if (error || !Array.isArray(data)) return [];
+    return data.map((row) => ({
+      ...mapDbListingToModel(row),
+      hostEmail: row.host_email,
+      propertyType: row.property_type,
+      roomType: row.room_type,
+      priceDaily: Number(row.price_daily ?? (Number(row.two_night_price_usd) / 2)) || 0,
+      priceWeekly: Number(row.price_weekly) || undefined,
+      priceMonthly: Number(row.price_monthly) || undefined,
+      status: row.status || 'pending_approval',
+      isFeatured: Boolean(row.is_featured),
+      facilities: row.facilities || {},
+      createdAt: row.created_at,
+    }));
   });
 }
 
@@ -1197,43 +1196,42 @@ export async function checkPropertyAvailability(
 /* ========================================================================= */
 export async function getBookingsForHost(hostEmail: string): Promise<any[]> {
   const cleanEmail = hostEmail.trim().toLowerCase();
-  return dedupFetch(`host_bookings:${cleanEmail}`, async () => {
-    const supabase = getSupabase();
-    if (!supabase) return [];
+  const supabase = getSupabase();
+  if (!supabase || !cleanEmail) return [];
 
-    try {
-      const { data, error } = await supabase
-        .from('bookings')
-        .select('*')
-         .eq('host_email', cleanEmail)
-        .order('created_at', { ascending: false });
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  const currentEmail = authData.user?.email?.trim().toLowerCase();
+  const isAdmin = authData.user?.app_metadata?.role === 'admin';
+  if (authError || !authData.user || (!isAdmin && currentEmail !== cleanEmail)) return [];
 
-      if (!error && Array.isArray(data)) {
-        return data.map((b) => ({
-          id: b.id,
-          confirmationCode: b.confirmation_code,
-          propertyId: b.property_id || b.listing_id,
-          title: b.title,
-          area: b.area,
-          image: b.image,
-          customerEmail: b.customer_email || b.guest_email,
-          customerName: b.customer_name || b.guest_name,
-          customerPhone: b.customer_phone,
-          checkIn: b.check_in,
-          checkOut: b.check_out,
-          checkInLabel: b.check_in_label,
-          nights: Number(b.nights) || 1,
-          guests: Number(b.guests) || 1,
-          totalUsd: Number(b.total_usd) || 0,
-          status: b.status || 'Pending',
-          cancellationReason: b.cancellation_reason,
-          createdAt: b.created_at,
-        }));
-      }
-    } catch (err) {
-      console.warn('Notice: Host bookings fetch error:', err);
-    }
-    return [];
+  return dedupFetch('host_bookings:' + authData.user.id + ':' + cleanEmail, async () => {
+    const { data, error } = await supabase
+      .from('bookings')
+      .select('*')
+      .eq('host_email', cleanEmail)
+      .order('created_at', { ascending: false });
+
+    if (error || !Array.isArray(data)) return [];
+    return data.map((b) => ({
+      id: b.id,
+      confirmationCode: b.confirmation_code,
+      propertyId: b.property_id || b.listing_id,
+      title: b.title,
+      area: b.area,
+      image: b.image,
+      customerEmail: b.customer_email || b.guest_email,
+      customerName: b.customer_name || b.guest_name,
+      customerPhone: b.customer_phone,
+      checkIn: b.check_in,
+      checkOut: b.check_out,
+      checkInLabel: b.check_in_label,
+      nights: Number(b.nights) || 0,
+      guests: Number(b.guests) || 1,
+      totalUsd: Number(b.total_usd) || 0,
+      status: b.status || 'Pending',
+      cancellationReason: b.cancellation_reason,
+      createdAt: b.created_at,
+    }));
   });
 }
 
