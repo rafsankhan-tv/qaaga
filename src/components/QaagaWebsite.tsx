@@ -488,7 +488,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
     });
 
     // 4. Supabase Realtime Channels
-    const unsubListings = subscribeToSupabaseTable('properties', (payload) => {
+    const unsubListings = subscribeToSupabaseTable('public_property_feed', (payload) => {
       if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
         const item = payload.new;
         if (item) {
@@ -496,7 +496,6 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
             id: String(item.id),
             title: item.title,
             area: item.area,
-            hostEmail: item.host_email || undefined,
             city: item.city || 'Dhaka',
             subType: item.property_type || item.room_type || 'Apartment',
             category: item.category || 'stay',
