@@ -899,7 +899,7 @@ GRANT SELECT, INSERT, UPDATE ON public.profiles TO authenticated;
 REVOKE ALL ON public.properties FROM anon;
 GRANT SELECT (id,title,description,property_type,room_type,category,city,area,two_night_price_usd,price_daily,currency,max_guests,bedrooms,bathrooms,beds,rating,reviews_count,guest_favorite,in_popular_kl,is_featured,image,gallery,amenities,status,created_at,updated_at) ON public.properties TO anon;
 GRANT SELECT ON public.properties, public.property_availability, public.site_branding TO authenticated;
-REVOKE ALL ON public.listings, public.public_properties FROM anon;
+REVOKE ALL ON public.listings, public.public_properties FROM anon, authenticated;
 GRANT SELECT ON public.listings, public.public_properties TO anon, authenticated;
 GRANT INSERT, UPDATE, DELETE ON public.properties, public.property_availability TO authenticated;
 GRANT SELECT, INSERT ON public.bookings TO authenticated;
