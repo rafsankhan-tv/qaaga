@@ -40,6 +40,7 @@ import {
 import { BrandLogo } from './BrandLogo';
 import { ListingImage } from './ListingCard';
 import {
+  getSupabase,
   getSupabaseConfig,
   saveSupabaseConfig,
   testSupabaseConnection,
@@ -259,6 +260,7 @@ const AdminPanelModalInner: React.FC<AdminPanelProps> = ({
   standalone = false,
   onClose,
 }) => {
+  const [adminAccess, setAdminAccess] = useState<'checking' | 'authorized' | 'denied'>('checking');
   const [activeTab, setActiveTab] = useState<
     'overview' | 'users' | 'database' | 'branding' | 'listings' | 'bookings'
   >('overview');
@@ -303,28 +305,63 @@ const AdminPanelModalInner: React.FC<AdminPanelProps> = ({
 
   useEffect(() => {
     let mounted = true;
-    setLoadingUsers(true);
-    setLoadingStats(true);
+    const supabase = getSupabase();
 
-    Promise.all([getAllUsersFromDatabase(), getAdminPlatformStats(), testSupabaseConnection()])
-      .then(([dbUsers, stats, conn]) => {
-        if (!mounted) return;
-        setUsers(dbUsers || []);
-        setPlatformStats(stats);
-        setTestResult(conn);
-      })
-      .finally(() => {
-        if (!mounted) return;
+    const verifyAdministrator = async () => {
+      if (!supabase) {
+        if (mounted) setAdminAccess('denied');
+        return;
+      }
+
+      const { data, error } = await supabase.auth.getUser();
+      const isAdmin = !error && data.user?.app_metadata?.role === 'admin';
+
+      if (!mounted) return;
+      if (!isAdmin) {
+        setAdminAccess('denied');
         setLoadingUsers(false);
         setLoadingStats(false);
-      });
+        return;
+      }
 
-    const cfg = getSupabaseConfig();
-    setSupabaseUrl(cfg.url);
-    setSupabaseKey(cfg.key);
+      setAdminAccess('authorized');
+      setLoadingUsers(true);
+      setLoadingStats(true);
+
+      const [dbUsers, stats, conn] = await Promise.all([
+        getAllUsersFromDatabase(),
+        getAdminPlatformStats(),
+        testSupabaseConnection(),
+      ]).catch(() => [[], null, null] as const);
+
+      if (!mounted) return;
+      setUsers(dbUsers || []);
+      setPlatformStats(stats);
+      setTestResult(conn);
+
+      const cfg = getSupabaseConfig();
+      setSupabaseUrl(cfg.url);
+      setSupabaseKey(cfg.key);
+      setLoadingUsers(false);
+      setLoadingStats(false);
+    };
+
+    verifyAdministrator().catch(() => {
+      if (!mounted) return;
+      setAdminAccess('denied');
+      setLoadingUsers(false);
+      setLoadingStats(false);
+    });
+
+    const authSubscription = supabase?.auth.onAuthStateChange(() => {
+      queueMicrotask(() => {
+        if (mounted) setAdminAccess('checking');
+      });
+    });
 
     return () => {
       mounted = false;
+      authSubscription?.data.subscription.unsubscribe();
     };
   }, []);
 
@@ -353,7 +390,15 @@ const AdminPanelModalInner: React.FC<AdminPanelProps> = ({
     email: string,
     nextRole: 'guest' | 'host' | 'admin'
   ) => {
-    await updateUserRoleInDatabase(email, nextRole);
+    if (nextRole === 'admin') {
+      flashBanner('Grant administrator privileges only through Supabase Auth app_metadata.');
+      return;
+    }
+    const saved = await updateUserRoleInDatabase(email, nextRole);
+    if (!saved) {
+      flashBanner('Role update failed. Check administrator permissions.');
+      return;
+    }
     setUsers((prev) =>
       prev.map((u) => (u.email === email ? { ...u, role: nextRole } : u))
     );
@@ -1954,6 +1999,32 @@ const AdminPanelModalInner: React.FC<AdminPanelProps> = ({
       </div>
     </div>
   );
+
+  if (adminAccess !== 'authorized') {
+    const message = adminAccess === 'checking'
+      ? 'Checking administrator access…'
+      : 'Administrator access is restricted. Sign in with an account explicitly granted the admin role in Supabase Auth app_metadata.';
+    const gateCard = (
+      <div className="w-full max-w-md rounded-3xl bg-white p-8 shadow-xl text-center">
+        <Shield className="mx-auto mb-4 h-10 w-10 text-slate-500" />
+        <h1 className="text-lg font-bold text-slate-900">QAAGA Administration</h1>
+        <p className="mt-2 text-sm text-slate-600">{message}</p>
+        {adminAccess === 'denied' && (
+          <a href="/login" className="mt-5 inline-flex rounded-full bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white">
+            Sign in
+          </a>
+        )}
+        {onClose && (
+          <button type="button" onClick={onClose} className="mt-3 block w-full text-sm text-slate-500">
+            Close
+          </button>
+        )}
+      </div>
+    );
+    return standalone
+      ? <div className="min-h-screen bg-slate-50 px-4 py-6 flex items-center justify-center">{gateCard}</div>
+      : <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">{gateCard}</div>;
+  }
 
   if (standalone) {
     return (
