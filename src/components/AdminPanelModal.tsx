@@ -327,14 +327,21 @@ const AdminPanelModalInner: React.FC<AdminPanelProps> = ({
       setLoadingUsers(true);
       setLoadingStats(true);
 
-      const [dbUsers, stats, conn] = await Promise.all([
-        getAllUsersFromDatabase(),
-        getAdminPlatformStats(),
-        testSupabaseConnection(),
-      ]).catch(() => [[], null, null] as const);
+      let dbUsers: GuestProfile[] = [];
+      let stats: AdminPlatformStats | null = null;
+      let conn: SupabaseTestResult | null = null;
+      try {
+        [dbUsers, stats, conn] = await Promise.all([
+          getAllUsersFromDatabase(),
+          getAdminPlatformStats(),
+          testSupabaseConnection(),
+        ]);
+      } catch {
+        // Preserve an empty state and show connection diagnostics in the admin tools.
+      }
 
       if (!mounted) return;
-      setUsers(dbUsers || []);
+      setUsers(dbUsers);
       setPlatformStats(stats);
       setTestResult(conn);
 
