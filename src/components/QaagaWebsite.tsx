@@ -1240,35 +1240,37 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
     }
   };
 
-  const handleDeleteCustomListing = (id: string) => {
+  const handleDeleteCustomListing = async (id: string) => {
+    const deleted = await deleteListingFromDatabase(id);
+    if (!deleted) {
+      showToast({ message: 'Listing could not be deleted. Check your account permissions.' });
+      return;
+    }
     setDbListings((prev) => prev.filter((item) => item.id !== id));
     setWishlistIds((prev) => prev.filter((wId) => wId !== id));
     setRecentlyViewedIds((prev) => prev.filter((rId) => rId !== id));
-    deleteListingFromDatabase(id).catch((err) =>
-      console.warn('Listing delete sync notice:', err)
-    );
-    showToast({ message: 'Removed host listing' });
+    showToast({ message: 'Listing removed successfully.' });
   };
 
-  const handleAddReview = (rating: number, comment: string) => {
-    if (!selectedListing) return;
-    const rev: ListingReview = {
-      id: `rev-${Date.now()}`,
-      author: profile.fullName || 'Verified Guest',
-      date: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
-      rating,
-      comment,
-    };
-    setReviewsByListing((prev) => ({
-      ...prev,
-      [selectedListing.id]: [rev, ...(prev[selectedListing.id] || [])],
-    }));
-    insertReviewToDatabase(selectedListing.id, {
-      author: profile.fullName || 'Verified Guest',
-      rating,
-      comment,
-    }).catch((err) => console.warn('Review sync notice:', err));
-    showToast({ message: 'Your guest review has been posted' });
+  const handleAddReview = async (rating: number, comment: string) => {
+    if (!selectedListing || !profile.email) {
+      showToast({ message: 'Sign in before submitting a review.' });
+      return;
+    }
+    try {
+      const savedReview = await insertReviewToDatabase(selectedListing.id, {
+        author: profile.fullName,
+        rating,
+        comment,
+      });
+      setReviewsByListing((prev) => ({
+        ...prev,
+        [selectedListing.id]: [savedReview, ...(prev[selectedListing.id] || [])],
+      }));
+      showToast({ message: 'Your review has been saved.' });
+    } catch (error: any) {
+      showToast({ message: error?.message || 'Your review could not be saved.' });
+    }
   };
 
   const handleClickNotification = (notif: AppNotification) => {
@@ -2316,24 +2318,35 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
             navigateTo('/host');
           }}
           onSave={async (updated) => {
-            setProfile(updated);
             try {
-              await saveUserProfileToDatabase(updated);
-            } catch {}
-            showToast({ message: 'Account profile updated successfully' });
+              const saved = await saveUserProfileToDatabase(updated);
+              setProfile(saved);
+              showToast({ message: 'Account profile updated successfully' });
+            } catch (error: any) {
+              showToast({ message: error?.message || 'Profile could not be saved.' });
+            }
           }}
-          onLogout={() => {
+          onLogout={async () => {
+            const supabase = getSupabase();
+            if (supabase) {
+              const { error } = await supabase.auth.signOut();
+              if (error) {
+                showToast({ message: 'Sign out failed. Please try again.' });
+                return;
+              }
+            }
             const guest: GuestProfile = {
               fullName: 'Guest User',
               email: '',
-              city: 'Kuala Lumpur',
+              city: 'Dhaka',
               verified: false,
               role: 'guest',
             };
             setProfile(guest);
-            try {
-              localStorage.removeItem(STORAGE_KEYS.profile);
-            } catch {}
+            setBookings([]);
+            setThreads([]);
+            setNotifications([]);
+            setWishlistIds([]);
             showToast({ message: 'Signed out successfully' });
             setIsProfileOpen(false);
             navigateTo('/');
@@ -2394,11 +2407,6 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
           profile={profile}
           onUpdateProfile={(updated) => {
             setProfile(updated);
-            try {
-              localStorage.setItem(STORAGE_KEYS.profile, JSON.stringify(updated));
-            } catch {
-              // ignore
-            }
           }}
           onOpenAdminModal={() => {
             setIsAdminOpen(true);
