@@ -724,15 +724,12 @@ CREATE POLICY "threads_read_participants" ON public.threads
 CREATE POLICY "threads_insert_participant" ON public.threads
   FOR INSERT WITH CHECK (
     property_id IS NOT NULL
+    AND guest_email = public.current_user_email()
     AND EXISTS (
       SELECT 1 FROM public.properties p
       WHERE p.id = public.threads.property_id
         AND p.status = 'active'
         AND p.host_email = public.threads.host_email
-    )
-    AND (
-      guest_email = public.current_user_email()
-      OR host_email = public.current_user_email()
     )
   );
 CREATE POLICY "threads_update_participants" ON public.threads
