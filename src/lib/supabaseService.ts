@@ -1035,7 +1035,7 @@ export async function getAllUsersFromDatabase(): Promise<GuestProfile[]> {
 
 export async function updateUserRoleInDatabase(
   email: string,
-  role: 'customer' | 'guest' | 'host',
+  role: 'customer' | 'guest' | 'host' | 'admin',
   status: 'active' | 'suspended' = 'active'
 ): Promise<boolean> {
   const cleanEmail = email.trim().toLowerCase();
