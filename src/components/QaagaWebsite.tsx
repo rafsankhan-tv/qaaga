@@ -1207,11 +1207,6 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
       setActivePopover('when');
       return;
     }
-    if (!selectedListing.hostEmail) {
-      showToast({ message: 'This listing is missing its verified host account. Booking is unavailable.' });
-      return;
-    }
-
     const start = new Date(`${checkInIso}T00:00:00`);
     const end = new Date(`${checkOutIso}T00:00:00`);
     const actualNights = Math.round((end.getTime() - start.getTime()) / 86400000);
@@ -1244,8 +1239,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
       const savedBooking = await insertBookingToDatabase(
         newBooking,
         profile.email,
-        profile.fullName,
-        selectedListing.hostEmail
+        profile.fullName
       );
       setBookings((prev) => [savedBooking, ...prev]);
       setNotifications((prev) => [
@@ -1272,11 +1266,6 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
       showToast({ message: 'Sign in before messaging a host.' });
       return;
     }
-    if (!item.hostEmail) {
-      showToast({ message: 'This listing has no verified host contact yet.' });
-      return;
-    }
-
     const existing = threads.find((thread) => thread.listingTitle === item.title);
     if (existing) {
       setActiveThreadId(existing.id);
@@ -1286,13 +1275,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
     }
 
     try {
-      const created = await createThreadInDatabase({
-        propertyId: item.id,
-        hostEmail: item.hostEmail,
-        hostName: item.hostName,
-        listingTitle: item.title,
-        listingImage: item.image,
-      });
+      const created = await createThreadInDatabase({ propertyId: item.id });
       setThreads((prev) => [created, ...prev]);
       setActiveThreadId(created.id);
       setSelectedListing(null);
