@@ -25,6 +25,7 @@ import {
   QaagaListing,
   SiteBranding,
 } from '@/data/listings';
+import { getSupabase } from '@/lib/supabaseClient';
 import {
   fetchListingsWithStatus,
   FetchStatus,
@@ -63,6 +64,7 @@ export default function PropertiesCatalogClient({
   const [bookingSuccessCode, setBookingSuccessCode] = useState<string | null>(null);
   const [userProfile, setUserProfile] = useState<GuestProfile | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [checkInDate, setCheckInDate] = useState<string>('');
 
   const showToast = useCallback((msg: string) => {
     setToastMsg(msg);
@@ -94,14 +96,50 @@ export default function PropertiesCatalogClient({
     try {
       const savedWish = localStorage.getItem('qaaga_v3_wishlist');
       if (savedWish) setWishlistIds(JSON.parse(savedWish));
-      const savedProfile = localStorage.getItem('qaaga_v3_profile');
-      if (savedProfile) setUserProfile(JSON.parse(savedProfile));
     } catch {
       // ignore local storage read errors
     }
 
     return () => {
       active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const restoreAuthenticatedProfile = async () => {
+      const supabase = getSupabase();
+      if (!supabase) {
+        if (active) setUserProfile(null);
+        return;
+      }
+      const { data: sessionData } = await supabase.auth.getSession();
+      const session = sessionData.session;
+      if (!session?.access_token || !session.user.email) {
+        if (active) setUserProfile(null);
+        return;
+      }
+      const response = await fetch(
+        '/api/auth/profile?email=' + encodeURIComponent(session.user.email),
+        { headers: { Authorization: 'Bearer ' + session.access_token } }
+      );
+      if (!response.ok) {
+        if (active) setUserProfile(null);
+        return;
+      }
+      const result = await response.json();
+      if (active && result.profile) setUserProfile(result.profile as GuestProfile);
+    };
+    restoreAuthenticatedProfile().catch(() => {
+      if (active) setUserProfile(null);
+    });
+    const supabase = getSupabase();
+    const authListener = supabase?.auth.onAuthStateChange(() => {
+      queueMicrotask(() => restoreAuthenticatedProfile().catch(() => {}));
+    });
+    return () => {
+      active = false;
+      authListener?.data.subscription.unsubscribe();
     };
   }, []);
 
@@ -142,29 +180,68 @@ export default function PropertiesCatalogClient({
   const handleConfirmBooking = useCallback(
     async (nights: number, guests: number) => {
       if (!selectedListing) return;
-      const code = `QGA-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+      if (!userProfile?.email) {
+        showToast('Sign in with your verified email before booking.');
+        return;
+      }
+      if (!selectedListing.hostEmail) {
+        showToast('This listing does not have a verified host account yet.');
+        return;
+      }
+      if (!checkInDate) {
+        showToast('Select your check-in date before sending a booking request.');
+        return;
+      }
+      const start = new Date(checkInDate + 'T00:00:00');
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (Number.isNaN(start.getTime()) || start < today) {
+        showToast('Choose a valid future check-in date.');
+        return;
+      }
+      const end = new Date(start);
+      end.setDate(end.getDate() + nights);
+      const toIso = (value: Date) => {
+        const y = value.getFullYear();
+        const m = String(value.getMonth() + 1).padStart(2, '0');
+        const d = String(value.getDate()).padStart(2, '0');
+        return y + '-' + m + '-' + d;
+      };
+      const checkInIso = toIso(start);
+      const checkOutIso = toIso(end);
+      const dateFmt = (value: Date) =>
+        value.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      const dateRange = dateFmt(start) + ' – ' + dateFmt(end);
+      const code = 'QGA-' + crypto.randomUUID().slice(0, 8).toUpperCase();
       const totalUsd = Math.round((selectedListing.twoNightPriceUsd / 2) * nights);
-      await insertBookingToDatabase(
-        {
-          id: `bk-${Date.now()}`,
-          listingId: selectedListing.id,
-          title: selectedListing.title,
-          area: selectedListing.area,
-          image: selectedListing.image,
-          checkInLabel: 'Flexible dates',
-          nights,
-          guests,
-          totalUsd,
-          confirmationCode: code,
-          hostName: selectedListing.hostName || 'Verified Host',
-          status: 'Pending',
-        },
-        userProfile?.email || 'guest@qaaga.com',
-        userProfile?.fullName || 'Verified Guest'
-      );
-      setBookingSuccessCode(code);
+      try {
+        await insertBookingToDatabase(
+          {
+            id: 'bk-' + crypto.randomUUID(),
+            listingId: selectedListing.id,
+            checkInDate: checkInIso,
+            checkOutDate: checkOutIso,
+            title: selectedListing.title,
+            area: selectedListing.area,
+            image: selectedListing.image,
+            checkInLabel: dateRange,
+            nights,
+            guests,
+            totalUsd,
+            confirmationCode: code,
+            hostName: selectedListing.hostName || 'Verified Host',
+            status: 'Pending',
+          },
+          userProfile.email,
+          userProfile.fullName,
+          selectedListing.hostEmail
+        );
+        setBookingSuccessCode(code);
+      } catch (error: any) {
+        showToast(error?.message || 'Booking request was not saved.');
+      }
     },
-    [selectedListing, userProfile]
+    [selectedListing, userProfile, checkInDate, showToast]
   );
 
   const handleAddReview = useCallback(
@@ -277,6 +354,17 @@ export default function PropertiesCatalogClient({
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
+            <label className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-3 h-9 text-xs font-semibold text-slate-700">
+              <span>Check-in</span>
+              <input
+                aria-label="Booking check-in date"
+                type="date"
+                min={new Date().toISOString().slice(0, 10)}
+                value={checkInDate}
+                onChange={(event) => setCheckInDate(event.target.value)}
+                className="max-w-[132px] bg-transparent text-xs font-medium outline-none"
+              />
+            </label>
             <div className="relative flex-1 min-w-[200px] sm:w-64">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
@@ -415,7 +503,7 @@ export default function PropertiesCatalogClient({
           reviews={listingReviews}
           initialNights={2}
           initialGuests={1}
-          dateRangeLabel="Flexible dates"
+          dateRangeLabel={checkInDate ? new Date(checkInDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "Choose check-in date"}
           formatPrice={formatPrice}
           bookingSuccessCode={bookingSuccessCode}
           onClose={() => setSelectedListing(null)}
