@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await supabase
     .from('reviews')
-    .select('*')
+    .select('id,property_id,listing_id,author,rating,comment,created_at')
     .eq('listing_id', listingId)
     .order('created_at', { ascending: false });
 
@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
       rating,
       comment,
     })
-    .select()
+    .select('id,property_id,listing_id,author,rating,comment,created_at')
     .single();
 
   if (error || !data) return NextResponse.json({ error: 'Review could not be saved.' }, { status: 502 });
