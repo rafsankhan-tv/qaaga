@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 
 export const metadata = {
   title: 'Instant Booking & Reservations — QAAGA Super Marketplace',
-  description: 'Book verified stays, experiences, and hospitality services in Kuala Lumpur on qaaga.com.',
+  description: 'Book verified stays, experiences, and hospitality services in Dhaka on qaaga.com.',
 };
 
 export default async function BookingGeneralPage() {
