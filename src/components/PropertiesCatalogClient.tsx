@@ -184,10 +184,6 @@ export default function PropertiesCatalogClient({
         showToast('Sign in with your verified email before booking.');
         return;
       }
-      if (!selectedListing.hostEmail) {
-        showToast('This listing does not have a verified host account yet.');
-        return;
-      }
       if (!checkInDate) {
         showToast('Select your check-in date before sending a booking request.');
         return;
@@ -233,8 +229,7 @@ export default function PropertiesCatalogClient({
             status: 'Pending',
           },
           userProfile.email,
-          userProfile.fullName,
-          selectedListing.hostEmail
+          userProfile.fullName
         );
         setBookingSuccessCode(code);
       } catch (error: any) {
