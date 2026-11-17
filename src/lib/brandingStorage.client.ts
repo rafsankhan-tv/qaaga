@@ -5,10 +5,8 @@ import {
   SiteBranding,
   STORAGE_KEYS,
 } from '@/data/listings';
-import {
-  saveBrandingToSupabase,
-  getBrandingFromSupabase,
-} from './supabaseService';
+import { getBrandingFromSupabase } from './supabaseService';
+import { getSupabase } from './supabaseClient';
 
 const IDB_NAME = 'qaaga_permanent_branding_db';
 const IDB_STORE = 'site_branding';
@@ -150,49 +148,52 @@ export async function loadBestClientBranding(): Promise<SiteBranding | null> {
 export async function persistBrandingEverywhere(
   draft: SiteBranding
 ): Promise<SiteBranding> {
+  const supabase = getSupabase();
+  if (!supabase) throw new Error('Authentication service is not configured.');
+
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  const accessToken = sessionData.session?.access_token;
+  if (sessionError || !accessToken) {
+    throw new Error('Please sign in as a platform administrator before changing branding.');
+  }
+
   const stamped: SiteBranding = {
     ...draft,
     revision: Math.max(Date.now(), (draft.revision || 0) + 1),
     updatedAt: new Date().toISOString(),
   };
 
+  const body = JSON.stringify(stamped);
+  const response = await fetch('/api/branding', {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer ' + accessToken,
+    },
+    cache: 'no-store',
+    keepalive: body.length < 60000,
+    body,
+  });
+
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || !result?.branding) {
+    throw new Error(result?.error || 'Branding could not be saved to the QAAGA database.');
+  }
+
+  const saved = normalizeClientBranding(result.branding);
+  if (!saved) throw new Error('Server returned invalid branding data.');
+
   invalidateBrandingCache();
-  writeSyncLocalBranding(stamped);
-  await writeIdbBranding(stamped);
+  writeSyncLocalBranding(saved);
+  await writeIdbBranding(saved);
 
   if (typeof window !== 'undefined') {
     window.dispatchEvent(
-      new CustomEvent('qaaga-branding-updated', { detail: stamped })
+      new CustomEvent('qaaga-branding-updated', { detail: saved })
     );
   }
 
-  // Also push to Supabase site_branding table
-  saveBrandingToSupabase(stamped).catch(() => {});
-
-  try {
-    const body = JSON.stringify(stamped);
-    const res = await fetch('/api/branding', {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'Cache-Control': 'no-cache',
-      },
-      cache: 'no-store',
-      keepalive: body.length < 60000,
-      body,
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (data?.branding) {
-        writeSyncLocalBranding(data.branding);
-        await writeIdbBranding(data.branding);
-        saveBrandingToSupabase(data.branding).catch(() => {});
-        return data.branding as SiteBranding;
-      }
-    }
-  } catch {}
-
-  return stamped;
+  return saved;
 }
 
 let brandingReconcilePromise: Promise<SiteBranding> | null = null;
