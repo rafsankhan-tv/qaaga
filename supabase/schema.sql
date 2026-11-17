@@ -125,7 +125,7 @@ CREATE INDEX IF NOT EXISTS idx_availability_lookup ON public.property_availabili
 CREATE TABLE IF NOT EXISTS public.bookings (
     id TEXT PRIMARY KEY,
     confirmation_code TEXT UNIQUE NOT NULL,
-    property_id TEXT NOT NULL,
+    property_id TEXT NOT NULL REFERENCES public.properties(id) ON DELETE RESTRICT,
     listing_id TEXT, -- backwards compatibility
     title TEXT NOT NULL,
     area TEXT NOT NULL,
@@ -348,8 +348,8 @@ CREATE POLICY "profiles_select_own_or_admin" ON public.profiles
   FOR SELECT USING (email = public.current_user_email() OR public.is_platform_admin());
 CREATE POLICY "profiles_insert_own_non_admin" ON public.profiles
   FOR INSERT WITH CHECK (
-    email = public.current_user_email()
-    AND role IN ('guest', 'customer', 'host')
+    (email = public.current_user_email() AND role IN ('guest', 'customer', 'host'))
+    OR public.is_platform_admin()
   );
 CREATE POLICY "profiles_update_own_or_admin" ON public.profiles
   FOR UPDATE
@@ -360,6 +360,47 @@ CREATE POLICY "profiles_update_own_or_admin" ON public.profiles
   );
 CREATE POLICY "profiles_delete_admin_only" ON public.profiles
   FOR DELETE USING (public.is_platform_admin());
+
+CREATE OR REPLACE FUNCTION public.guard_profile_privileged_fields()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = ''
+AS $
+BEGIN
+  IF public.is_platform_admin() THEN
+    RETURN NEW;
+  END IF;
+
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.role NOT IN ('guest', 'customer', 'host') THEN
+      RAISE EXCEPTION 'Administrator role cannot be self-assigned';
+    END IF;
+    NEW.verified := false;
+    NEW.identity_status := 'unverified';
+    NEW.status := 'active';
+    RETURN NEW;
+  END IF;
+
+  IF NEW.email <> OLD.email THEN
+    RAISE EXCEPTION 'Profile email cannot be changed';
+  END IF;
+  IF NEW.role NOT IN ('guest', 'customer', 'host') THEN
+    RAISE EXCEPTION 'Administrator role cannot be self-assigned';
+  END IF;
+
+  NEW.verified := OLD.verified;
+  NEW.identity_status := OLD.identity_status;
+  NEW.status := OLD.status;
+  RETURN NEW;
+END;
+$;
+
+DROP TRIGGER IF EXISTS trg_guard_profile_privileged_fields ON public.profiles;
+CREATE TRIGGER trg_guard_profile_privileged_fields
+  BEFORE INSERT OR UPDATE ON public.profiles
+  FOR EACH ROW EXECUTE FUNCTION public.guard_profile_privileged_fields();
+
+
 
 -- Properties: public read only for approved/active listings; host owns their records.
 CREATE POLICY "properties_read_active_or_owner" ON public.properties
@@ -582,8 +623,16 @@ CREATE POLICY "identity_delete_admin_only" ON public.identity_verifications
 -- Reviews are public to read, but a signed-in user can post only as themselves.
 CREATE POLICY "reviews_public_read" ON public.reviews
   FOR SELECT USING (true);
-CREATE POLICY "reviews_insert_as_self" ON public.reviews
-  FOR INSERT WITH CHECK (author_email = public.current_user_email());
+CREATE POLICY "reviews_insert_after_completed_stay" ON public.reviews
+  FOR INSERT WITH CHECK (
+    author_email = public.current_user_email()
+    AND EXISTS (
+      SELECT 1 FROM public.bookings b
+      WHERE b.property_id = COALESCE(reviews.property_id, reviews.listing_id)
+        AND b.customer_email = public.current_user_email()
+        AND b.status = 'Completed'
+    )
+  );
 
 -- Threads and messages are visible only to their two participants.
 CREATE POLICY "threads_read_participants" ON public.threads
@@ -688,7 +737,8 @@ GRANT UPDATE (status, cancellation_reason, cancelled_by, cancelled_at, updated_a
 GRANT SELECT, INSERT ON public.payment_records, public.identity_verifications TO authenticated;
 GRANT UPDATE (status, host_notes, verified_at, updated_at) ON public.payment_records TO authenticated;
 GRANT UPDATE (status, rejection_reason, reviewed_by, reviewed_at, updated_at) ON public.identity_verifications TO authenticated;
-GRANT SELECT, INSERT ON public.reviews TO anon, authenticated;
+GRANT SELECT ON public.reviews TO anon, authenticated;
+GRANT INSERT ON public.reviews TO authenticated;
 GRANT SELECT, INSERT ON public.threads, public.messages TO authenticated;
 GRANT UPDATE (unread, last_message, updated_at) ON public.threads TO authenticated;
 GRANT SELECT, INSERT ON public.notifications TO authenticated;
