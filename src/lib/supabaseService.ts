@@ -678,7 +678,7 @@ export async function sendMessageToDatabase(
 export async function uploadPrivateFileToSupabaseStorage(
   file: File,
   purpose: 'payment' | 'identity'
-): Promise<{ url: string; error?: string }> {
+): Promise<{ url: string; storageRef?: string; error?: string }> {
   const supabase = getSupabase();
   if (!supabase) return { url: '', error: 'Supabase Storage is not configured.' };
 
@@ -701,7 +701,14 @@ export async function uploadPrivateFileToSupabaseStorage(
     });
 
   if (error || !data) return { url: '', error: 'Private document upload failed.' };
-  return { url: 'storage://qaaga-private/' + data.path };
+  const storageRef = 'storage://qaaga-private/' + data.path;
+  const { data: signedData, error: signError } = await supabase.storage
+    .from('qaaga-private')
+    .createSignedUrl(data.path, 15 * 60);
+  if (signError || !signedData?.signedUrl) {
+    return { url: '', storageRef, error: 'The document was uploaded but a preview link could not be created.' };
+  }
+  return { url: signedData.signedUrl, storageRef };
 }
 
 async function resolvePrivateStorageReference(
@@ -1397,7 +1404,7 @@ export async function submitPaymentProof(data: {
 }
 
 export async function getPaymentProofs(bookingId?: string): Promise<PaymentProofRecord[]> {
-  return dedupFetch(`payments:${bookingId || 'all'}`, async () => {
+  return dedupFetch('payments:' + (bookingId || 'all'), async () => {
     const supabase = getSupabase();
     if (!supabase) return [];
 
@@ -1407,29 +1414,28 @@ export async function getPaymentProofs(bookingId?: string): Promise<PaymentProof
         .select('*')
         .order('created_at', { ascending: false });
       if (bookingId) query = query.eq('booking_id', bookingId);
-      const { data, error } = await query;
-      if (!error && Array.isArray(data)) {
-        return data.map((p) => ({
-          id: p.id,
-          bookingId: p.booking_id,
-          amount: Number(p.amount),
-          currency: p.currency || 'USD',
-          paymentMethod: p.payment_method,
-          transactionReference: p.transaction_reference,
-          proofImageUrl: p.proof_image_url,
-          payerName: p.payer_name,
-          payerEmail: p.payer_email,
-          status: p.status,
-          hostNotes: p.host_notes,
-          adminNotes: p.admin_notes,
-          createdAt: p.created_at,
-        }));
-      }
-    } catch (err) {
-      console.warn('Notice: Payment records query error:', err);
-    }
 
-    return [];
+      const { data, error } = await query;
+      if (error || !Array.isArray(data)) return [];
+
+      return await Promise.all(data.map(async (p) => ({
+        id: p.id,
+        bookingId: p.booking_id,
+        amount: Number(p.amount),
+        currency: p.currency || 'USD',
+        paymentMethod: p.payment_method,
+        transactionReference: p.transaction_reference,
+        proofImageUrl: await resolvePrivateStorageReference(supabase, p.proof_image_url),
+        payerName: p.payer_name,
+        payerEmail: p.payer_email,
+        status: p.status,
+        hostNotes: p.host_notes,
+        adminNotes: p.admin_notes,
+        createdAt: p.created_at,
+      })));
+    } catch {
+      return [];
+    }
   });
 }
 
@@ -1538,7 +1544,7 @@ export async function getIdentityVerifications(
   userEmail?: string
 ): Promise<IdentityVerificationRecord[]> {
   const cleanEmail = userEmail ? userEmail.trim().toLowerCase() : 'all';
-  return dedupFetch(`idv:${cleanEmail}`, async () => {
+  return dedupFetch('idv:' + cleanEmail, async () => {
     const supabase = getSupabase();
     if (!supabase) return [];
 
@@ -1548,28 +1554,27 @@ export async function getIdentityVerifications(
         .select('*')
         .order('created_at', { ascending: false });
       if (userEmail) query = query.eq('user_email', cleanEmail);
-      const { data, error } = await query;
-      if (!error && Array.isArray(data)) {
-        return data.map((v) => ({
-          id: v.id,
-          userEmail: v.user_email,
-          userName: v.user_name,
-          documentType: v.document_type,
-          documentFrontUrl: v.document_front_url,
-          documentBackUrl: v.document_back_url,
-          selfieUrl: v.selfie_url,
-          status: v.status,
-          rejectionReason: v.rejection_reason,
-          reviewedBy: v.reviewed_by,
-          reviewedAt: v.reviewed_at,
-          createdAt: v.created_at,
-        }));
-      }
-    } catch (err) {
-      console.warn('Notice: Identity verifications query error:', err);
-    }
 
-    return [];
+      const { data, error } = await query;
+      if (error || !Array.isArray(data)) return [];
+
+      return await Promise.all(data.map(async (v) => ({
+        id: v.id,
+        userEmail: v.user_email,
+        userName: v.user_name,
+        documentType: v.document_type,
+        documentFrontUrl: await resolvePrivateStorageReference(supabase, v.document_front_url),
+        documentBackUrl: await resolvePrivateStorageReference(supabase, v.document_back_url),
+        selfieUrl: await resolvePrivateStorageReference(supabase, v.selfie_url),
+        status: v.status,
+        rejectionReason: v.rejection_reason,
+        reviewedBy: v.reviewed_by,
+        reviewedAt: v.reviewed_at,
+        createdAt: v.created_at,
+      })));
+    } catch {
+      return [];
+    }
   });
 }
 
