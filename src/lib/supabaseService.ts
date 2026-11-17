@@ -832,7 +832,7 @@ export async function getBrandingFromSupabase(): Promise<any | null> {
 /* 6. REALTIME CHANNEL SUBSCRIPTION                                          */
 /* ========================================================================= */
 export function subscribeToSupabaseTable(
-  tableName: 'listings' | 'properties' | 'bookings' | 'reviews' | 'threads' | 'messages' | 'site_branding' | 'profiles',
+  tableName: 'listings' | 'properties' | 'public_property_feed' | 'bookings' | 'reviews' | 'threads' | 'messages' | 'site_branding' | 'profiles',
   onPayload: (payload: any) => void
 ): () => void {
   const supabase = getSupabase();
