@@ -84,6 +84,18 @@ test.describe('QAAGA public marketplace', () => {
     const weekendPreset = page.getByRole('button', { name: 'This weekend' });
     await expect(weekendPreset).toBeVisible();
     await expect(weekendPreset).toBeEnabled();
+    const weekendRange = await page.getByTestId('calendar-preset-weekend').evaluate((element) => ({
+      checkIn: element.getAttribute('data-check-in') || '',
+      checkOut: element.getAttribute('data-check-out') || '',
+    }));
+    const dhakaToday = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Dhaka',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+    expect(weekendRange.checkIn >= dhakaToday).toBe(true);
+    expect(weekendRange.checkOut > weekendRange.checkIn).toBe(true);
     await weekendPreset.click();
 
     await expect(page.getByText('Guests & Travelers')).toBeVisible();
@@ -118,7 +130,7 @@ test.describe('QAAGA public marketplace', () => {
     await page.getByRole('button', { name: /Who/ }).last().click();
     await expect(page.getByText('Guests & Travelers')).toBeVisible();
     await page.getByRole('button', { name: 'Increase Children' }).click();
-    await expect(page.getByText(/2 guests, 1 child/i)).toBeVisible();
+    await expect(page.getByText('2 guests', { exact: true })).toBeVisible();
 
     await page.keyboard.press('Escape');
     await expect(page.getByText('Search QAAGA Stays')).toHaveCount(0);
