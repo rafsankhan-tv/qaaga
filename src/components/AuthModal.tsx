@@ -25,7 +25,6 @@ import {
   testSupabaseConnection,
   SupabaseTestResult,
 } from '@/lib/supabaseClient';
-import { saveUserProfileToDatabase } from '@/lib/supabaseService';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -57,7 +56,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [fullNameInput, setFullNameInput] = useState('');
   const [phoneInput, setPhoneInput] = useState('');
   const [cityInput, setCityInput] = useState('Dhaka');
-  const [roleInput, setRoleInput] = useState<'guest' | 'host' | 'admin'>('guest');
+  const [roleInput, setRoleInput] = useState<'guest' | 'host'>('guest');
   const [bioInput, setBioInput] = useState('');
   const [avatarIndex, setAvatarIndex] = useState(0);
 
@@ -242,9 +241,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
 
     setLoading(true);
-    const isEmail = emailOrPhone.includes('@');
-    const finalEmail = isEmail ? emailOrPhone.trim() : `${emailOrPhone.replace(/\D/g, '')}@qaaga.com`;
+    setErrorMessage('');
 
+    const finalEmail = emailOrPhone.trim().toLowerCase();
     const completedProfile: GuestProfile = {
       fullName: fullNameInput.trim(),
       email: finalEmail,
@@ -254,33 +253,54 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       bio: bioInput.trim() || undefined,
       avatarUrl: AVATAR_OPTIONS[avatarIndex],
       verified: true,
-      joinedDate: 'Nov 2026',
+      joinedDate: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
       status: 'active',
     };
 
-    // Save to database & local persistence
     try {
-      await saveUserProfileToDatabase(completedProfile);
-      await fetch('/api/auth/profile', {
+      const supabase = getSupabase();
+      if (!supabase) throw new Error('Authentication service is not configured.');
+
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (sessionError || !accessToken) {
+        throw new Error('Your login session has expired. Please verify your email again.');
+      }
+
+      const response = await fetch('/api/auth/profile', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
         body: JSON.stringify(completedProfile),
       });
-    } catch {
-      // graceful local fallback
+      const result = await response.json();
+
+      if (!response.ok || !result?.success) {
+        throw new Error(result?.error || 'Unable to save your profile. Please try again.');
+      }
+
+      const savedProfile: GuestProfile = {
+        ...completedProfile,
+        role: result.profile?.role === 'host' ? 'host' : 'guest',
+        verified: Boolean(result.profile?.verified),
+      };
+
+      onUpdateProfile(savedProfile);
+      setLoading(false);
+      setStep('success');
+      onShowToast({
+        message: `Profile complete! Welcome to qaaga.com, ${savedProfile.fullName}.`,
+      });
+
+      setTimeout(() => {
+        onClose();
+      }, 1500);
+    } catch (err: any) {
+      setLoading(false);
+      setErrorMessage(err?.message || 'Unable to save your profile. Please try again.');
     }
-
-    onUpdateProfile(completedProfile);
-    setLoading(false);
-    setStep('success');
-
-    onShowToast({
-      message: `Profile complete! Welcome to qaaga.com, ${completedProfile.fullName}.`,
-    });
-
-    setTimeout(() => {
-      onClose();
-    }, 1500);
   };
 
   const handleSocialLogin = async (provider: 'google' | 'apple') => {
@@ -677,11 +697,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             {/* Account Role */}
             <div className="space-y-1">
               <label className="block text-xs font-semibold text-slate-700">Primary Role</label>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 {[
                   { id: 'guest' as const, label: 'Guest', desc: 'Book stays' },
                   { id: 'host' as const, label: 'Host', desc: 'List stays' },
-                  { id: 'admin' as const, label: 'Admin', desc: 'Manage site' },
                 ].map((r) => (
                   <button
                     key={r.id}
