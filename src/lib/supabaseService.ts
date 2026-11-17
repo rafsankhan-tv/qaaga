@@ -493,22 +493,23 @@ export async function insertReviewToDatabase(
 /* 4. MESSAGES & INBOX OPERATIONS                                            */
 /* ========================================================================= */
 export async function fetchThreadsWithStatus(): Promise<ServiceResult<HostThread[]>> {
-  return dedupFetch('threads:all', async () => {
-    const supabase = getSupabase();
-    if (!supabase) {
-      return { data: [], status: 'error', error: 'Supabase unavailable.' };
-    }
+  const supabase = getSupabase();
+  if (!supabase) return { data: [], status: 'error', error: 'Supabase unavailable.' };
 
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError || !authData.user) {
+    return { data: [], status: 'empty' };
+  }
+
+  const userId = authData.user.id;
+  return dedupFetch('threads:' + userId, async () => {
     try {
       const { data: threadsData, error } = await supabase
         .from('threads')
         .select('*, messages(*)')
         .order('updated_at', { ascending: false });
 
-      if (error) {
-        return { data: [], status: 'error', error: error.message };
-      }
-
+      if (error) return { data: [], status: 'error', error: error.message };
       if (!Array.isArray(threadsData) || threadsData.length === 0) {
         return { data: [], status: 'empty' };
       }
@@ -517,7 +518,7 @@ export async function fetchThreadsWithStatus(): Promise<ServiceResult<HostThread
         id: t.id,
         hostName: t.host_name,
         listingTitle: t.listing_title,
-        listingImage: t.listing_image || '/assets/kl-ui/kl-1.jpg',
+        listingImage: t.listing_image || '',
         unread: Boolean(t.unread),
         messages: Array.isArray(t.messages)
           ? t.messages.map((m: any) => ({
