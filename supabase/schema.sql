@@ -798,7 +798,7 @@ BEGIN
     thread_row.listing_image,
     thread_row.unread;
 END;
-$;
+$qaaga_thread$;
 
 REVOKE ALL ON FUNCTION public.create_property_thread(TEXT) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.create_property_thread(TEXT) TO authenticated;
