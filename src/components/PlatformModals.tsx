@@ -607,7 +607,7 @@ export const CollectionExplorerModal: React.FC<{
               {title} ({items.length})
             </h3>
             <p className="text-xs text-slate-500">
-              Malaysian capital with skyline views · Instant reservation
+              Dhaka stays and furnished apartments · Instant reservation
             </p>
           </div>
 
