@@ -342,6 +342,103 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
     };
   }, [initialBranding]);
 
+  // Restore the authenticated Supabase session after reload and OAuth redirects.
+  useEffect(() => {
+    let active = true;
+    const guestProfile: GuestProfile = {
+      fullName: 'Guest User',
+      email: '',
+      city: 'Dhaka',
+      verified: false,
+      role: 'guest',
+    };
+
+    const restoreAuthenticatedProfile = async () => {
+      const supabase = getSupabase();
+      if (!supabase) {
+        if (active) setProfile(guestProfile);
+        return;
+      }
+
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      const session = sessionData.session;
+      if (sessionError || !session?.access_token || !session.user.email) {
+        if (active) {
+          setProfile(guestProfile);
+          setBookings([]);
+          setThreads([]);
+          setNotifications([]);
+        }
+        return;
+      }
+
+      const accessToken = session.access_token;
+      const email = session.user.email.trim().toLowerCase();
+      const headers = { Authorization: 'Bearer ' + accessToken };
+
+      let response = await fetch('/api/auth/profile?email=' + encodeURIComponent(email), { headers });
+      if (response.status === 404) {
+        const metadata = session.user.user_metadata || {};
+        const fallbackName =
+          metadata.full_name ||
+          metadata.name ||
+          metadata.preferred_username ||
+          email.split('@')[0].replace(/[._-]/g, ' ');
+
+        response = await fetch('/api/auth/profile', {
+          method: 'PUT',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fullName: String(fallbackName).trim() || 'Member',
+            email,
+            city: 'Dhaka',
+            role: 'guest',
+          }),
+        });
+      }
+
+      if (!response.ok) {
+        throw new Error('Unable to restore your QAAGA profile.');
+      }
+
+      const result = await response.json();
+      const profileData = result.profile || {};
+      if (!active) return;
+
+      setProfile({
+        fullName: profileData.fullName || 'Member',
+        email,
+        city: profileData.city || 'Dhaka',
+        verified: Boolean(profileData.verified),
+        role: profileData.role === 'admin' ? 'admin' : profileData.role === 'host' ? 'host' : 'guest',
+        phone: profileData.phone,
+        avatarUrl: profileData.avatarUrl,
+        bio: profileData.bio,
+      });
+    };
+
+    restoreAuthenticatedProfile().catch((error) => {
+      if (active) {
+        setProfile(guestProfile);
+        showToast({ message: error?.message || 'Could not restore your account session.' });
+      }
+    });
+
+    const supabase = getSupabase();
+    const authSubscription = supabase?.auth.onAuthStateChange(() => {
+      queueMicrotask(() => {
+        restoreAuthenticatedProfile().catch(() => {
+          if (active) setProfile(guestProfile);
+        });
+      });
+    });
+
+    return () => {
+      active = false;
+      authSubscription?.data.subscription.unsubscribe();
+    };
+  }, [showToast]);
+
   const loadListingsFromSupabase = useCallback(async () => {
     setIsLoadingListings(true);
     setListingsError(null);
@@ -390,7 +487,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
     });
 
     // 4. Supabase Realtime Channels
-    const unsubListings = subscribeToSupabaseTable('listings', (payload) => {
+    const unsubListings = subscribeToSupabaseTable('properties', (payload) => {
       if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
         const item = payload.new;
         if (item) {
@@ -398,19 +495,20 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
             id: String(item.id),
             title: item.title,
             area: item.area,
-            city: item.city || 'Kuala Lumpur',
-            subType: item.sub_type || 'Apartment',
+            hostEmail: item.host_email || undefined,
+            city: item.city || 'Dhaka',
+            subType: item.property_type || item.room_type || 'Apartment',
             category: item.category || 'stay',
-            twoNightPriceUsd: Number(item.two_night_price_usd) || 120,
-            rating: String(item.rating || '5.0'),
+            twoNightPriceUsd: Number(item.two_night_price_usd) || 0,
+            rating: String(item.rating || '0'),
             reviewsCount: Number(item.reviews_count) || 0,
             guestFavorite: Boolean(item.guest_favorite),
-            image: item.image || '/assets/kl-ui/kl-1.jpg',
-            gallery: Array.isArray(item.gallery) ? item.gallery : [item.image || '/assets/kl-ui/kl-1.jpg'],
+            image: item.image || '',
+            gallery: Array.isArray(item.gallery) ? item.gallery : (item.image ? [item.image] : []),
             maxGuests: Number(item.max_guests) || 2,
             bedrooms: item.bedrooms || '1 bedroom',
             hostName: item.host_name || 'Host',
-            hostYears: Number(item.host_years) || 1,
+            hostYears: 0,
             amenities: Array.isArray(item.amenities) ? item.amenities : [],
             description: item.description || '',
             inPopularKL: Boolean(item.in_popular_kl),
@@ -458,10 +556,60 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
       }
     });
 
+    const unsubThreads = subscribeToSupabaseTable('threads', (payload) => {
+      if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+        const row = payload.new;
+        if (row) {
+          const mappedThread: HostThread = {
+            id: String(row.id),
+            hostName: row.host_name || 'Host',
+            listingTitle: row.listing_title || 'Property conversation',
+            listingImage: row.listing_image || '',
+            unread: Boolean(row.unread),
+            messages: [],
+          };
+          setThreads((prev) => [
+            mappedThread,
+            ...prev.filter((thread) => thread.id !== mappedThread.id),
+          ]);
+          setActiveThreadId((prev) => prev || mappedThread.id);
+        }
+      } else if (payload.eventType === 'DELETE') {
+        const id = String(payload.old?.id || '');
+        if (id) setThreads((prev) => prev.filter((thread) => thread.id !== id));
+      }
+    });
+
+    const unsubMessages = subscribeToSupabaseTable('messages', (payload) => {
+      if (payload.eventType !== 'INSERT') return;
+      const row = payload.new;
+      if (!row?.thread_id || !row?.id) return;
+      setThreads((prev) =>
+        prev.map((thread) => {
+          if (thread.id !== String(row.thread_id)) return thread;
+          if (thread.messages.some((message) => message.id === String(row.id))) return thread;
+          return {
+            ...thread,
+            messages: [
+              ...thread.messages,
+              {
+                id: String(row.id),
+                sender: row.sender === 'host' ? 'host' : 'guest',
+                text: row.text || '',
+                time: row.time || row.created_at || 'Just now',
+              },
+            ],
+          };
+        })
+      );
+    });
+
     return () => {
       active = false;
       unsubListings();
       unsubBookings();
+      unsubThreads();
+      unsubMessages();
     };
   }, [profile.email]);
 
