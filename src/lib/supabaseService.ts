@@ -245,6 +245,39 @@ export async function insertListingToDatabase(
   return mapDbListingToModel(data);
 }
 
+export async function updateListingInDatabase(
+  listing: QaagaListing
+): Promise<QaagaListing> {
+  invalidateServiceCache('listings:');
+  invalidateServiceCache('host_props:');
+  invalidateServiceCache('admin:stats');
+
+  const supabase = getSupabase();
+  if (!supabase) throw new Error('Supabase is not configured.');
+
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  const userEmail = authData.user?.email?.trim().toLowerCase();
+  if (authError || !userEmail || listing.hostEmail?.trim().toLowerCase() !== userEmail) {
+    throw new Error('You can only update your own property listings.');
+  }
+
+  const payload = {
+    ...mapModelToDbListing(listing),
+    status: 'pending_approval',
+    updated_at: new Date().toISOString(),
+  };
+  const { data, error } = await supabase
+    .from('properties')
+    .update(payload)
+    .eq('id', listing.id)
+    .eq('host_email', userEmail)
+    .select()
+    .single();
+
+  if (error || !data) throw new Error('Listing could not be updated. Check your host permissions.');
+  return mapDbListingToModel(data);
+}
+
 export async function deleteListingFromDatabase(id: string): Promise<boolean> {
   invalidateServiceCache('listings:');
   invalidateServiceCache('host_props:');
@@ -404,23 +437,25 @@ export async function cancelBookingInDatabase(
   const supabase = getSupabase();
   if (!supabase) return false;
 
-  try {
-    const updatePayload: Record<string, any> = {
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  const email = authData.user?.email?.trim().toLowerCase();
+  if (authError || !email) return false;
+
+  const { data, error } = await supabase
+    .from('bookings')
+    .update({
       status: 'Cancelled',
+      cancellation_reason: reason || null,
+      cancelled_by: email,
+      cancelled_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-    };
-    if (reason) {
-      updatePayload.cancellation_reason = reason;
-      updatePayload.cancelled_at = new Date().toISOString();
-    }
-    const { error } = await supabase
-      .from('bookings')
-      .update(updatePayload)
-      .eq('id', id);
-    return !error;
-  } catch {
-    return false;
-  }
+    })
+    .eq('id', id)
+    .eq('customer_email', email)
+    .select('id')
+    .maybeSingle();
+
+  return !error && Boolean(data);
 }
 
 /* ========================================================================= */
@@ -1413,7 +1448,7 @@ export async function updatePaymentProofStatus(
       .from('payment_records')
       .update({
         status,
-        admin_notes: notes,
+        host_notes: notes,
         verified_at: status === 'verified' ? new Date().toISOString() : null,
         updated_at: new Date().toISOString(),
       })
