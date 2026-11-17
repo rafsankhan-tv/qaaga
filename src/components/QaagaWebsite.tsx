@@ -1563,7 +1563,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
                 </h2>
                 <p className="text-[13px] text-slate-500 mt-0.5">
                   {[
-                    whereQuery ? `Destination: ${whereQuery}` : 'All Kuala Lumpur',
+                    whereQuery ? `Destination: ${whereQuery}` : 'All Dhaka',
                     selectedDates.display || '2 nights',
                     guestSummaryText || 'Any group size',
                   ].join(' · ')}
@@ -1587,7 +1587,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
                   No exact matches found for those filters
                 </p>
                 <p className="text-xs text-slate-500 max-w-md mx-auto">
-                  Try searching Bukit Bintang, Kampung Bahru, KLCC, Mont Kiara, or reset
+                  Try searching Gulshan, Banani, Dhanmondi, Uttara, or Mirpur, or reset
                   guest counts to explore all available stays and experiences.
                 </p>
                 <button
@@ -1789,7 +1789,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
                   )}
                 </section>
 
-                {/* ROW 3: Popular homes in Kuala Lumpur */}
+                {/* ROW 3: Popular homes in Dhaka */}
                 {popularKLListings.length > 0 && (
                   <section aria-labelledby="heading-popular-kl" className="space-y-3.5">
                     <div className="flex items-start justify-between gap-4">
@@ -1801,7 +1801,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
                             setExplorerSort('recommended');
                             setExplorerCollection({
                               mode: 'popular-kl',
-                              title: 'Popular homes in Kuala Lumpur',
+                              title: 'Popular homes in Dhaka',
                             });
                           }}
                           className="group inline-flex items-center gap-2 text-left cursor-pointer"
@@ -1810,14 +1810,14 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
                             id="heading-popular-kl"
                             className="text-[20px] sm:text-[22px] font-bold text-slate-950 tracking-[-0.02em] group-hover:text-[#C72B62] transition-colors"
                           >
-                            Popular homes in Kuala Lumpur
+                            Popular homes in Dhaka
                           </h2>
                           <span className="w-7 h-7 rounded-full bg-slate-100 group-hover:bg-[#C72B62] group-hover:text-white text-slate-800 flex items-center justify-center transition-colors shrink-0">
                             <ArrowRight size={15} strokeWidth={2.3} />
                           </span>
                         </button>
                         <p className="text-[13px] sm:text-[13.5px] text-slate-500 mt-0.5">
-                          Malaysian capital with skyline views
+                          Dhaka city stays and furnished apartments
                         </p>
                       </div>
 
@@ -1879,7 +1879,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
                             setExplorerSort('recommended');
                             setExplorerCollection({
                               mode: 'experiences-services',
-                              title: 'Experiences & services in Kuala Lumpur',
+                              title: 'Experiences & services in Dhaka',
                             });
                           }}
                           className="group inline-flex items-center gap-2 text-left cursor-pointer"
@@ -1888,14 +1888,14 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
                             id="heading-experiences-services"
                             className="text-[20px] sm:text-[22px] font-bold text-slate-950 tracking-[-0.02em] group-hover:text-[#C72B62] transition-colors"
                           >
-                            Experiences & services in Kuala Lumpur
+                            Experiences & services in Dhaka
                           </h2>
                           <span className="w-7 h-7 rounded-full bg-slate-100 group-hover:bg-[#C72B62] group-hover:text-white text-slate-800 flex items-center justify-center transition-colors shrink-0">
                             <ArrowRight size={15} strokeWidth={2.3} />
                           </span>
                         </button>
                         <p className="text-[13px] sm:text-[13.5px] text-slate-500 mt-0.5">
-                          Local night-market tours, private chefs, airport chauffeurs & spa care
+                          Local food walks, private chefs, airport transfers and wellness services
                         </p>
                       </div>
 
@@ -1955,10 +1955,10 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
               <div>
                 <h1 className="text-2xl sm:text-[26px] font-bold text-slate-950 tracking-[-0.02em]">
                   {activeCategory === 'stay'
-                    ? 'Stays in Kuala Lumpur'
+                    ? 'Stays in Dhaka'
                     : activeCategory === 'experiences'
-                    ? 'Experiences in Kuala Lumpur'
-                    : 'Hospitality Services in Kuala Lumpur'}
+                    ? 'Experiences in Dhaka'
+                    : 'Hospitality Services in Dhaka'}
                 </h1>
                 <p className="text-xs sm:text-sm text-slate-500 mt-1">
                   {activeCategory === 'stay'
@@ -2067,15 +2067,15 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
                 <BrandLogo branding={branding} variant="footer" />
               </button>
               <p className="leading-relaxed text-slate-500">
-                Stays, local experiences, and hospitality services across Kuala Lumpur —
-                from Bukit Bintang penthouses to Kampung Bahru skyline condos.
+                Stays, local experiences, and hospitality services across Dhaka —
+                from furnished Gulshan apartments to family stays in Uttara.
               </p>
             </div>
 
             <div className="space-y-2">
-              <p className="font-bold text-slate-900">Explore Kuala Lumpur</p>
+              <p className="font-bold text-slate-900">Explore Dhaka</p>
               <ul className="space-y-1.5">
-                {['Bukit Bintang', 'Kampung Bahru', 'KLCC', 'Mont Kiara'].map((hood) => (
+                {['Gulshan', 'Banani', 'Dhanmondi', 'Uttara'].map((hood) => (
                   <li key={hood}>
                     <button
                       type="button"
@@ -2189,7 +2189,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
             <div className="flex items-center gap-3">
               <span className="inline-flex items-center gap-1 text-slate-700 font-semibold">
                 <Globe size={14} className="text-[#C72B62]" />
-                <span>English (US)</span>
+                <span>English</span>
               </span>
               <span aria-hidden="true">·</span>
               <div className="flex items-center gap-1">
