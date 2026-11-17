@@ -203,7 +203,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
   const [threads, setThreads] = useState<HostThread[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string>('');
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
-  const [currency, setCurrency] = useState<CurrencyCode>('USD');
+  const [currency, setCurrency] = useState<CurrencyCode>('BDT');
   const [profile, setProfile] = useState<GuestProfile>({
     fullName: 'Guest User',
     email: '',
