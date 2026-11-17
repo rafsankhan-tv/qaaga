@@ -46,9 +46,9 @@ RETURNS TABLE (
   unread BOOLEAN
 )
 LANGUAGE plpgsql
-SECURITY DEFINER
+SECURITY INVOKER
 SET search_path = ''
-AS $$
+AS $
 DECLARE
   actor_email TEXT := public.current_user_email();
   property_row public.properties%ROWTYPE;
