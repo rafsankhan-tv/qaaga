@@ -100,7 +100,7 @@ export const CURRENCY_CONFIG: Record<
   USD: { symbol: '$', rate: 1, label: '$ USD' },
   MYR: { symbol: 'RM', rate: 4.45, label: 'RM MYR' },
   EUR: { symbol: '€', rate: 0.92, label: '€ EUR' },
-  BDT: { symbol: '৳', rate: 120, label: '৳ BDT' },
+  BDT: { symbol: '৳', rate: 124.75, label: '৳ BDT' },
 };
 
 export type LogoSizePreset = 'sm' | 'md' | 'lg' | 'xl';
