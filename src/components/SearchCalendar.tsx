@@ -82,9 +82,6 @@ function buildDatePresets(): DatePreset[] {
   ];
 }
 
-const PRESETS: DatePreset[] = buildDatePresets();
-
-
 const MONTH_NAMES = [
   'January',
   'February',
@@ -149,6 +146,8 @@ function formatDisplayRange(inIso: string, outIso: string): { display: string; n
 
   return { display, nights };
 }
+
+const PRESETS: DatePreset[] = buildDatePresets();
 
 export const SearchCalendar: React.FC<SearchCalendarProps> = ({
   checkInDate,
