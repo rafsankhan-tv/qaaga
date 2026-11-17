@@ -58,7 +58,7 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await authenticated.supabase
     .from('profiles')
-    .select('full_name,email,city,role,verified,phone,avatar_url,bio')
+    .select('full_name,email,city,role,verified,identity_status,status,phone,avatar_url,bio')
     .eq('email', userEmail)
     .maybeSingle();
 
@@ -75,7 +75,11 @@ export async function GET(req: NextRequest) {
       email: data.email,
       city: data.city || 'Dhaka',
       role: authenticated.user.app_metadata?.role === 'admin' ? 'admin' : (data.role === 'host' ? 'host' : 'guest'),
-      verified: Boolean(authenticated.user.email_confirmed_at),
+      // `verified` is identity-document approval, never email confirmation.
+      verified: Boolean(data.verified),
+      identity_status: data.identity_status || 'unverified',
+      status: data.status || 'active',
+      emailVerified: Boolean(authenticated.user.email_confirmed_at),
       phone: data.phone || undefined,
       avatarUrl: data.avatar_url || undefined,
       bio: data.bio || undefined,
@@ -106,7 +110,7 @@ export async function PUT(req: NextRequest) {
 
     const { data: existing, error: existingError } = await authenticated.supabase
       .from('profiles')
-      .select('role')
+      .select('role,verified,identity_status,status')
       .eq('email', userEmail)
       .maybeSingle();
 
@@ -114,9 +118,14 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: 'Unable to verify the existing profile.' }, { status: 502 });
     }
 
-    // Preserve a previously granted admin role, but never allow self-service admin escalation.
+    // Preserve verification and suspension state; profile edits cannot approve identity documents.
+    if (existing?.status === 'suspended') {
+      return NextResponse.json({ error: 'This account is suspended and cannot update its profile.' }, { status: 403 });
+    }
     const role = authenticated.user.app_metadata?.role === 'admin' ? 'admin' : profile.role;
-    const verified = Boolean(authenticated.user.email_confirmed_at);
+    const verified = Boolean(existing?.verified);
+    const identityStatus = existing?.identity_status || 'unverified';
+    const accountStatus = existing?.status || 'active';
 
     const { error: saveError } = await authenticated.supabase
       .from('profiles')
@@ -130,7 +139,8 @@ export async function PUT(req: NextRequest) {
           bio: profile.bio?.trim() || null,
           role,
           verified,
-          status: 'active',
+          identity_status: identityStatus,
+          status: accountStatus,
           updated_at: new Date().toISOString(),
         },
         { onConflict: 'email' }
@@ -148,6 +158,9 @@ export async function PUT(req: NextRequest) {
         city: profile.city.trim(),
         role,
         verified,
+        identity_status: identityStatus,
+        status: accountStatus,
+        emailVerified: Boolean(authenticated.user.email_confirmed_at),
         phone: profile.phone?.trim() || undefined,
         avatarUrl: profile.avatarUrl,
         bio: profile.bio,
