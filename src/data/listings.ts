@@ -11,6 +11,7 @@ export interface ListingReview {
 
 export interface QaagaListing {
   id: string;
+  hostEmail?: string;
   title: string;
   area: string;
   city: string;
@@ -37,6 +38,8 @@ export interface BookingRecord {
   id: string;
   confirmationCode: string;
   listingId: string;
+  checkInDate?: string;
+  checkOutDate?: string;
   title: string;
   area: string;
   image: string;
