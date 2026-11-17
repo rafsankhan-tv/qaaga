@@ -22,8 +22,7 @@ const ListingInputSchema = z.object({
 function mapProperty(row: any) {
   return {
     id: String(row.id),
-    hostEmail: row.host_email,
-    title: row.title,
+        title: row.title,
     area: row.area,
     city: row.city || 'Dhaka',
     subType: row.property_type || 'Apartment',
@@ -57,7 +56,7 @@ export async function GET(req: NextRequest) {
   const sort = searchParams.get('sort');
 
   const { data, error } = await supabase
-    .from('properties')
+    .from('public_properties')
     .select('*')
     .eq('status', 'active')
     .order('created_at', { ascending: false });
