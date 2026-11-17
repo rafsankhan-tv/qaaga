@@ -409,7 +409,11 @@ const AdminPanelModalInner: React.FC<AdminPanelProps> = ({
   const handleToggleUserStatus = async (email: string) => {
     const user = users.find((u) => u.email === email);
     const nextStatus = user?.status === 'suspended' ? 'active' : 'suspended';
-    await updateUserRoleInDatabase(email, user?.role || 'guest', nextStatus);
+    const saved = await updateUserRoleInDatabase(email, user?.role || 'guest', nextStatus);
+    if (!saved) {
+      flashBanner(`User ${email} status could not be changed.`);
+      return;
+    }
     setUsers((prev) =>
       prev.map((u) => (u.email === email ? { ...u, status: nextStatus } : u))
     );
