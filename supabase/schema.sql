@@ -103,7 +103,8 @@ CREATE INDEX IF NOT EXISTS idx_properties_area ON public.properties(area);
 
 -- Create backwards-compatible listings view / synonym if needed
 CREATE OR REPLACE VIEW public.public_properties WITH (security_invoker = true) AS SELECT id,title,description,property_type,room_type,category,city,area,two_night_price_usd,price_daily,currency,max_guests,bedrooms,bathrooms,beds,rating,reviews_count,guest_favorite,in_popular_kl,is_featured,image,gallery,amenities,status,created_at,updated_at FROM public.properties;
-CREATE OR REPLACE VIEW public.listings WITH (security_invoker = true) AS SELECT id,title,description,property_type,room_type,category,city,area,two_night_price_usd,price_daily,currency,max_guests,bedrooms,bathrooms,beds,rating,reviews_count,guest_favorite,in_popular_kl,is_featured,image,gallery,amenities,status,created_at,updated_at FROM public.properties;
+DROP VIEW IF EXISTS public.listings;
+CREATE VIEW public.listings WITH (security_invoker = true) AS SELECT id,title,description,property_type,room_type,category,city,area,two_night_price_usd,price_daily,currency,max_guests,bedrooms,bathrooms,beds,rating,reviews_count,guest_favorite,in_popular_kl,is_featured,image,gallery,amenities,status,created_at,updated_at FROM public.properties;
 
 -- -------------------------------------------------------------------------
 -- 4. PROPERTY AVAILABILITY & CALENDAR
@@ -895,18 +896,20 @@ CREATE POLICY "admin_logs_insert_admin" ON public.admin_activity_logs
 
 -- Explicit grants: RLS still determines which rows each role may access.
 GRANT SELECT, INSERT, UPDATE ON public.profiles TO authenticated;
-REVOKE SELECT ON public.properties FROM anon;
+REVOKE ALL ON public.properties FROM anon;
 GRANT SELECT (id,title,description,property_type,room_type,category,city,area,two_night_price_usd,price_daily,currency,max_guests,bedrooms,bathrooms,beds,rating,reviews_count,guest_favorite,in_popular_kl,is_featured,image,gallery,amenities,status,created_at,updated_at) ON public.properties TO anon;
-GRANT SELECT ON public.properties, public.property_availability, public.reviews, public.site_branding, public.listings, public.public_properties TO anon, authenticated;
+GRANT SELECT ON public.properties, public.property_availability, public.site_branding TO authenticated;
+REVOKE ALL ON public.listings, public.public_properties FROM anon;
+GRANT SELECT ON public.listings, public.public_properties TO anon, authenticated;
 GRANT INSERT, UPDATE, DELETE ON public.properties, public.property_availability TO authenticated;
 GRANT SELECT, INSERT ON public.bookings TO authenticated;
 GRANT UPDATE (status, cancellation_reason, cancelled_by, cancelled_at, updated_at) ON public.bookings TO authenticated;
 GRANT SELECT, INSERT ON public.payment_records, public.identity_verifications TO authenticated;
 GRANT UPDATE (status, host_notes, verified_at, updated_at) ON public.payment_records TO authenticated;
 GRANT UPDATE (status, rejection_reason, reviewed_by, reviewed_at, updated_at) ON public.identity_verifications TO authenticated;
-REVOKE SELECT ON public.reviews FROM anon, authenticated;
+REVOKE ALL ON public.reviews FROM anon, authenticated;
 GRANT SELECT (id, property_id, listing_id, author, rating, comment, created_at) ON public.reviews TO anon, authenticated;
-GRANT INSERT ON public.reviews TO authenticated;
+GRANT INSERT (property_id, listing_id, author, author_email, rating, comment) ON public.reviews TO authenticated;
 GRANT SELECT, INSERT ON public.threads, public.messages TO authenticated;
 GRANT UPDATE (unread, last_message, updated_at) ON public.threads TO authenticated;
 GRANT SELECT, INSERT ON public.notifications TO authenticated;
