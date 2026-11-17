@@ -2075,7 +2075,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
             <div className="space-y-2">
               <p className="font-bold text-slate-900">Explore Dhaka</p>
               <ul className="space-y-1.5">
-                {['Gulshan', 'Banani', 'Dhanmondi', 'Uttara'].map((hood) => (
+                {['Gulshan', 'Banani', 'Dhanmondi', 'Uttara', 'Mirpur'].map((hood) => (
                   <li key={hood}>
                     <button
                       type="button"
