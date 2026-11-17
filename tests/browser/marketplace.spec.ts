@@ -78,10 +78,10 @@ test.describe('QAAGA public marketplace', () => {
     const destinationInput = page.getByPlaceholder('Search destinations in Dhaka');
     await expect(destinationInput).toBeVisible();
     await destinationInput.fill('Gulshan');
-    const gulshanOption = page.getByRole('button', { name: /^Gulshan/ });
-    await expect(gulshanOption).toBeVisible();
-    await page.waitForTimeout(250);
-    await gulshanOption.click();
+    await expect(page.getByRole('button', { name: /^Gulshan/ })).toBeVisible();
+    // The input supports Enter-to-select, avoiding a pointer-hover transition race in desktop popovers.
+    await destinationInput.press('Enter');
+    await expect(destinationInput).toHaveCount(0);
 
     await page.getByTestId('search-when-segment').click();
     const weekendPreset = page.getByRole('button', { name: 'This weekend' });
