@@ -66,6 +66,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid booking request.', details: parsed.error.flatten() }, { status: 400 });
   }
 
+  if (!auth.user.email_confirmed_at) {
+    return NextResponse.json({ error: 'Verify your email before sending a booking request.' }, { status: 403 });
+  }
+
   const { listingId, checkInDate, checkOutDate, guests, specialRequests } = parsed.data;
   const start = new Date(checkInDate + 'T00:00:00');
   const end = new Date(checkOutDate + 'T00:00:00');
@@ -94,6 +98,22 @@ export async function POST(req: NextRequest) {
 
   if (guests > Number(property.max_guests || 1)) {
     return NextResponse.json({ error: 'Guest count exceeds this property’s capacity.' }, { status: 400 });
+  }
+
+  const { data: overlappingBookings, error: overlapError } = await auth.supabase
+    .from('bookings')
+    .select('id')
+    .eq('property_id', listingId)
+    .in('status', ['Pending', 'Confirmed', 'Accepted'])
+    .lt('check_in', checkOutDate)
+    .gt('check_out', checkInDate)
+    .limit(1);
+
+  if (overlapError) {
+    return NextResponse.json({ error: 'Unable to verify availability. Please try again.' }, { status: 502 });
+  }
+  if (overlappingBookings?.length) {
+    return NextResponse.json({ error: 'These dates are no longer available. Choose another date range.' }, { status: 409 });
   }
 
   const profile = await auth.supabase
