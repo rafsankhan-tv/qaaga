@@ -13,12 +13,15 @@ export function getSupabaseConfig(): { url: string; key: string } {
     }
   }
 
-  const url = storedUrl.trim() || process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-  const key =
-    storedKey.trim() ||
+  // Production build-time configuration is authoritative. Browser-stored values are
+  // only a development fallback and must never override the deployed QAAGA project.
+  const envUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+  const envKey =
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
     '';
+  const url = envUrl.trim() || storedUrl.trim();
+  const key = envKey.trim() || storedKey.trim();
 
   return { url, key };
 }
