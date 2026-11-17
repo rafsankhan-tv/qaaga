@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 
-const SUPABASE_REST = '**/rest/v1/properties**';
+const SUPABASE_REST = /\/rest\/v1\/(?:public_)?properties(?:\?|$)/;
 const FIXTURE_TITLE = 'QAAGA Playwright Test Apartment in Gulshan';
 const FIXTURE_IMAGE = '/assets/aistudio/Screenshot_2026-11-04_at_2.55.29_AM_bd5ef49c.png';
 
@@ -71,6 +71,7 @@ test.describe('QAAGA public marketplace', () => {
 
   test('desktop destination search, weekend calendar, guest counter and submit interaction work', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.goto('/');
 
     await page.getByTestId('search-where-segment').click();
@@ -100,7 +101,7 @@ test.describe('QAAGA public marketplace', () => {
 
     await expect(page.getByText('Guests & Travelers')).toBeVisible();
     await page.getByRole('button', { name: 'Increase Adults' }).click();
-    await expect(page.getByText('2 guests', { exact: true })).toBeVisible();
+    await expect(page.getByTestId('guest-summary')).toHaveText('2 guests');
 
     await page.getByRole('button', { name: 'Search' }).last().click();
     await expect(page.getByRole('heading', { name: /Search results/ })).toBeVisible();
@@ -156,7 +157,7 @@ test.describe('QAAGA public marketplace', () => {
     await expect(page.getByRole('heading', { name: FIXTURE_TITLE })).toBeVisible();
     await expect(page.getByText('What this place offers')).toBeVisible();
     await page.getByRole('button', { name: 'Close modal' }).click();
-    await expect(page.getByRole('heading', { name: FIXTURE_TITLE })).toHaveCount(0);
+    await expect(page.getByText('What this place offers')).toHaveCount(0);
   });
 
   test('sticky navigation stays at the top after scrolling and respects reduced motion', async ({ page }) => {
