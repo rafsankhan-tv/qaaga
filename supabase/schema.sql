@@ -702,3 +702,25 @@ GRANT SELECT, INSERT ON public.admin_activity_logs TO authenticated;
 INSERT INTO public.site_branding (id, logo_url, favicon_url, alt_text, fallback_text, fallback_domain)
 VALUES ('default_branding', NULL, NULL, 'qaaga.com', 'qaaga', '.com')
 ON CONFLICT (id) DO NOTHING;
+
+
+-- Enable Supabase Realtime for the base tables used by the live UI.
+DO $$
+DECLARE
+  table_name TEXT;
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+    FOREACH table_name IN ARRAY ARRAY['properties', 'bookings', 'threads', 'messages', 'notifications'] LOOP
+      IF NOT EXISTS (
+        SELECT 1
+        FROM pg_publication_tables
+        WHERE pubname = 'supabase_realtime'
+          AND schemaname = 'public'
+          AND tablename = table_name
+      ) THEN
+        EXECUTE format('ALTER PUBLICATION supabase_realtime ADD TABLE public.%I', table_name);
+      END IF;
+    END LOOP;
+  END IF;
+END
+$$;
