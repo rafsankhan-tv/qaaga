@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabase } from '@/lib/supabaseClient';
+import { createPublicServerSupabase } from '@/lib/supabaseServer';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'A valid email and six-digit code are required.' }, { status: 400 });
     }
 
-    const supabase = getSupabase();
+    const supabase = createPublicServerSupabase();
     if (!supabase) {
       return NextResponse.json({ error: 'Authentication service is not configured.' }, { status: 503 });
     }
