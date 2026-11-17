@@ -324,8 +324,7 @@ export async function getBookingsFromDatabase(
 export async function insertBookingToDatabase(
   booking: BookingRecord,
   guestEmail: string,
-  guestName: string,
-  hostEmail: string
+  guestName: string
 ): Promise<BookingRecord> {
   invalidateServiceCache('bookings:');
   invalidateServiceCache('host_bookings:');
@@ -340,7 +339,7 @@ export async function insertBookingToDatabase(
     throw new Error('Please sign in with your verified email before booking.');
   }
   if (!authData.user.email_confirmed_at) throw new Error('Verify your email before booking.');
-  if (!hostEmail.trim() || !booking.checkInDate || !booking.checkOutDate) {
+  if (!booking.checkInDate || !booking.checkOutDate) {
     throw new Error('A valid property and check-in/check-out date are required.');
   }
 
