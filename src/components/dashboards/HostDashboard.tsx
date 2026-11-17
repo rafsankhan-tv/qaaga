@@ -241,16 +241,20 @@ export default function HostDashboard({
     const file = e.target.files?.[0];
     if (!file) return;
     setIsUploadingPhoto(true);
+    setDashboardError(null);
     try {
       const res = await uploadFileToSupabaseStorage(file, 'qaaga-listings');
-      if (res.url) {
-        setMainPhoto(res.url);
-        setGallery((prev) => [res.url, ...prev.filter((p) => p !== res.url)]);
-      }
+      if (!res.url) throw new Error(res.error || 'Property image upload failed.');
+      setMainPhoto(res.url);
+      setGallery((prev) => [res.url, ...prev.filter((p) => p !== res.url)]);
+    } catch (error: any) {
+      setDashboardError(error?.message || 'Property image upload failed.');
     } finally {
       setIsUploadingPhoto(false);
+      e.target.value = '';
     }
   };
+
 
   // Save / Publish Property
   const handleSaveProperty = async (e: React.FormEvent) => {
@@ -335,13 +339,13 @@ export default function HostDashboard({
     setDescription(prop.description || '');
     setArea(prop.area);
     setPropertyType(prop.subType || 'Apartment');
-    setPriceDaily(String(prop.priceDaily || Math.round(prop.twoNightPriceUsd / 2)));
-    setPriceWeekly(String(prop.priceWeekly || (prop.priceDaily || 65) * 6));
-    setPriceMonthly(String(prop.priceMonthly || (prop.priceDaily || 65) * 24));
+    setPriceDaily(String(prop.priceDaily || (prop.twoNightPriceUsd ? Math.round(prop.twoNightPriceUsd / 2) : '')));
+    setPriceWeekly(String(prop.priceWeekly || (prop.priceDaily ? prop.priceDaily * 6 : '')));
+    setPriceMonthly(String(prop.priceMonthly || (prop.priceDaily ? prop.priceDaily * 30 : '')));
     setMaxGuests(prop.maxGuests || 2);
     setBedrooms(prop.bedrooms || '1 bedroom');
     setMainPhoto(prop.image);
-    setGallery(prop.gallery || [prop.image]);
+    setGallery(prop.gallery?.length ? prop.gallery : (prop.image ? [prop.image] : []));
     setIsAddModalOpen(true);
   };
 
