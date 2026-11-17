@@ -7,6 +7,7 @@
 -- Enable required extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+CREATE SCHEMA IF NOT EXISTS extensions;
 
 -- -------------------------------------------------------------------------
 -- 1. PROFILES TABLE (Users, Roles & Verification)
@@ -163,7 +164,8 @@ CREATE INDEX IF NOT EXISTS idx_bookings_property ON public.bookings(property_id)
 CREATE INDEX IF NOT EXISTS idx_bookings_status ON public.bookings(status);
 
 -- Prevent two active booking requests from taking the same property/date range.
-CREATE EXTENSION IF NOT EXISTS btree_gist;
+CREATE EXTENSION IF NOT EXISTS btree_gist WITH SCHEMA extensions;
+ALTER EXTENSION btree_gist SET SCHEMA extensions;
 ALTER TABLE public.bookings
   DROP CONSTRAINT IF EXISTS bookings_no_overlapping_active_stays;
 ALTER TABLE public.bookings
@@ -229,6 +231,8 @@ CREATE TABLE IF NOT EXISTS public.threads (
     created_at TIMESTAMPTZ DEFAULT TIMEZONE('utc', NOW()),
     updated_at TIMESTAMPTZ DEFAULT TIMEZONE('utc', NOW())
 );
+CREATE INDEX IF NOT EXISTS idx_threads_property_id ON public.threads(property_id);
+
 
 CREATE TABLE IF NOT EXISTS public.messages (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -239,6 +243,8 @@ CREATE TABLE IF NOT EXISTS public.messages (
     time TEXT NOT NULL,
     created_at TIMESTAMPTZ DEFAULT TIMEZONE('utc', NOW())
 );
+CREATE INDEX IF NOT EXISTS idx_messages_thread_id ON public.messages(thread_id);
+
 
 -- -------------------------------------------------------------------------
 -- 9. NOTIFICATIONS
