@@ -330,7 +330,7 @@ GRANT EXECUTE ON FUNCTION public.is_platform_admin() TO anon, authenticated;
 
 -- Drop every existing policy on the objects managed by this schema so the file
 -- can be safely re-applied after a partial setup or during a controlled migration.
-DO $
+DO $$
 DECLARE
   policy_row RECORD;
 BEGIN
