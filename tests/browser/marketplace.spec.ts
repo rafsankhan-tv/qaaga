@@ -130,7 +130,7 @@ test.describe('QAAGA public marketplace', () => {
 
     await expect(page.getByText('Guests & Travelers')).toBeVisible();
     await page.getByRole('button', { name: 'Increase Children' }).click();
-    await expect(page.getByText('2 guests', { exact: true })).toBeVisible();
+    await expect(page.getByTestId('guest-summary')).toHaveText('2 guests');
 
     await page.keyboard.press('Escape');
     await expect(page.getByText('Search QAAGA Stays')).toHaveCount(0);
@@ -157,7 +157,7 @@ test.describe('QAAGA public marketplace', () => {
     await expect(page.getByRole('heading', { name: FIXTURE_TITLE })).toBeVisible();
     await expect(page.getByText('What this place offers')).toBeVisible();
     await page.getByRole('button', { name: 'Close modal' }).click();
-    await expect(page.getByText('What this place offers')).toHaveCount(0);
+    await expect(page.getByRole('dialog')).toHaveCount(0);
   });
 
   test('sticky navigation stays at the top after scrolling and respects reduced motion', async ({ page }) => {
