@@ -4,8 +4,8 @@ import { readServerBranding } from '@/lib/brandingStorage.server';
 export const dynamic = 'force-dynamic';
 
 export const metadata = {
-  title: 'Stays & Apartments in Kuala Lumpur — QAAGA Super Marketplace',
-  description: 'Explore furnished rooms, penthouses, and residences across Kuala Lumpur on qaaga.com.',
+  title: 'Stays & Apartments in Dhaka — QAAGA Super Marketplace',
+  description: 'Explore furnished rooms, penthouses, and residences across Dhaka on qaaga.com.',
 };
 
 export default async function StayPage() {
