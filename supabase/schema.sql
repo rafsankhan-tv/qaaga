@@ -389,7 +389,16 @@ BEGIN
   END IF;
 
   NEW.verified := OLD.verified;
-  NEW.identity_status := OLD.identity_status;
+  IF NEW.identity_status IS DISTINCT FROM OLD.identity_status THEN
+    IF NEW.identity_status = 'pending' AND EXISTS (
+      SELECT 1 FROM public.identity_verifications iv
+      WHERE iv.user_email = OLD.email AND iv.status = 'pending'
+    ) THEN
+      NEW.identity_status := 'pending';
+    ELSE
+      NEW.identity_status := OLD.identity_status;
+    END IF;
+  END IF;
   NEW.status := OLD.status;
   RETURN NEW;
 END;
@@ -774,3 +783,107 @@ BEGIN
   END IF;
 END
 $$;
+
+
+-- -------------------------------------------------------------------------
+-- 14. STORAGE BUCKETS & ROW-LEVEL ACCESS
+-- -------------------------------------------------------------------------
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES
+  ('qaaga-listings', 'qaaga-listings', true, 10485760, ARRAY['image/jpeg','image/png','image/webp','image/avif']),
+  ('qaaga-avatars', 'qaaga-avatars', true, 5242880, ARRAY['image/jpeg','image/png','image/webp','image/avif']),
+  ('qaaga-branding', 'qaaga-branding', true, 5242880, ARRAY['image/jpeg','image/png','image/webp','image/avif','image/svg+xml']),
+  ('qaaga-private', 'qaaga-private', false, 10485760, ARRAY['image/jpeg','image/png','image/webp','image/avif','application/pdf'])
+ON CONFLICT (id) DO UPDATE
+SET public = EXCLUDED.public,
+    file_size_limit = EXCLUDED.file_size_limit,
+    allowed_mime_types = EXCLUDED.allowed_mime_types;
+
+-- Public listing/branding/avatar objects can be read by everyone.
+DROP POLICY IF EXISTS "qaaga_public_assets_read" ON storage.objects;
+CREATE POLICY "qaaga_public_assets_read" ON storage.objects
+  FOR SELECT TO anon, authenticated
+  USING (bucket_id IN ('qaaga-listings', 'qaaga-avatars', 'qaaga-branding'));
+
+-- Users can write their own listing and avatar objects only.
+DROP POLICY IF EXISTS "qaaga_user_assets_insert" ON storage.objects;
+CREATE POLICY "qaaga_user_assets_insert" ON storage.objects
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    bucket_id IN ('qaaga-listings', 'qaaga-avatars')
+    AND (storage.foldername(name))[1] = (SELECT auth.uid())::text
+  );
+
+DROP POLICY IF EXISTS "qaaga_user_assets_update" ON storage.objects;
+CREATE POLICY "qaaga_user_assets_update" ON storage.objects
+  FOR UPDATE TO authenticated
+  USING (
+    bucket_id IN ('qaaga-listings', 'qaaga-avatars')
+    AND (storage.foldername(name))[1] = (SELECT auth.uid())::text
+  )
+  WITH CHECK (
+    bucket_id IN ('qaaga-listings', 'qaaga-avatars')
+    AND (storage.foldername(name))[1] = (SELECT auth.uid())::text
+  );
+
+DROP POLICY IF EXISTS "qaaga_user_assets_delete" ON storage.objects;
+CREATE POLICY "qaaga_user_assets_delete" ON storage.objects
+  FOR DELETE TO authenticated
+  USING (
+    bucket_id IN ('qaaga-listings', 'qaaga-avatars')
+    AND (storage.foldername(name))[1] = (SELECT auth.uid())::text
+  );
+
+-- Only a trusted administrator may upload, replace or remove branding files.
+DROP POLICY IF EXISTS "qaaga_branding_admin_write" ON storage.objects;
+CREATE POLICY "qaaga_branding_admin_write" ON storage.objects
+  FOR ALL TO authenticated
+  USING (
+    bucket_id = 'qaaga-branding'
+    AND public.is_platform_admin()
+  )
+  WITH CHECK (
+    bucket_id = 'qaaga-branding'
+    AND public.is_platform_admin()
+  );
+
+-- Government IDs and payment slips live in a private bucket. The owner may access
+-- their own documents; an admin may review all; a property's host may see only the
+-- payment proof attached to a booking for that host.
+DROP POLICY IF EXISTS "qaaga_private_documents_read" ON storage.objects;
+CREATE POLICY "qaaga_private_documents_read" ON storage.objects
+  FOR SELECT TO authenticated
+  USING (
+    bucket_id = 'qaaga-private'
+    AND (
+      (storage.foldername(name))[1] = (SELECT auth.uid())::text
+      OR public.is_platform_admin()
+      OR EXISTS (
+        SELECT 1
+        FROM public.payment_records pr
+        JOIN public.bookings b ON b.id = pr.booking_id
+        WHERE pr.proof_image_url = 'storage://qaaga-private/' || storage.objects.name
+          AND b.host_email = public.current_user_email()
+      )
+    )
+  );
+
+DROP POLICY IF EXISTS "qaaga_private_documents_insert" ON storage.objects;
+CREATE POLICY "qaaga_private_documents_insert" ON storage.objects
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    bucket_id = 'qaaga-private'
+    AND (storage.foldername(name))[1] = (SELECT auth.uid())::text
+  );
+
+DROP POLICY IF EXISTS "qaaga_private_documents_delete" ON storage.objects;
+CREATE POLICY "qaaga_private_documents_delete" ON storage.objects
+  FOR DELETE TO authenticated
+  USING (
+    bucket_id = 'qaaga-private'
+    AND (
+      (storage.foldername(name))[1] = (SELECT auth.uid())::text
+      OR public.is_platform_admin()
+    )
+  );
+
