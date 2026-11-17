@@ -919,7 +919,7 @@ export async function saveUserProfileToDatabase(profile: GuestProfile): Promise<
 
   const { data: existing, error: readError } = await supabase
     .from('profiles')
-    .select('role,status,identity_status')
+    .select('role,status,identity_status,verified')
     .eq('email', authenticatedEmail)
     .maybeSingle();
   if (readError) throw new Error(readError.message);
@@ -930,7 +930,8 @@ export async function saveUserProfileToDatabase(profile: GuestProfile): Promise<
     : existing?.role === 'host' && profile.role === 'host'
       ? 'host'
       : profile.role === 'host' ? 'host' : 'guest';
-  const verified = Boolean(authData.user.email_confirmed_at);
+  // Email confirmation is separate from identity-document approval.
+  const verified = Boolean(existing?.verified);
 
   const { data, error } = await supabase
     .from('profiles')
