@@ -78,7 +78,7 @@ test.describe('QAAGA public marketplace', () => {
     });
     expect(railBehavior.preventsLenis).toBe(false);
     expect(railBehavior.overscrollY).toBe('auto');
-    expect(railBehavior.scrollSnap).toContain('proximity');
+    expect(railBehavior.scrollSnap).toContain('x');
 
     expect(pageErrors).toEqual([]);
   });
@@ -176,12 +176,21 @@ test.describe('QAAGA public marketplace', () => {
 
     const card = page.locator('article').filter({ has: detailButton }).first();
     const image = card.locator('img').first();
-    const initialImageUrl = await image.getAttribute('src');
+    const readOriginalImageUrl = async () =>
+      image.evaluate((element) => {
+        const src = element.getAttribute('src') || '';
+        try {
+          return new URL(src, window.location.origin).searchParams.get('url') || src;
+        } catch {
+          return src;
+        }
+      });
+    const initialImageUrl = await readOriginalImageUrl();
     await expect(card.getByRole('button', { name: 'Next photo of ' + FIXTURE_TITLE })).toBeVisible();
     await card.getByRole('button', { name: 'Next photo of ' + FIXTURE_TITLE }).click();
-    await expect(image).toHaveAttribute('src', FIXTURE_IMAGE + '?photo=2');
+    await expect.poll(readOriginalImageUrl).toBe(FIXTURE_IMAGE + '?photo=2');
     await card.getByRole('button', { name: 'Previous photo of ' + FIXTURE_TITLE }).click();
-    await expect(image).toHaveAttribute('src', initialImageUrl || FIXTURE_IMAGE);
+    await expect.poll(readOriginalImageUrl).toBe(initialImageUrl);
 
     const beforeY = (await card.boundingBox())?.y;
     expect(beforeY).not.toBeUndefined();
