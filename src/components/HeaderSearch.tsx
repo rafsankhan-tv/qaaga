@@ -434,6 +434,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
             {/* Compact Search Pill + Adjacent '+' Button: Shown on scroll on all screen sizes */}
             <motion.div
               layout
+              data-testid="compact-search-row"
               aria-hidden={!shouldCollapse}
               transition={{ layout: { duration: 0.38, ease: [0.16, 1, 0.3, 1] } }}
               className={`flex items-center gap-1.5 sm:gap-2.5 transition-[opacity,transform] duration-[400ms] ease-[cubic-bezier(0.16,1,0.3,1)] max-w-full ${
