@@ -108,7 +108,7 @@ test.describe('QAAGA public marketplace', () => {
     await page.getByRole('button', { name: 'Increase Adults' }).click();
     await expect(page.getByTestId('guest-summary')).toHaveText('2 guests');
 
-    await page.getByRole('button', { name: 'Search' }).last().click();
+    await page.getByTestId('desktop-search-submit').click();
     await expect(page).toHaveURL(/where=Gulshan/);
     await expect(page).toHaveURL(/checkIn=/);
     await expect(page).toHaveURL(/checkOut=/);
