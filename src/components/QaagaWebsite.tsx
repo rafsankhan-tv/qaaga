@@ -1232,10 +1232,8 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
   };
 
   const handleExecuteSearch = () => {
-    if (!hasActiveSearchCriteria) {
-      setActivePopover('where');
-      return;
-    }
+    // An explicit Search action means "show available stays in the selected scope",
+    // even when the guest count remains at its default of one adult.
     const params = new URLSearchParams();
     if (whereQuery.trim()) params.set('where', whereQuery.trim());
     if (checkInIso) params.set('checkIn', checkInIso);
