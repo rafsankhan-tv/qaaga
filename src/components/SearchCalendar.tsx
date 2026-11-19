@@ -75,10 +75,13 @@ function buildDatePresets(): DatePreset[] {
   const thisWeekend = addDays(today, daysUntilFriday);
 
   return [
+    makePreset('one-night', '1 night stay', addDays(today, 1), 1),
     makePreset('weekend', 'This weekend', thisWeekend, 2),
     makePreset('next-week', 'Next weekend', addDays(thisWeekend, 7), 3),
     makePreset('5-nights', '5 nights stay', addDays(today, 14), 5),
     makePreset('1-week', '1 week getaway', addDays(today, 21), 7),
+    makePreset('15-nights', '15 nights stay', addDays(today, 14), 15),
+    makePreset('30-nights', '30 nights stay', addDays(today, 30), 30),
   ];
 }
 
