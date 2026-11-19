@@ -380,7 +380,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
             {/* Desktop Category Tabs: Shown at top on md+ */}
             <nav
               aria-label="Listing categories"
-              className={`hidden md:flex items-center justify-center gap-4 sm:gap-7 lg:gap-10 overflow-x-auto scrollbar-none px-0.5 transition-[opacity,transform] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+              className={`qaaga-category-rail hidden md:flex items-center justify-center gap-4 sm:gap-7 lg:gap-10 overflow-x-auto scrollbar-none px-0.5 transition-[opacity,transform] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
                 shouldCollapse
                   ? 'opacity-0 scale-95 pointer-events-none -translate-y-2 absolute invisible'
                   : 'opacity-100 scale-100 pointer-events-auto translate-y-0 visible'
@@ -985,7 +985,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
             {/* Mobile Category Tabs Strip */}
             <nav
               aria-label="Mobile listing categories"
-              className="flex items-center justify-center gap-5 min-[380px]:gap-7 overflow-x-auto scrollbar-none px-1 pt-0.5"
+              className="qaaga-category-rail flex items-center justify-center gap-5 min-[380px]:gap-7 overflow-x-auto scrollbar-none px-1 pt-0.5"
             >
               {CATEGORY_TABS.map((tab) => {
                 const isActive = activeCategory === tab.id;
