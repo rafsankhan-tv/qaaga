@@ -87,6 +87,9 @@ test.describe('QAAGA public marketplace', () => {
     const weekendPreset = page.getByRole('button', { name: 'This weekend' });
     await expect(weekendPreset).toBeVisible();
     await expect(weekendPreset).toBeEnabled();
+    await expect(page.getByTestId('calendar-preset-one-night')).toBeVisible();
+    await expect(page.getByTestId('calendar-preset-15-nights')).toBeVisible();
+    await expect(page.getByTestId('calendar-preset-30-nights')).toBeVisible();
     const weekendRange = await page.getByTestId('calendar-preset-weekend').evaluate((element) => ({
       checkIn: element.getAttribute('data-check-in') || '',
       checkOut: element.getAttribute('data-check-out') || '',
@@ -107,6 +110,10 @@ test.describe('QAAGA public marketplace', () => {
 
     await page.getByRole('button', { name: 'Search' }).last().click();
     await expect(page.getByRole('heading', { name: /Search results/ })).toBeVisible();
+    await expect(page).toHaveURL(/where=Gulshan/);
+    await expect(page).toHaveURL(/checkIn=/);
+    await expect(page).toHaveURL(/checkOut=/);
+    await expect(page).toHaveURL(/adults=2/);
   });
 
   test('mobile search sheet supports destination, date, guest tabs and escape dismissal', async ({ page }) => {
