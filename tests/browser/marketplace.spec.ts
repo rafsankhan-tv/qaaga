@@ -74,11 +74,26 @@ test.describe('QAAGA public marketplace', () => {
         preventsLenis: element.hasAttribute('data-lenis-prevent'),
         overscrollY: style.overscrollBehaviorY,
         scrollSnap: style.scrollSnapType,
+        scrollBehavior: style.scrollBehavior,
       };
     });
     expect(railBehavior.preventsLenis).toBe(false);
     expect(railBehavior.overscrollY).toBe('auto');
     expect(railBehavior.scrollSnap).toContain('x');
+    expect(railBehavior.scrollBehavior).toBe('smooth');
+
+    await page.setViewportSize({ width: 1440, height: 720 });
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    const documentMetrics = await page.evaluate(() => ({
+      y: window.scrollY,
+      maxY: document.documentElement.scrollHeight - window.innerHeight,
+    }));
+    const railBox = await filterRail.boundingBox();
+    if (documentMetrics.maxY > 24 && railBox) {
+      await page.mouse.move(railBox.x + railBox.width / 2, railBox.y + railBox.height / 2);
+      await page.mouse.wheel(0, 420);
+      await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(documentMetrics.y + 5);
+    }
 
     expect(pageErrors).toEqual([]);
   });
