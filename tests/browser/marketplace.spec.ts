@@ -29,7 +29,7 @@ const listingFixture = {
   is_featured: false,
   status: 'active',
   image: FIXTURE_IMAGE,
-  gallery: [FIXTURE_IMAGE],
+  gallery: [FIXTURE_IMAGE, FIXTURE_IMAGE + '?photo=2'],
   amenities: ['Wi-Fi', 'Air conditioning'],
 };
 
@@ -157,6 +157,13 @@ test.describe('QAAGA public marketplace', () => {
 
     const card = page.locator('article').filter({ has: detailButton }).first();
     const image = card.locator('img').first();
+    const initialImageUrl = await image.getAttribute('src');
+    await expect(card.getByRole('button', { name: 'Next photo of ' + FIXTURE_TITLE })).toBeVisible();
+    await card.getByRole('button', { name: 'Next photo of ' + FIXTURE_TITLE }).click();
+    await expect(image).toHaveAttribute('src', FIXTURE_IMAGE + '?photo=2');
+    await card.getByRole('button', { name: 'Previous photo of ' + FIXTURE_TITLE }).click();
+    await expect(image).toHaveAttribute('src', initialImageUrl || FIXTURE_IMAGE);
+
     const beforeY = (await card.boundingBox())?.y;
     expect(beforeY).not.toBeUndefined();
     await card.hover();
