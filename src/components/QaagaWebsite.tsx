@@ -1799,8 +1799,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
 
                     <div
                       ref={recentCarouselRef}
-                      data-lenis-prevent
-                      className="carousel-scroll flex gap-3 sm:gap-3.5 lg:gap-4 overflow-x-auto scrollbar-none snap-x snap-mandatory scroll-smooth pb-1"
+                      className="qaaga-horizontal-rail carousel-scroll flex gap-3 sm:gap-3.5 lg:gap-4 overflow-x-auto scrollbar-none snap-x snap-mandatory scroll-smooth pb-1"
                     >
                       {recentlyViewedListings.map((item, idx) => (
                         <ListingCard
@@ -1867,8 +1866,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
                   ) : (
                     <div
                       ref={wishlistCarouselRef}
-                      data-lenis-prevent
-                      className="carousel-scroll flex gap-3.5 sm:gap-4 overflow-x-auto scrollbar-none snap-x snap-mandatory scroll-smooth pb-1"
+                      className="qaaga-horizontal-rail carousel-scroll flex gap-3.5 sm:gap-4 overflow-x-auto scrollbar-none snap-x snap-mandatory scroll-smooth pb-1"
                     >
                       {wishlistListings.map((item) => (
                         <ListingCard
@@ -1942,8 +1940,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
 
                     <div
                       ref={popularCarouselRef}
-                      data-lenis-prevent
-                      className="carousel-scroll flex gap-3.5 sm:gap-4 overflow-x-auto scrollbar-none snap-x snap-mandatory scroll-smooth pb-1"
+                      className="qaaga-horizontal-rail carousel-scroll flex gap-3.5 sm:gap-4 overflow-x-auto scrollbar-none snap-x snap-mandatory scroll-smooth pb-1"
                     >
                       {popularKLListings.map((item) => (
                         <ListingCard
@@ -2020,8 +2017,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
 
                     <div
                       ref={curatedCarouselRef}
-                      data-lenis-prevent
-                      className="carousel-scroll flex gap-3.5 sm:gap-4 overflow-x-auto scrollbar-none snap-x snap-mandatory scroll-smooth pb-1"
+                      className="qaaga-horizontal-rail carousel-scroll flex gap-3.5 sm:gap-4 overflow-x-auto scrollbar-none snap-x snap-mandatory scroll-smooth pb-1"
                     >
                       {curatedExperiencesAndServices.map((item) => (
                         <ListingCard
@@ -2072,8 +2068,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
                       </div>
                       <div
                         ref={(node) => { neighborhoodCarouselRefs.current[section.area] = node; }}
-                        data-lenis-prevent
-                        className='carousel-scroll flex gap-3.5 sm:gap-4 overflow-x-auto scrollbar-none snap-x snap-mandatory scroll-smooth pb-1'
+                        className='qaaga-horizontal-rail carousel-scroll flex gap-3.5 sm:gap-4 overflow-x-auto scrollbar-none snap-x snap-mandatory scroll-smooth pb-1'
                       >
                         {section.listings.map((item, index) => (
                           <ListingCard
@@ -2139,7 +2134,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
             </div>
 
             {/* Clean Interactive Filter Controls */}
-            <div data-lenis-prevent className="flex items-center gap-2 overflow-x-auto scrollbar-none scroll-smooth pb-1">
+            <div data-testid="category-filter-rail" className="qaaga-horizontal-rail flex items-center gap-2 overflow-x-auto scrollbar-none pb-1">
               {(activeCategory === 'stay'
                 ? STAY_SUBFILTERS
                 : activeCategory === 'experiences'
