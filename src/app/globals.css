@@ -134,6 +134,13 @@ html.lenis body {
   outline-offset: 3px;
 }
 
+/* Motion owns transforms on the primary CTA; keep only color/shadow transitions here. */
+.search-button.motion-search-button {
+  transition:
+    background-color 160ms ease,
+    box-shadow 180ms var(--qaaga-ease);
+}
+
 /* Respect prefers-reduced-motion globally */
 @media (prefers-reduced-motion: reduce) {
   html {
