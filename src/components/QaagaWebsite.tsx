@@ -309,6 +309,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
   const wishlistCarouselRef = useRef<HTMLDivElement | null>(null);
   const popularCarouselRef = useRef<HTMLDivElement | null>(null);
   const curatedCarouselRef = useRef<HTMLDivElement | null>(null);
+  const neighborhoodCarouselRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const showToast = useCallback((next: ToastState) => {
     setToast(next);
@@ -979,6 +980,30 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
     () => allListings.filter((item) => item.category !== 'stay'),
     [allListings]
   );
+
+  const neighborhoodSections = useMemo(() => {
+    const grouped = new Map<string, QaagaListing[]>();
+    for (const item of allListings) {
+      const area = item.area?.trim();
+      if (item.category !== 'stay' || !area) continue;
+      const current = grouped.get(area) || [];
+      current.push(item);
+      grouped.set(area, current);
+    }
+    return Array.from(grouped.entries())
+      .map(([area, items]) => ({
+        area,
+        listings: [...items].sort(
+          (a, b) =>
+            Number(Boolean(b.guestFavorite)) - Number(Boolean(a.guestFavorite)) ||
+            b.reviewsCount - a.reviewsCount ||
+            Number.parseFloat(b.rating || '0') - Number.parseFloat(a.rating || '0')
+        ),
+      }))
+      .filter((section) => section.listings.length >= 2)
+      .sort((a, b) => b.listings.length - a.listings.length || a.area.localeCompare(b.area))
+      .slice(0, 5);
+  }, [allListings]);
 
   const explorerItems = useMemo(() => {
     if (!explorerCollection) return [];
@@ -1940,7 +1965,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
                   </section>
                 )}
 
-                {/* ROW 4 (Below the fold): Experiences & Hospitality Services in KL */}
+                {/* ROW 4: Experiences & Hospitality Services in Dhaka */}
                 {curatedExperiencesAndServices.length > 0 && (
                   <section
                     aria-labelledby="heading-experiences-services"
@@ -2017,6 +2042,60 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
                     </div>
                   </section>
                 )}
+
+                {/* Dynamic neighborhood rows — only backed by published Supabase stays */}
+                {neighborhoodSections.map((section) => {
+                  const headingId = 'heading-area-' + section.area.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+                  const scrollArea = (direction: 'left' | 'right') => {
+                    const element = neighborhoodCarouselRefs.current[section.area];
+                    if (!element) return;
+                    const distance = Math.max(280, Math.round(element.clientWidth * 0.82));
+                    element.scrollBy({ left: direction === 'right' ? distance : -distance, behavior: 'smooth' });
+                  };
+                  return (
+                    <section key={section.area} aria-labelledby={headingId} className='pt-2 space-y-3.5'>
+                      <div className='flex items-center justify-between gap-4'>
+                        <div className='min-w-0'>
+                          <h2 id={headingId} className='text-[20px] sm:text-[22px] font-bold text-slate-950 tracking-[-0.02em]'>
+                            Stays in {section.area}
+                          </h2>
+                          <p className='text-[13px] sm:text-[13.5px] text-slate-500 mt-0.5'>
+                            Furnished homes and rooms in {section.area}
+                          </p>
+                        </div>
+                        <div className='flex items-center gap-2 shrink-0'>
+                          <button type='button' aria-label={'Previous stays in ' + section.area} onClick={() => scrollArea('left')} className='w-8 h-8 rounded-full border border-slate-200 bg-white hover:border-slate-400 text-slate-700 flex items-center justify-center transition-colors cursor-pointer'>
+                            <ChevronLeft size={16} />
+                          </button>
+                          <button type='button' aria-label={'Next stays in ' + section.area} onClick={() => scrollArea('right')} className='w-8 h-8 rounded-full border border-slate-200 bg-white hover:border-slate-400 text-slate-700 flex items-center justify-center transition-colors cursor-pointer'>
+                            <ChevronRight size={16} />
+                          </button>
+                        </div>
+                      </div>
+                      <div
+                        ref={(node) => { neighborhoodCarouselRefs.current[section.area] = node; }}
+                        data-lenis-prevent
+                        className='carousel-scroll flex gap-3.5 sm:gap-4 overflow-x-auto scrollbar-none snap-x snap-mandatory scroll-smooth pb-1'
+                      >
+                        {section.listings.map((item, index) => (
+                          <ListingCard
+                            key={'area-' + section.area + '-' + item.id}
+                            item={item}
+                            priority={index < 3}
+                            isSaved={wishlistIds.includes(item.id)}
+                            isUserToggled={Boolean(userToggledHearts[item.id])}
+                            formattedPrice={formatPrice(item.twoNightPriceUsd)}
+                            activeNights={activeNights}
+                            carouselItem={true}
+                            variant='wishlist'
+                            onOpen={handleOpenListing}
+                            onToggleWishlist={handleToggleWishlist}
+                          />
+                        ))}
+                      </div>
+                    </section>
+                  );
+                })}
               </>
             )}
           </>
