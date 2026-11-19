@@ -207,16 +207,40 @@ test.describe('QAAGA public marketplace', () => {
     await card.getByRole('button', { name: 'Previous photo of ' + FIXTURE_TITLE }).click();
     await expect.poll(readOriginalImageUrl).toBe(initialImageUrl);
 
-    const beforeY = (await card.boundingBox())?.y;
-    expect(beforeY).not.toBeUndefined();
+    const beforeTransform = await card.evaluate((element) => getComputedStyle(element).transform);
     await card.hover();
-    await expect.poll(async () => (await card.boundingBox())?.y ?? beforeY!).toBeLessThan(beforeY!);
+    await expect.poll(async () => card.evaluate((element) => getComputedStyle(element).transform))
+      .not.toBe(beforeTransform);
 
     await detailButton.click();
     await expect(page.getByRole('heading', { name: FIXTURE_TITLE })).toBeVisible();
     await expect(page.getByText('What this place offers')).toBeVisible();
     await page.getByRole('button', { name: 'Close modal' }).click();
     await expect(page.getByRole('dialog')).toHaveCount(0);
+  });
+
+  test('sticky header and search CTA morph smoothly between expanded and compact states', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 850 });
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await page.goto('/');
+
+    const searchButton = page.getByTestId('desktop-search-submit');
+    await expect(searchButton).toBeVisible();
+    const compactWidth = (await searchButton.boundingBox())?.width;
+    expect(compactWidth).toBeGreaterThan(0);
+
+    await page.getByTestId('search-where-segment').click();
+    await expect.poll(async () => (await searchButton.boundingBox())?.width ?? 0)
+      .toBeGreaterThan(compactWidth! + 20);
+    await expect(searchButton.getByText('Search')).toBeVisible();
+
+    await page.keyboard.press('Escape');
+    await page.mouse.move(1200, 420);
+    await page.mouse.wheel(0, 820);
+
+    await expect(page.getByTestId('compact-search-pill')).toBeVisible();
+    await expect(page.getByTestId('expanded-search-row')).toHaveCount(0);
+    await expect(page.getByTestId('qaaga-sticky-header')).toBeVisible();
   });
 
   test('sticky navigation stays at the top after scrolling and respects reduced motion', async ({ page }) => {
