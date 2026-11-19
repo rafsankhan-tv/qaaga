@@ -49,12 +49,34 @@ html.lenis body {
   scrollbar-width: none;
 }
 
-/* Native GPU-accelerated horizontal carousel scrolling */
+/* Horizontal rails keep their own X momentum without trapping page Y scroll. */
+.qaaga-horizontal-rail,
+.qaaga-category-rail {
+  scroll-behavior: smooth;
+  scroll-snap-type: x proximity;
+  scroll-padding-inline: 1rem;
+  overscroll-behavior-x: contain;
+  overscroll-behavior-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.qaaga-horizontal-rail > *,
+.qaaga-category-rail > * {
+  scroll-snap-align: start;
+}
+
+/* Listing carousels use proximity snapping so trackpad gestures do not feel locked. */
 .carousel-scroll {
   scroll-behavior: smooth;
+  scroll-snap-type: x proximity;
   overscroll-behavior-x: contain;
+  overscroll-behavior-y: auto;
   -webkit-overflow-scrolling: touch;
-  scroll-snap-type: x mandatory;
+}
+
+/* A true vertical modal may scroll independently of the document. */
+.modal-scroll {
+  overscroll-behavior: contain;
 }
 
 /* Compositor-only skeleton shimmer (transform, never background-position) */
@@ -88,31 +110,28 @@ html.lenis body {
   will-change: transform;
 }
 
+/* Airbnb-inspired coral search action; QAAGA brand colors elsewhere stay unchanged. */
 .search-button {
-  background: linear-gradient(
-    to right,
-    #E61E4D 0%,
-    #E31C5F 50%,
-    #D70466 100%
-  );
+  background: #FF385C;
+  background-image: none;
   color: #FFFFFF;
   border-radius: 32px;
-  box-shadow:
-    0 3px 12px rgba(0, 0, 0, 0.10),
-    0 1px 2px rgba(0, 0, 0, 0.08);
-  transition: transform 0.18s var(--qaaga-ease), opacity 0.18s var(--qaaga-ease), box-shadow 0.18s var(--qaaga-ease);
+  box-shadow: 0 2px 8px rgba(255, 56, 92, 0.22);
+  transition:
+    background-color 160ms ease,
+    transform 180ms var(--qaaga-ease),
+    box-shadow 180ms var(--qaaga-ease);
 }
 
 .search-button:hover {
-  background: radial-gradient(
-    circle at center,
-    #FF385C 0%,
-    #E61E4D 27.5%,
-    #E31C5F 40%,
-    #D70466 57.5%,
-    #BD1E59 75%,
-    #BD1E59 100%
-  );
+  background: #E31C5F;
+  background-image: none;
+  box-shadow: 0 4px 14px rgba(255, 56, 92, 0.28);
+}
+
+.search-button:focus-visible {
+  outline: 3px solid rgba(255, 56, 92, 0.28);
+  outline-offset: 3px;
 }
 
 /* Respect prefers-reduced-motion globally */
