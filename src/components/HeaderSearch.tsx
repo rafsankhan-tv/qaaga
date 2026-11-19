@@ -388,7 +388,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
               aria-label="Listing categories"
               aria-hidden={shouldCollapse}
               transition={{ layout: { duration: 0.38, ease: [0.16, 1, 0.3, 1] } }}
-              className={`qaaga-category-rail hidden md:flex items-center justify-center gap-4 sm:gap-7 lg:gap-10 overflow-x-auto scrollbar-none px-0.5 transition-[opacity,transform] duration-400 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+              className={`qaaga-category-rail hidden md:flex items-center justify-center gap-4 sm:gap-7 lg:gap-10 overflow-x-auto scrollbar-none px-0.5 transition-[opacity,transform] duration-[400ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${
                 shouldCollapse
                   ? 'opacity-0 scale-[0.96] pointer-events-none -translate-y-2 absolute'
                   : 'opacity-100 scale-100 pointer-events-auto translate-y-0'
@@ -436,7 +436,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
               layout
               aria-hidden={!shouldCollapse}
               transition={{ layout: { duration: 0.38, ease: [0.16, 1, 0.3, 1] } }}
-              className={`flex items-center gap-1.5 sm:gap-2.5 transition-[opacity,transform] duration-400 ease-[cubic-bezier(0.16,1,0.3,1)] max-w-full ${
+              className={`flex items-center gap-1.5 sm:gap-2.5 transition-[opacity,transform] duration-[400ms] ease-[cubic-bezier(0.16,1,0.3,1)] max-w-full ${
                 shouldCollapse
                   ? 'opacity-100 scale-100 pointer-events-auto translate-y-0'
                   : 'opacity-0 scale-[0.96] pointer-events-none translate-y-2 absolute'
@@ -1199,7 +1199,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
               whileHover={{ scale: 1.025 }}
               whileTap={{ scale: 0.98 }}
               transition={{ layout: { duration: 0.36, ease: [0.16, 1, 0.3, 1] }, scale: { type: 'spring', stiffness: 500, damping: 32 } }}
-              className={`search-button inline-flex items-center justify-center border-0 border-none text-white font-[600] tracking-normal cursor-pointer select-none shrink-0 ml-1 sm:ml-2 min-w-[44px] sm:min-w-[48px] min-h-[44px] sm:min-h-[48px] ${
+              className={`search-button motion-search-button inline-flex items-center justify-center border-0 border-none text-white font-[600] tracking-normal cursor-pointer select-none shrink-0 ml-1 sm:ml-2 min-w-[44px] sm:min-w-[48px] min-h-[44px] sm:min-h-[48px] ${
                 activePopover
                   ? 'py-[12px] sm:py-[14px] px-[16px] sm:px-[22px] gap-[8px]'
                   : 'w-11 h-11 sm:w-12 sm:h-12 p-0'
