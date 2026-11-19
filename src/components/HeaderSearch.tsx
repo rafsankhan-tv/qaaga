@@ -338,14 +338,19 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
   const displayWho = guestSummaryText ? guestSummaryText : 'Who';
 
   return (
-    <div
+    <motion.div
+      layout
+      data-testid="qaaga-sticky-header"
+      transition={{ layout: { duration: 0.42, ease: [0.16, 1, 0.3, 1] } }}
       className={`sticky top-0 z-50 bg-white/98 backdrop-blur-md w-full transition-[box-shadow,border-color] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
         shouldCollapse
           ? 'border-b border-slate-200/90 shadow-[0_4px_20px_rgba(15,23,42,0.06)]'
           : 'border-b border-slate-200/60 shadow-none'
       }`}
     >
-      <div
+      <motion.div
+        layout
+        transition={{ layout: { duration: 0.42, ease: [0.16, 1, 0.3, 1] } }}
         className={`w-full px-3 sm:px-6 lg:px-10 xl:px-12 2xl:px-16 ${
           shouldCollapse
             ? 'py-2 sm:py-2.5 space-y-0'
@@ -378,12 +383,15 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
             }`}
           >
             {/* Desktop Category Tabs: Shown at top on md+ */}
-            <nav
+            <motion.nav
+              layout
               aria-label="Listing categories"
-              className={`qaaga-category-rail hidden md:flex items-center justify-center gap-4 sm:gap-7 lg:gap-10 overflow-x-auto scrollbar-none px-0.5 transition-[opacity,transform] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+              aria-hidden={shouldCollapse}
+              transition={{ layout: { duration: 0.38, ease: [0.16, 1, 0.3, 1] } }}
+              className={`qaaga-category-rail hidden md:flex items-center justify-center gap-4 sm:gap-7 lg:gap-10 overflow-x-auto scrollbar-none px-0.5 transition-[opacity,transform] duration-400 ease-[cubic-bezier(0.16,1,0.3,1)] ${
                 shouldCollapse
-                  ? 'opacity-0 scale-95 pointer-events-none -translate-y-2 absolute invisible'
-                  : 'opacity-100 scale-100 pointer-events-auto translate-y-0 visible'
+                  ? 'opacity-0 scale-[0.96] pointer-events-none -translate-y-2 absolute'
+                  : 'opacity-100 scale-100 pointer-events-auto translate-y-0'
               }`}
             >
               {CATEGORY_TABS.map((tab) => {
@@ -421,21 +429,28 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
                   </button>
                 );
               })}
-            </nav>
+            </motion.nav>
 
             {/* Compact Search Pill + Adjacent '+' Button: Shown on scroll on all screen sizes */}
-            <div
-              className={`flex items-center gap-1.5 sm:gap-2.5 transition-[opacity,transform] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] max-w-full ${
+            <motion.div
+              layout
+              aria-hidden={!shouldCollapse}
+              transition={{ layout: { duration: 0.38, ease: [0.16, 1, 0.3, 1] } }}
+              className={`flex items-center gap-1.5 sm:gap-2.5 transition-[opacity,transform] duration-400 ease-[cubic-bezier(0.16,1,0.3,1)] max-w-full ${
                 shouldCollapse
-                  ? 'opacity-100 scale-100 pointer-events-auto translate-y-0 visible'
-                  : 'opacity-0 scale-95 pointer-events-none translate-y-2 absolute invisible'
+                  ? 'opacity-100 scale-100 pointer-events-auto translate-y-0'
+                  : 'opacity-0 scale-[0.96] pointer-events-none translate-y-2 absolute'
               }`}
             >
-              <button
+              <motion.button
                 type="button"
                 data-testid="compact-search-pill"
                 aria-label="Search destination, dates, guests"
                 onClick={() => handleOpenSearchModal('where')}
+                layout
+                whileHover={{ y: -1, scale: 1.015 }}
+                whileTap={{ scale: 0.985 }}
+                transition={{ type: 'spring', stiffness: 420, damping: 32 }}
                 className="inline-flex items-center gap-1.5 sm:gap-2.5 bg-white border border-slate-300/90 hover:border-slate-400 rounded-full pl-2 sm:pl-3.5 pr-1 sm:pr-1.5 py-1 sm:py-1.5 shadow-[0_2px_8px_rgba(15,23,42,0.08)] hover:shadow-[0_4px_14px_rgba(15,23,42,0.14)] transition-shadow cursor-pointer group min-w-0"
               >
                 {/* Stay / Category Logo beside Where */}
@@ -473,7 +488,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
                 >
                   <Search size={14} className="text-white" strokeWidth={2.5} />
                 </span>
-              </button>
+              </motion.button>
 
               {/* Plus Button beside Search Button: linear-gradient(90deg, #E91D58, #D90065), white plus icon */}
               <button
@@ -490,7 +505,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
                 <Plus size={16} strokeWidth={2.6} className="text-white" />
               </button>
             </div>
-          </div>
+          </motion.div>
 
           {/* Right: "become a host" + Notification Bell + Avatar Menu */}
           <div
@@ -926,10 +941,18 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
         {/* ================================================================= */}
         {/* ROW 2: Search Section (Mobile Dedicated Card & Categories + Desktop 3-Segment) */}
         {/* ================================================================= */}
+        <AnimatePresence initial={false}>
         {!shouldCollapse && (
-          <div
+          <motion.div
+            key="expanded-search-row"
             ref={searchRef}
-            className="relative flex flex-col items-center justify-center gap-2 sm:gap-3.5 w-full mt-2 sm:mt-4 mb-0 overflow-visible"
+            data-testid="expanded-search-row"
+            initial={{ opacity: 0, height: 0, y: -8 }}
+            animate={{ opacity: 1, height: 'auto', y: 0 }}
+            exit={{ opacity: 0, height: 0, y: -8 }}
+            transition={{ duration: 0.36, ease: [0.16, 1, 0.3, 1] }}
+            style={{ overflow: 'visible' }}
+            className="relative flex flex-col items-center justify-center gap-2 sm:gap-3.5 w-full mt-2 sm:mt-4 mb-0"
           >
           {/* MOBILE ONLY (md:hidden): Dedicated Full-Width Search Card + Adjacent '+' Button */}
           <div className="md:hidden w-full space-y-2.5">
@@ -1167,29 +1190,43 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
             </button>
 
             {/* Custom Search Button with exact linear gradient, hover radial-gradient, and border-radius: 32px */}
-            <button
+            <motion.button
               type="button"
               aria-label="Search"
               data-testid="desktop-search-submit"
               onClick={handleExecuteSearch}
-              className={`search-button inline-flex items-center justify-center border-0 border-none text-white font-[600] tracking-normal cursor-pointer select-none shrink-0 transition-all duration-200 ease-out hover:scale-[1.02] active:scale-[0.98] ml-1 sm:ml-2 ${
+              layout
+              whileHover={{ scale: 1.025 }}
+              whileTap={{ scale: 0.98 }}
+              transition={{ layout: { duration: 0.36, ease: [0.16, 1, 0.3, 1] }, scale: { type: 'spring', stiffness: 500, damping: 32 } }}
+              className={`search-button inline-flex items-center justify-center border-0 border-none text-white font-[600] tracking-normal cursor-pointer select-none shrink-0 ml-1 sm:ml-2 min-w-[44px] sm:min-w-[48px] min-h-[44px] sm:min-h-[48px] ${
                 activePopover
-                  ? 'py-[10px] sm:py-[14px] px-[16px] sm:px-[24px] gap-[8px]'
+                  ? 'py-[12px] sm:py-[14px] px-[16px] sm:px-[22px] gap-[8px]'
                   : 'w-11 h-11 sm:w-12 sm:h-12 p-0'
               }`}
             >
-              <Search
-                size={activePopover ? 20 : 18}
-                className="text-white shrink-0"
-                strokeWidth={2.5}
-                aria-hidden="true"
-              />
-              {activePopover && (
-                <span className="leading-none text-white font-[600] text-[15px] sm:text-[16px] whitespace-nowrap animate-in fade-in zoom-in-95 duration-200">
-                  Search
-                </span>
-              )}
-            </button>
+              <motion.span
+                animate={{ scale: activePopover ? 1 : 0.9 }}
+                transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+                className="flex items-center justify-center shrink-0"
+              >
+                <Search size={20} className="text-white" strokeWidth={2.5} aria-hidden="true" />
+              </motion.span>
+              <AnimatePresence initial={false}>
+                {activePopover && (
+                  <motion.span
+                    key="search-label"
+                    initial={{ opacity: 0, width: 0, x: -5 }}
+                    animate={{ opacity: 1, width: 'auto', x: 0 }}
+                    exit={{ opacity: 0, width: 0, x: -5 }}
+                    transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+                    className="overflow-hidden leading-none text-white font-[600] text-[15px] sm:text-[16px] whitespace-nowrap"
+                  >
+                    Search
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </motion.button>
           </div>
 
           {/* Adjacent '+' Circle Button beside Search Button:
@@ -1306,9 +1343,10 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
               </motion.div>
             )}
           </AnimatePresence>
-          </div>
+          </motion.div>
         )}
-      </div>
+        </AnimatePresence>
+      </motion.div>
 
       {/* Mobile Dedicated Search Bottom Sheet / Modal */}
       <MobileSearchModal
@@ -1351,7 +1389,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
         matchingCount={matchingCount}
         initialTab={mobileInitialTab}
       />
-    </div>
+    </motion.div>
   );
 });
 
