@@ -504,8 +504,8 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
               >
                 <Plus size={16} strokeWidth={2.6} className="text-white" />
               </button>
-            </div>
-          </motion.div>
+            </motion.div>
+          </div>
 
           {/* Right: "become a host" + Notification Bell + Avatar Menu */}
           <div
