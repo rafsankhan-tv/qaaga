@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Image from 'next/image';
 import { motion } from 'motion/react';
-import { Building2, Heart, Star } from 'lucide-react';
+import { Building2, ChevronLeft, ChevronRight, Heart, Star } from 'lucide-react';
 import { QaagaListing } from '@/data/listings';
 
 interface ListingImageProps {
@@ -116,6 +116,28 @@ export const ListingCard: React.FC<ListingCardProps> = React.memo(({
   onOpen,
   onToggleWishlist,
 }) => {
+  const galleryImages = useMemo(
+    () => Array.from(new Set([item.image, ...(Array.isArray(item.gallery) ? item.gallery : [])].filter(Boolean))),
+    [item.image, item.gallery]
+  );
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+
+  useEffect(() => {
+    setActiveImageIndex(0);
+  }, [item.id]);
+
+  useEffect(() => {
+    if (activeImageIndex >= galleryImages.length) setActiveImageIndex(0);
+  }, [activeImageIndex, galleryImages.length]);
+
+  const changePhoto = (event: React.MouseEvent<HTMLButtonElement>, direction: -1 | 1) => {
+    event.stopPropagation();
+    setActiveImageIndex((current) => {
+      const total = galleryImages.length;
+      return total > 0 ? (current + direction + total) % total : 0;
+    });
+  };
+
   const showCrimsonHeart = isSaved && (isUserToggled || vividSavedState);
   const nightsLabel =
     item.category === 'stay'
@@ -143,7 +165,7 @@ export const ListingCard: React.FC<ListingCardProps> = React.memo(({
       className={`group relative flex flex-col text-left rounded-[16px] sm:rounded-[20px] transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-1 ${responsiveWidthClass}`}
     >
       {/* Rounded Square Photo Frame */}
-      <div className="relative w-full aspect-[1.05/1] rounded-[16px] sm:rounded-[20px] overflow-hidden bg-slate-100 shadow-[0_2px_8px_rgba(0,0,0,0.04)] group-hover:shadow-[0_8px_20px_rgba(0,0,0,0.1)] transition-shadow duration-300">
+      <div className="relative w-full aspect-[4/3] rounded-[16px] sm:rounded-[20px] overflow-hidden bg-slate-100 shadow-[0_2px_8px_rgba(0,0,0,0.04)] group-hover:shadow-[0_8px_20px_rgba(0,0,0,0.1)] transition-shadow duration-300">
         <button
           type="button"
           aria-label={`View details for ${item.title}`}
@@ -151,7 +173,7 @@ export const ListingCard: React.FC<ListingCardProps> = React.memo(({
           className="block relative w-full h-full cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#C72B62]"
         >
           <ListingImage
-            src={item.image}
+            src={galleryImages[activeImageIndex] || item.image}
             alt={item.title}
             priority={priority}
             sizes={variant === 'recent' ? '(max-width: 640px) 32vw, 14vw' : DEFAULT_CARD_SIZES}
@@ -159,6 +181,41 @@ export const ListingCard: React.FC<ListingCardProps> = React.memo(({
           />
         </button>
 
+        {galleryImages.length > 1 && (
+          <>
+            <button
+              type="button"
+              aria-label={"Previous photo of " + item.title}
+              onClick={(event) => changePhoto(event, -1)}
+              className="absolute left-2 top-1/2 -translate-y-1/2 z-20 w-8 h-8 rounded-full bg-white/95 text-slate-900 shadow-md flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 transition-opacity cursor-pointer"
+            >
+              <ChevronLeft size={17} />
+            </button>
+            <button
+              type="button"
+              aria-label={"Next photo of " + item.title}
+              onClick={(event) => changePhoto(event, 1)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 z-20 w-8 h-8 rounded-full bg-white/95 text-slate-900 shadow-md flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 transition-opacity cursor-pointer"
+            >
+              <ChevronRight size={17} />
+            </button>
+            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5" aria-label={"Photo " + (activeImageIndex + 1) + " of " + galleryImages.length}>
+              {galleryImages.slice(0, 7).map((photo, index) => (
+                <button
+                  key={photo + "-" + index}
+                  type="button"
+                  aria-label={"Show photo " + (index + 1) + " of " + item.title}
+                  aria-current={activeImageIndex === index ? 'true' : undefined}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setActiveImageIndex(index);
+                  }}
+                  className={"h-1.5 rounded-full shadow-sm transition-all cursor-pointer " + (activeImageIndex === index ? "w-3 bg-white" : "w-1.5 bg-white/65 hover:bg-white")}
+                />
+              ))}
+            </div>
+          </>
+        )}
         {/* Top-Left "Guest favorite" Pill */}
         {item.guestFavorite && (
           <span
