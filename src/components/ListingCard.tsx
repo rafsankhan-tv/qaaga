@@ -200,7 +200,7 @@ export const ListingCard: React.FC<ListingCardProps> = React.memo(({
               <ChevronRight size={17} />
             </button>
             <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5" aria-label={"Photo " + (activeImageIndex + 1) + " of " + galleryImages.length}>
-              {galleryImages.slice(0, 7).map((photo, index) => (
+              {galleryImages.map((photo, index) => (
                 <button
                   key={photo + "-" + index}
                   type="button"
