@@ -151,9 +151,11 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
   /* URL ROUTING HELPERS & STATE                                             */
   /* ======================================================================= */
   const navigateTo = useCallback((path: string, state: Record<string, any> = {}) => {
-    if (typeof window !== 'undefined' && window.location.pathname !== path) {
-      window.history.pushState(state, '', path);
-    }
+    if (typeof window === 'undefined') return;
+    const target = new URL(path, window.location.origin);
+    const targetHref = `${target.pathname}${target.search}${target.hash}`;
+    const currentHref = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (currentHref !== targetHref) window.history.pushState(state, '', targetHref);
   }, []);
 
   /* ======================================================================= */
@@ -187,6 +189,56 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
     null
   );
   const [searchSubmitted, setSearchSubmitted] = useState<boolean>(false);
+
+  const syncSearchFromUrl = useCallback(() => {
+    const params = new URLSearchParams(window.location.search);
+    const hasParams = ['where', 'destination', 'checkIn', 'checkOut', 'adults', 'children', 'infants', 'pets', 'category'].some((key) => params.has(key));
+    if (!hasParams) return false;
+
+    setWhereQuery((params.get('where') || params.get('destination') || '').trim());
+    const parseCount = (key: string, fallback: number, min: number, max: number) => {
+      const raw = params.get(key);
+      if (raw === null) return fallback;
+      const value = Number.parseInt(raw, 10);
+      return Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback;
+    };
+    setAdults(parseCount('adults', 1, 1, 16));
+    setChildrenCount(parseCount('children', 0, 0, 10));
+    setInfants(parseCount('infants', 0, 0, 5));
+    setPets(parseCount('pets', 0, 0, 5));
+
+    const category = params.get('category');
+    if (category === 'all' || category === 'stay' || category === 'experiences' || category === 'services') {
+      setActiveCategory(category);
+    }
+
+    const start = params.get('checkIn') || '';
+    const end = params.get('checkOut') || '';
+    const isIsoDate = (value: string) => {
+      if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return false;
+      const parsed = new Date(value + 'T00:00:00');
+      return !Number.isNaN(parsed.getTime()) && toLocalIsoDate(parsed) === value;
+    };
+    if (isIsoDate(start) && isIsoDate(end) && end > start) {
+      const startDate = new Date(start + 'T00:00:00');
+      const endDate = new Date(end + 'T00:00:00');
+      const nights = Math.round((endDate.getTime() - startDate.getTime()) / 86400000);
+      const display = formatDateRange(start, end);
+      setCheckInIso(start);
+      setCheckOutIso(end);
+      setSelectedDates({ id: 'url-range-' + start + '-' + end, label: display, display, nights, tag: display + ' · ' + nights + ' nights' });
+    } else {
+      setCheckInIso(null);
+      setCheckOutIso(null);
+      setSelectedDates(DATE_OPTIONS[0]);
+    }
+    setSearchSubmitted(true);
+    return true;
+  }, []);
+
+  useEffect(() => {
+    syncSearchFromUrl();
+  }, [syncSearchFromUrl]);
 
   /* ======================================================================= */
   /* PERSISTENT MARKETPLACE DATA STATE (REAL SUPABASE, ZERO MOCKS)           */
@@ -257,6 +309,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
   const wishlistCarouselRef = useRef<HTMLDivElement | null>(null);
   const popularCarouselRef = useRef<HTMLDivElement | null>(null);
   const curatedCarouselRef = useRef<HTMLDivElement | null>(null);
+  const neighborhoodCarouselRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const showToast = useCallback((next: ToastState) => {
     setToast(next);
@@ -278,7 +331,14 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
       const savedWish = localStorage.getItem(STORAGE_KEYS.wishlist);
       if (savedWish) {
         const parsed = JSON.parse(savedWish);
-        if (Array.isArray(parsed)) setWishlistIds(parsed);
+        if (Array.isArray(parsed)) setWishlistIds(parsed.filter((id) => typeof id === 'string'));
+      }
+      const savedRecentlyViewed = localStorage.getItem(STORAGE_KEYS.recentlyViewed);
+      if (savedRecentlyViewed) {
+        const parsed = JSON.parse(savedRecentlyViewed);
+        if (Array.isArray(parsed)) {
+          setRecentlyViewedIds(parsed.filter((id) => typeof id === 'string').slice(0, 20));
+        }
       }
       const savedCurrency = localStorage.getItem(STORAGE_KEYS.currency) as CurrencyCode | null;
       if (savedCurrency && CURRENCY_CONFIG[savedCurrency]) {
@@ -623,6 +683,13 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
   useEffect(() => {
     if (!hydrated) return;
     try {
+      localStorage.setItem(STORAGE_KEYS.recentlyViewed, JSON.stringify(recentlyViewedIds.slice(0, 20)));
+    } catch {}
+  }, [recentlyViewedIds, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
       localStorage.setItem(STORAGE_KEYS.currency, currency);
     } catch {}
   }, [currency, hydrated]);
@@ -724,6 +791,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
   useEffect(() => {
     const handlePopState = () => {
       const path = window.location.pathname;
+      const hasSearchParams = syncSearchFromUrl();
       if (path === '/' || path === '') {
         setSelectedListing(null);
         setIsTripsOpen(false);
@@ -734,7 +802,18 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
         setIsAdminOpen(false);
         setIsMessagesOpen(false);
         setExplorerCollection(null);
-        setActiveCategory('all');
+        if (!hasSearchParams) {
+          setActiveCategory('all');
+          setWhereQuery('');
+          setSelectedDates(DATE_OPTIONS[0]);
+          setCheckInIso(null);
+          setCheckOutIso(null);
+          setAdults(1);
+          setChildrenCount(0);
+          setInfants(0);
+          setPets(0);
+          setSearchSubmitted(false);
+        }
       } else if (path.startsWith('/rooms/')) {
         const id = path.replace('/rooms/', '');
         const match = allListings.find((i) => i.id === id);
@@ -773,7 +852,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [allListings]);
+  }, [allListings, syncSearchFromUrl]);
 
   // Synchronize initialListingId with allListings
   useEffect(() => {
@@ -786,6 +865,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
   const totalGuests = adults + childrenCount;
 
   const guestSummaryText = useMemo(() => {
+    if (adults === 1 && childrenCount === 0 && infants === 0 && pets === 0) return '';
     const parts: string[] = [];
     if (totalGuests > 0) {
       parts.push(`${totalGuests} guest${totalGuests > 1 ? 's' : ''}`);
@@ -815,7 +895,8 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
   const hasActiveSearchCriteria =
     whereQuery.trim().length > 0 ||
     Boolean(selectedDates.display) ||
-    totalGuests > 0 ||
+    adults > 1 ||
+    childrenCount > 0 ||
     infants > 0 ||
     pets > 0;
 
@@ -868,13 +949,10 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
   // Rows for "All" home canvas matching Screenshot_2026-11-04_at_2.23.12_AM_ec851fb8.png
   const recentlyViewedListings = useMemo(() => {
     const byId = new Map(allListings.map((item) => [item.id, item]));
-    const ordered = recentlyViewedIds
+    return recentlyViewedIds
       .map((id) => byId.get(id))
-      .filter((x): x is QaagaListing => Boolean(x));
-    const extraStays = allListings.filter(
-      (item) => item.category === 'stay' && !recentlyViewedIds.includes(item.id)
-    );
-    return [...ordered, ...extraStays].slice(0, 16);
+      .filter((item): item is QaagaListing => Boolean(item))
+      .slice(0, 16);
   }, [allListings, recentlyViewedIds]);
 
   const wishlistListings = useMemo(() => {
@@ -884,18 +962,48 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
       .filter((x): x is QaagaListing => Boolean(x));
   }, [allListings, wishlistIds]);
 
-  const popularKLListings = useMemo(
-    () =>
-      allListings.filter(
-        (item) => item.category === 'stay' && (item.inPopularKL || item.id.startsWith('host-'))
-      ),
-    [allListings]
-  );
+  const popularKLListings = useMemo(() => {
+    const candidates = allListings.filter(
+      (item) =>
+        item.category === 'stay' &&
+        (item.inPopularKL || item.guestFavorite || item.reviewsCount > 0)
+    );
+    return [...candidates].sort(
+      (a, b) =>
+        Number(Boolean(b.guestFavorite)) - Number(Boolean(a.guestFavorite)) ||
+        b.reviewsCount - a.reviewsCount ||
+        Number.parseFloat(b.rating || '0') - Number.parseFloat(a.rating || '0')
+    );
+  }, [allListings]);
 
   const curatedExperiencesAndServices = useMemo(
     () => allListings.filter((item) => item.category !== 'stay'),
     [allListings]
   );
+
+  const neighborhoodSections = useMemo(() => {
+    const grouped = new Map<string, QaagaListing[]>();
+    for (const item of allListings) {
+      const area = item.area?.trim();
+      if (item.category !== 'stay' || !area) continue;
+      const current = grouped.get(area) || [];
+      current.push(item);
+      grouped.set(area, current);
+    }
+    return Array.from(grouped.entries())
+      .map(([area, items]) => ({
+        area,
+        listings: [...items].sort(
+          (a, b) =>
+            Number(Boolean(b.guestFavorite)) - Number(Boolean(a.guestFavorite)) ||
+            b.reviewsCount - a.reviewsCount ||
+            Number.parseFloat(b.rating || '0') - Number.parseFloat(a.rating || '0')
+        ),
+      }))
+      .filter((section) => section.listings.length >= 2)
+      .sort((a, b) => b.listings.length - a.listings.length || a.area.localeCompare(b.area))
+      .slice(0, 5);
+  }, [allListings]);
 
   const explorerItems = useMemo(() => {
     if (!explorerCollection) return [];
@@ -1124,10 +1232,19 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
   };
 
   const handleExecuteSearch = () => {
-    if (!hasActiveSearchCriteria) {
-      setActivePopover('where');
-      return;
-    }
+    // An explicit Search action means "show available stays in the selected scope",
+    // even when the guest count remains at its default of one adult.
+    const params = new URLSearchParams();
+    if (whereQuery.trim()) params.set('where', whereQuery.trim());
+    if (checkInIso) params.set('checkIn', checkInIso);
+    if (checkOutIso) params.set('checkOut', checkOutIso);
+    if (adults > 1) params.set('adults', String(adults));
+    if (childrenCount > 0) params.set('children', String(childrenCount));
+    if (infants > 0) params.set('infants', String(infants));
+    if (pets > 0) params.set('pets', String(pets));
+    if (activeCategory !== 'all') params.set('category', activeCategory);
+    const queryString = params.toString();
+    navigateTo(window.location.pathname + (queryString ? '?' + queryString : ''), { search: true });
     setActivePopover(null);
     setSearchSubmitted(true);
     smoothScrollTo('#qaaga-listings-canvas', { offset: -90, duration: 1.1 });
@@ -1682,8 +1799,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
 
                     <div
                       ref={recentCarouselRef}
-                      data-lenis-prevent
-                      className="carousel-scroll flex gap-3 sm:gap-3.5 lg:gap-4 overflow-x-auto scrollbar-none snap-x snap-mandatory scroll-smooth pb-1"
+                      className="qaaga-horizontal-rail carousel-scroll flex gap-3 sm:gap-3.5 lg:gap-4 overflow-x-auto scrollbar-none snap-x snap-mandatory scroll-smooth pb-1"
                     >
                       {recentlyViewedListings.map((item, idx) => (
                         <ListingCard
@@ -1750,8 +1866,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
                   ) : (
                     <div
                       ref={wishlistCarouselRef}
-                      data-lenis-prevent
-                      className="carousel-scroll flex gap-3.5 sm:gap-4 overflow-x-auto scrollbar-none snap-x snap-mandatory scroll-smooth pb-1"
+                      className="qaaga-horizontal-rail carousel-scroll flex gap-3.5 sm:gap-4 overflow-x-auto scrollbar-none snap-x snap-mandatory scroll-smooth pb-1"
                     >
                       {wishlistListings.map((item) => (
                         <ListingCard
@@ -1825,8 +1940,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
 
                     <div
                       ref={popularCarouselRef}
-                      data-lenis-prevent
-                      className="carousel-scroll flex gap-3.5 sm:gap-4 overflow-x-auto scrollbar-none snap-x snap-mandatory scroll-smooth pb-1"
+                      className="qaaga-horizontal-rail carousel-scroll flex gap-3.5 sm:gap-4 overflow-x-auto scrollbar-none snap-x snap-mandatory scroll-smooth pb-1"
                     >
                       {popularKLListings.map((item) => (
                         <ListingCard
@@ -1846,7 +1960,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
                   </section>
                 )}
 
-                {/* ROW 4 (Below the fold): Experiences & Hospitality Services in KL */}
+                {/* ROW 4: Experiences & Hospitality Services in Dhaka */}
                 {curatedExperiencesAndServices.length > 0 && (
                   <section
                     aria-labelledby="heading-experiences-services"
@@ -1903,8 +2017,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
 
                     <div
                       ref={curatedCarouselRef}
-                      data-lenis-prevent
-                      className="carousel-scroll flex gap-3.5 sm:gap-4 overflow-x-auto scrollbar-none snap-x snap-mandatory scroll-smooth pb-1"
+                      className="qaaga-horizontal-rail carousel-scroll flex gap-3.5 sm:gap-4 overflow-x-auto scrollbar-none snap-x snap-mandatory scroll-smooth pb-1"
                     >
                       {curatedExperiencesAndServices.map((item) => (
                         <ListingCard
@@ -1923,6 +2036,59 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
                     </div>
                   </section>
                 )}
+
+                {/* Dynamic neighborhood rows — only backed by published Supabase stays */}
+                {neighborhoodSections.map((section) => {
+                  const headingId = 'heading-area-' + section.area.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+                  const scrollArea = (direction: 'left' | 'right') => {
+                    const element = neighborhoodCarouselRefs.current[section.area];
+                    if (!element) return;
+                    const distance = Math.max(280, Math.round(element.clientWidth * 0.82));
+                    element.scrollBy({ left: direction === 'right' ? distance : -distance, behavior: 'smooth' });
+                  };
+                  return (
+                    <section key={section.area} aria-labelledby={headingId} className='pt-2 space-y-3.5'>
+                      <div className='flex items-center justify-between gap-4'>
+                        <div className='min-w-0'>
+                          <h2 id={headingId} className='text-[20px] sm:text-[22px] font-bold text-slate-950 tracking-[-0.02em]'>
+                            Stays in {section.area}
+                          </h2>
+                          <p className='text-[13px] sm:text-[13.5px] text-slate-500 mt-0.5'>
+                            Furnished homes and rooms in {section.area}
+                          </p>
+                        </div>
+                        <div className='flex items-center gap-2 shrink-0'>
+                          <button type='button' aria-label={'Previous stays in ' + section.area} onClick={() => scrollArea('left')} className='w-8 h-8 rounded-full border border-slate-200 bg-white hover:border-slate-400 text-slate-700 flex items-center justify-center transition-colors cursor-pointer'>
+                            <ChevronLeft size={16} />
+                          </button>
+                          <button type='button' aria-label={'Next stays in ' + section.area} onClick={() => scrollArea('right')} className='w-8 h-8 rounded-full border border-slate-200 bg-white hover:border-slate-400 text-slate-700 flex items-center justify-center transition-colors cursor-pointer'>
+                            <ChevronRight size={16} />
+                          </button>
+                        </div>
+                      </div>
+                      <div
+                        ref={(node) => { neighborhoodCarouselRefs.current[section.area] = node; }}
+                        className='qaaga-horizontal-rail carousel-scroll flex gap-3.5 sm:gap-4 overflow-x-auto scrollbar-none snap-x snap-mandatory scroll-smooth pb-1'
+                      >
+                        {section.listings.map((item, index) => (
+                          <ListingCard
+                            key={'area-' + section.area + '-' + item.id}
+                            item={item}
+                            priority={index < 3}
+                            isSaved={wishlistIds.includes(item.id)}
+                            isUserToggled={Boolean(userToggledHearts[item.id])}
+                            formattedPrice={formatPrice(item.twoNightPriceUsd)}
+                            activeNights={activeNights}
+                            carouselItem={true}
+                            variant='wishlist'
+                            onOpen={handleOpenListing}
+                            onToggleWishlist={handleToggleWishlist}
+                          />
+                        ))}
+                      </div>
+                    </section>
+                  );
+                })}
               </>
             )}
           </>
@@ -1968,7 +2134,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
             </div>
 
             {/* Clean Interactive Filter Controls */}
-            <div data-lenis-prevent className="flex items-center gap-2 overflow-x-auto scrollbar-none scroll-smooth pb-1">
+            <div data-testid="category-filter-rail" className="qaaga-horizontal-rail flex items-center gap-2 overflow-x-auto scrollbar-none pb-1">
               {(activeCategory === 'stay'
                 ? STAY_SUBFILTERS
                 : activeCategory === 'experiences'

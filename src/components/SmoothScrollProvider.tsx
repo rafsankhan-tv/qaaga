@@ -22,7 +22,7 @@ export const useSmoothScroll = () => useContext(SmoothScrollContext);
  */
 export const smoothScrollTo = (
   target: string | number | HTMLElement,
-  options?: { offset?: number; duration?: number; immediate?: boolean }
+  options?: { offset?: number; duration?: number; lerp?: number; immediate?: boolean }
 ) => {
   if (typeof window === 'undefined') return;
   const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -32,8 +32,7 @@ export const smoothScrollTo = (
   if (lenis && !prefersReducedMotion) {
     lenis.scrollTo(target, {
       offset: options?.offset ?? -80,
-      duration: options?.duration ?? 0.8,
-      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+      lerp: options?.lerp ?? 0.075,
       immediate: options?.immediate ?? false,
     });
     return;
@@ -69,13 +68,14 @@ export const SmoothScrollProvider: React.FC<SmoothScrollProviderProps> = ({ chil
 
     const lenis = new Lenis({
       autoRaf: true,
-      duration: 0.85,
-      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+      // Explicit lerp is used for wheel scrolling; Lenis ignores duration when lerp is set.
+      lerp: 0.085,
       orientation: 'vertical',
       gestureOrientation: 'vertical',
       smoothWheel: true,
-      wheelMultiplier: 1.0,
+      wheelMultiplier: 0.95,
       anchors: true,
+      stopInertiaOnNavigate: true,
       prevent: (node) =>
         node.hasAttribute('data-lenis-prevent') ||
         node.closest('[data-lenis-prevent]') !== null ||

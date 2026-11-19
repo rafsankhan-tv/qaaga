@@ -29,7 +29,7 @@ const listingFixture = {
   is_featured: false,
   status: 'active',
   image: FIXTURE_IMAGE,
-  gallery: [FIXTURE_IMAGE],
+  gallery: [FIXTURE_IMAGE, FIXTURE_IMAGE + '?photo=2'],
   amenities: ['Wi-Fi', 'Air conditioning'],
 };
 
@@ -66,6 +66,35 @@ test.describe('QAAGA public marketplace', () => {
     await expect(page).toHaveTitle(/Rooms & Stays in Dhaka/);
     await expect(page.getByRole('heading', { name: 'Stays in Dhaka' })).toBeVisible();
 
+    const filterRail = page.getByTestId('category-filter-rail');
+    await expect(filterRail).toBeVisible();
+    const railBehavior = await filterRail.evaluate((element) => {
+      const style = window.getComputedStyle(element);
+      return {
+        preventsLenis: element.hasAttribute('data-lenis-prevent'),
+        overscrollY: style.overscrollBehaviorY,
+        scrollSnap: style.scrollSnapType,
+        scrollBehavior: style.scrollBehavior,
+      };
+    });
+    expect(railBehavior.preventsLenis).toBe(false);
+    expect(railBehavior.overscrollY).toBe('auto');
+    expect(railBehavior.scrollSnap).toContain('x');
+    expect(railBehavior.scrollBehavior).toBe('smooth');
+
+    await page.setViewportSize({ width: 1440, height: 720 });
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    const documentMetrics = await page.evaluate(() => ({
+      y: window.scrollY,
+      maxY: document.documentElement.scrollHeight - window.innerHeight,
+    }));
+    const railBox = await filterRail.boundingBox();
+    if (documentMetrics.maxY > 24 && railBox) {
+      await page.mouse.move(railBox.x + railBox.width / 2, railBox.y + railBox.height / 2);
+      await page.mouse.wheel(0, 420);
+      await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(documentMetrics.y + 5);
+    }
+
     expect(pageErrors).toEqual([]);
   });
 
@@ -73,6 +102,11 @@ test.describe('QAAGA public marketplace', () => {
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.goto('/');
+    const searchSubmit = page.getByTestId('desktop-search-submit');
+    await expect(searchSubmit).toBeVisible();
+    await expect.poll(async () =>
+      searchSubmit.evaluate((element) => window.getComputedStyle(element).backgroundColor)
+    ).toBe('rgb(255, 56, 92)');
 
     await page.getByTestId('search-where-segment').click();
     const destinationInput = page.getByPlaceholder('Search destinations in Dhaka');
@@ -87,6 +121,9 @@ test.describe('QAAGA public marketplace', () => {
     const weekendPreset = page.getByRole('button', { name: 'This weekend' });
     await expect(weekendPreset).toBeVisible();
     await expect(weekendPreset).toBeEnabled();
+    await expect(page.getByTestId('calendar-preset-one-night')).toBeVisible();
+    await expect(page.getByTestId('calendar-preset-15-nights')).toBeVisible();
+    await expect(page.getByTestId('calendar-preset-30-nights')).toBeVisible();
     const weekendRange = await page.getByTestId('calendar-preset-weekend').evaluate((element) => ({
       checkIn: element.getAttribute('data-check-in') || '',
       checkOut: element.getAttribute('data-check-out') || '',
@@ -105,7 +142,11 @@ test.describe('QAAGA public marketplace', () => {
     await page.getByRole('button', { name: 'Increase Adults' }).click();
     await expect(page.getByTestId('guest-summary')).toHaveText('2 guests');
 
-    await page.getByRole('button', { name: 'Search' }).last().click();
+    await page.getByTestId('desktop-search-submit').click();
+    await expect(page).toHaveURL(/where=Gulshan/);
+    await expect(page).toHaveURL(/checkIn=/);
+    await expect(page).toHaveURL(/checkOut=/);
+    await expect(page).toHaveURL(/adults=2/);
     await expect(page.getByRole('heading', { name: /Search results/ })).toBeVisible();
   });
 
@@ -124,7 +165,7 @@ test.describe('QAAGA public marketplace', () => {
     const destinationInput = page.getByPlaceholder('Search destinations in Dhaka');
     await expect(destinationInput).toBeVisible();
     await destinationInput.fill('Banani');
-    await page.getByRole('button', { name: /^Banani/ }).click();
+    await page.getByRole('button', { name: /^Banani/, exact: true }).click();
 
     await page.getByRole('button', { name: /When/ }).last().click();
     await expect(page.getByRole('button', { name: 'This weekend' })).toBeVisible();
@@ -150,16 +191,56 @@ test.describe('QAAGA public marketplace', () => {
 
     const card = page.locator('article').filter({ has: detailButton }).first();
     const image = card.locator('img').first();
-    const beforeY = (await card.boundingBox())?.y;
-    expect(beforeY).not.toBeUndefined();
+    const readOriginalImageUrl = async () =>
+      image.evaluate((element) => {
+        const src = element.getAttribute('src') || '';
+        try {
+          return new URL(src, window.location.origin).searchParams.get('url') || src;
+        } catch {
+          return src;
+        }
+      });
+    const initialImageUrl = await readOriginalImageUrl();
+    await expect(card.getByRole('button', { name: 'Next photo of ' + FIXTURE_TITLE })).toBeVisible();
+    await card.getByRole('button', { name: 'Next photo of ' + FIXTURE_TITLE }).click();
+    await expect.poll(readOriginalImageUrl).toBe(FIXTURE_IMAGE + '?photo=2');
+    await card.getByRole('button', { name: 'Previous photo of ' + FIXTURE_TITLE }).click();
+    await expect.poll(readOriginalImageUrl).toBe(initialImageUrl);
+
+    const beforeTranslate = await card.evaluate((element) => getComputedStyle(element).translate);
     await card.hover();
-    await expect.poll(async () => (await card.boundingBox())?.y ?? beforeY!).toBeLessThan(beforeY!);
+    await expect.poll(async () => card.evaluate((element) => getComputedStyle(element).translate))
+      .not.toBe(beforeTranslate);
 
     await detailButton.click();
     await expect(page.getByRole('heading', { name: FIXTURE_TITLE })).toBeVisible();
     await expect(page.getByText('What this place offers')).toBeVisible();
     await page.getByRole('button', { name: 'Close modal' }).click();
     await expect(page.getByRole('dialog')).toHaveCount(0);
+  });
+
+  test('sticky header and search CTA morph smoothly between expanded and compact states', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 850 });
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await page.goto('/');
+
+    const searchButton = page.getByTestId('desktop-search-submit');
+    await expect(searchButton).toBeVisible();
+    const compactWidth = (await searchButton.boundingBox())?.width;
+    expect(compactWidth).toBeGreaterThan(0);
+
+    await page.getByTestId('search-where-segment').click();
+    await expect.poll(async () => (await searchButton.boundingBox())?.width ?? 0)
+      .toBeGreaterThan(compactWidth! + 20);
+    await expect(searchButton.getByText('Search')).toBeVisible();
+
+    await page.keyboard.press('Escape');
+    await page.mouse.move(1200, 420);
+    await page.mouse.wheel(0, 820);
+
+    await expect(page.getByTestId('compact-search-row')).toHaveAttribute('aria-hidden', 'false');
+    await expect(page.getByTestId('expanded-search-row')).toHaveCount(0);
+    await expect(page.getByTestId('qaaga-sticky-header')).toBeVisible();
   });
 
   test('sticky navigation stays at the top after scrolling and respects reduced motion', async ({ page }) => {

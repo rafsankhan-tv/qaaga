@@ -139,6 +139,7 @@ export const DEFAULT_BRANDING: SiteBranding = {
 
 export const STORAGE_KEYS = {
   wishlist: 'qaaga_v3_wishlist',
+  recentlyViewed: 'qaaga_v3_recently_viewed',
   bookings: 'qaaga_v3_bookings',
   threads: 'qaaga_v3_threads',
   notifications: 'qaaga_v3_notifications',
@@ -166,10 +167,12 @@ export const KL_DESTINATIONS = [
 
 export const DATE_OPTIONS = [
   { id: 'default-2', label: 'Add dates', display: '', nights: 2, tag: 'Choose check-in and check-out' },
+  { id: 'one-night', label: '1 night', display: '', nights: 1, tag: '1-night stay' },
   { id: 'two-nights', label: '2 nights', display: '', nights: 2, tag: '2-night stay' },
   { id: 'three-nights', label: '3 nights', display: '', nights: 3, tag: '3-night stay' },
   { id: 'five-nights', label: '5 nights', display: '', nights: 5, tag: '5-night stay' },
-  { id: 'weekly', label: '1 week', display: '', nights: 7, tag: '7-night stay' },
+  { id: 'weekly', label: '7 nights', display: '', nights: 7, tag: '7-night stay' },
+  { id: 'fifteen-nights', label: '15 nights', display: '', nights: 15, tag: '15-night stay' },
   { id: 'monthly', label: '30 nights', display: '', nights: 30, tag: 'Monthly stay' },
 ];
 
