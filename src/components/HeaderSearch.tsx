@@ -1170,6 +1170,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
             <button
               type="button"
               aria-label="Search"
+              data-testid="desktop-search-submit"
               onClick={handleExecuteSearch}
               className={`search-button inline-flex items-center justify-center border-0 border-none text-white font-[600] tracking-normal cursor-pointer select-none shrink-0 transition-all duration-200 ease-out hover:scale-[1.02] active:scale-[0.98] ml-1 sm:ml-2 ${
                 activePopover
