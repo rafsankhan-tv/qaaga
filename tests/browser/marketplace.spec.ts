@@ -165,7 +165,7 @@ test.describe('QAAGA public marketplace', () => {
     const destinationInput = page.getByPlaceholder('Search destinations in Dhaka');
     await expect(destinationInput).toBeVisible();
     await destinationInput.fill('Banani');
-    await page.getByRole('button', { name: /^Banani/ }).click();
+    await page.getByRole('button', { name: /^Banani/, exact: true }).click();
 
     await page.getByRole('button', { name: /When/ }).last().click();
     await expect(page.getByRole('button', { name: 'This weekend' })).toBeVisible();
@@ -207,10 +207,10 @@ test.describe('QAAGA public marketplace', () => {
     await card.getByRole('button', { name: 'Previous photo of ' + FIXTURE_TITLE }).click();
     await expect.poll(readOriginalImageUrl).toBe(initialImageUrl);
 
-    const beforeTransform = await card.evaluate((element) => getComputedStyle(element).transform);
+    const beforeTranslate = await card.evaluate((element) => getComputedStyle(element).translate);
     await card.hover();
-    await expect.poll(async () => card.evaluate((element) => getComputedStyle(element).transform))
-      .not.toBe(beforeTransform);
+    await expect.poll(async () => card.evaluate((element) => getComputedStyle(element).translate))
+      .not.toBe(beforeTranslate);
 
     await detailButton.click();
     await expect(page.getByRole('heading', { name: FIXTURE_TITLE })).toBeVisible();
@@ -238,7 +238,7 @@ test.describe('QAAGA public marketplace', () => {
     await page.mouse.move(1200, 420);
     await page.mouse.wheel(0, 820);
 
-    await expect(page.getByTestId('compact-search-pill')).toBeVisible();
+    await expect(page.getByTestId('compact-search-row')).toHaveAttribute('aria-hidden', 'false');
     await expect(page.getByTestId('expanded-search-row')).toHaveCount(0);
     await expect(page.getByTestId('qaaga-sticky-header')).toBeVisible();
   });
