@@ -109,11 +109,11 @@ test.describe('QAAGA public marketplace', () => {
     await expect(page.getByTestId('guest-summary')).toHaveText('2 guests');
 
     await page.getByRole('button', { name: 'Search' }).last().click();
-    await expect(page.getByRole('heading', { name: /Search results/ })).toBeVisible();
     await expect(page).toHaveURL(/where=Gulshan/);
     await expect(page).toHaveURL(/checkIn=/);
     await expect(page).toHaveURL(/checkOut=/);
     await expect(page).toHaveURL(/adults=2/);
+    await expect(page.getByRole('heading', { name: /Search results/ })).toBeVisible();
   });
 
   test('mobile search sheet supports destination, date, guest tabs and escape dismissal', async ({ page }) => {
