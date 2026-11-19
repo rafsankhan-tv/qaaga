@@ -66,6 +66,20 @@ test.describe('QAAGA public marketplace', () => {
     await expect(page).toHaveTitle(/Rooms & Stays in Dhaka/);
     await expect(page.getByRole('heading', { name: 'Stays in Dhaka' })).toBeVisible();
 
+    const filterRail = page.getByTestId('category-filter-rail');
+    await expect(filterRail).toBeVisible();
+    const railBehavior = await filterRail.evaluate((element) => {
+      const style = window.getComputedStyle(element);
+      return {
+        preventsLenis: element.hasAttribute('data-lenis-prevent'),
+        overscrollY: style.overscrollBehaviorY,
+        scrollSnap: style.scrollSnapType,
+      };
+    });
+    expect(railBehavior.preventsLenis).toBe(false);
+    expect(railBehavior.overscrollY).toBe('auto');
+    expect(railBehavior.scrollSnap).toContain('proximity');
+
     expect(pageErrors).toEqual([]);
   });
 
@@ -73,6 +87,11 @@ test.describe('QAAGA public marketplace', () => {
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.goto('/');
+    const searchSubmit = page.getByTestId('desktop-search-submit');
+    await expect(searchSubmit).toBeVisible();
+    await expect.poll(async () =>
+      searchSubmit.evaluate((element) => window.getComputedStyle(element).backgroundColor)
+    ).toBe('rgb(255, 56, 92)');
 
     await page.getByTestId('search-where-segment').click();
     const destinationInput = page.getByPlaceholder('Search destinations in Dhaka');
