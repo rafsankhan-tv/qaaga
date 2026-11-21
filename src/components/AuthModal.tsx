@@ -202,34 +202,77 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setLoading(true);
     setErrorMessage('');
 
-    const cleanTarget = emailOrPhone.trim();
-    let isVerified = false;
+    const cleanTarget = emailOrPhone.trim().toLowerCase();
 
     try {
       const supabase = getSupabase();
       if (!supabase) throw new Error('Authentication service is not configured.');
+
       const { data, error } = await supabase.auth.verifyOtp({
         email: cleanTarget,
         token: code,
         type: 'email',
       });
-      if (!error && data?.user) isVerified = true;
-      else if (error) setErrorMessage('Invalid or expired verification code. Please try again.');
-    } catch {
-      setErrorMessage('Unable to verify the code. Please try again.');
-    }
 
-    if (isVerified) {
-      setLoading(false);
+      if (error || !data?.user?.email || !data.session?.access_token) {
+        throw new Error('Invalid or expired verification code. Please try again.');
+      }
 
-      // Standard user flow: transition to Complete Profile step!
+      // Existing members should sign in directly; only first-time members need profile setup.
+      const profileResponse = await fetch(
+        '/api/auth/profile?email=' + encodeURIComponent(data.user.email.toLowerCase()),
+        {
+          headers: { Authorization: 'Bearer ' + data.session.access_token },
+          cache: 'no-store',
+        }
+      );
+
+      if (profileResponse.ok) {
+        const result = await profileResponse.json();
+        const saved = result?.profile;
+        if (!saved || saved.status !== 'active') {
+          await supabase.auth.signOut();
+          throw new Error('This account is not active. Please contact QAAGA support.');
+        }
+
+        const restoredProfile: GuestProfile = {
+          fullName: saved.fullName || data.user.user_metadata?.full_name || 'Member',
+          email: data.user.email.toLowerCase(),
+          city: saved.city || 'Dhaka',
+          role: saved.role === 'admin' ? 'admin' : saved.role === 'host' ? 'host' : 'guest',
+          verified: Boolean(saved.verified),
+          identity_status: saved.identity_status || 'unverified',
+          status: saved.status,
+          phone: saved.phone || undefined,
+          avatarUrl: saved.avatarUrl || undefined,
+          bio: saved.bio || undefined,
+        };
+
+        onUpdateProfile(restoredProfile);
+        setStep('success');
+        onShowToast({ message: 'Welcome back to QAAGA.' });
+        setLoading(false);
+        setTimeout(() => onClose(), 900);
+        return;
+      }
+
+      if (profileResponse.status !== 404) {
+        throw new Error('Your account was verified, but QAAGA could not load your profile. Please try again.');
+      }
+
+      // A verified Auth user without a public profile completes the one-time setup.
+      const prefix = data.user.email.split('@')[0].replace(/[._-]/g, ' ');
+      const suggestedName = prefix
+        .split(' ')
+        .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+      setFullNameInput(data.user.user_metadata?.full_name || suggestedName || 'Member');
       setStep('complete_profile');
-      onShowToast({
-        message: 'OTP verified! Now complete your profile details.',
-      });
-    } else {
+      onShowToast({ message: 'Email verified. Complete your profile to finish registration.' });
       setLoading(false);
-      setErrorMessage('Invalid verification code. Please check the code and try again.');
+    } catch (err: any) {
+      setLoading(false);
+      setErrorMessage(err?.message || 'Unable to verify the code. Please try again.');
     }
   };
 
