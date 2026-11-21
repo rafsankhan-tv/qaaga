@@ -165,6 +165,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
   onOpenAdminModal,
   onOpenAuthModal,
 }) => {
+  const hasAccount = Boolean(profile.email?.trim());
   const searchRef = useRef<HTMLDivElement | null>(null);
   const compactPillRef = useRef<HTMLDivElement | null>(null);
   const whereInputRef = useRef<HTMLInputElement | null>(null);
@@ -527,14 +528,14 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
               {/* User Profile / Account Menu Pill (Airbnb style: hamburger + avatar, opens Account & Admin menu) */}
               <button
                 type="button"
-                aria-label={profile.verified ? `${profile.fullName}'s account menu` : 'Main account menu'}
+                aria-label={hasAccount ? `${profile.fullName}'s account menu` : 'Main account menu'}
                 onClick={onToggleAccount}
                 className="flex items-center gap-2 pl-2.5 sm:pl-3 pr-1 sm:pr-1.5 py-1 rounded-full border border-slate-300 hover:border-slate-400 hover:shadow-md transition-all cursor-pointer bg-white active:scale-95 shrink-0"
               >
                 <Menu size={16} className="text-slate-700 shrink-0 ml-0.5" />
                 <div
                   className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full border border-slate-300 text-white flex items-center justify-center shrink-0 relative ${
-                    profile.verified ? 'bg-[#C72B62]' : 'bg-[#717171]'
+                    hasAccount ? 'bg-[#C72B62]' : 'bg-[#717171]'
                   }`}
                 >
                   {profile.avatarUrl ? (
@@ -543,14 +544,14 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
                       alt={profile.fullName}
                       className="w-full h-full rounded-full object-cover"
                     />
-                  ) : profile.verified ? (
+                  ) : hasAccount ? (
                     <span className="text-xs sm:text-sm font-bold text-white uppercase select-none">
                       {profile.fullName.charAt(0) || 'U'}
                     </span>
                   ) : (
                     <User size={16} className="fill-white text-white" />
                   )}
-                  {profile.verified && (
+                  {hasAccount && (
                     <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-emerald-500 rounded-full border-2 border-white" />
                   )}
                 </div>
@@ -761,7 +762,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
                   >
                     <span className="inline-flex items-center gap-2">
                       <User size={15} />
-                      <span>Log in or sign up</span>
+                      <span>{hasAccount ? 'Switch account' : 'Log in or sign up'}</span>
                     </span>
                     <span className="text-[10px] bg-[#C72B62] text-white px-2 py-0.5 rounded-full font-bold">
                       OTP
@@ -773,13 +774,14 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
                   type="button"
                   onClick={() => {
                     onCloseMenus();
-                    onOpenProfileModal();
+                    if (hasAccount) onOpenProfileModal();
+                    else onOpenAuthModal();
                   }}
                   className="w-full px-4 py-2.5 border-b border-slate-100 text-left hover:bg-slate-50 transition-colors cursor-pointer"
                 >
-                  <p className="text-xs font-bold text-slate-900 truncate">{profile.fullName}</p>
+                  <p className="text-xs font-bold text-slate-900 truncate">{hasAccount ? profile.fullName : 'Guest User'}</p>
                   <p className="text-[11px] text-slate-500 truncate">
-                    {profile.email} · Edit profile
+                    {hasAccount ? `${profile.email} · Edit profile` : 'Sign in to edit profile'}
                   </p>
                 </button>
 
