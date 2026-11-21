@@ -394,7 +394,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
                     key={tab.id}
                     type="button"
                     onClick={() => onSelectCategory(tab.id)}
-                    className={`relative flex items-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0 transition-colors duration-200 cursor-pointer pb-2.5 pt-1 ${
+                    className={`relative flex items-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0 transition-colors duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] cursor-pointer pb-2.5 pt-1 ${
                       isActive
                         ? 'text-slate-950 font-semibold'
                         : 'text-slate-500 hover:text-slate-800 font-semibold'
@@ -408,7 +408,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
                       decoding="async"
                       aria-hidden="true"
                       referrerPolicy="no-referrer"
-                      className={`w-6 h-6 min-[410px]:w-7 min-[410px]:h-7 sm:w-9 sm:h-9 object-contain transition-transform duration-200 ${
+                      className={`w-6 h-6 min-[410px]:w-7 min-[410px]:h-7 sm:w-9 sm:h-9 object-contain transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
                         isActive ? 'scale-105' : 'opacity-95 hover:opacity-100'
                       }`}
                     />
@@ -417,7 +417,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
                     </span>
 
                     {isActive && (
-                      <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-slate-900 rounded-full" />
+                      <motion.span layoutId="qaaga-category-underline-desktop" transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }} className="absolute bottom-0 left-0 right-0 h-[2px] bg-slate-900 rounded-full" />
                     )}
                   </button>
                 );
@@ -482,11 +482,11 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
                 aria-label="Create new listing"
                 onClick={onOpenHostModal}
                 style={{
-                  background: 'linear-gradient(90deg, #E91D58, #D90065)',
+                  background: '#FF385C',
                   color: '#FFFFFF',
                   borderRadius: '100px',
                 }}
-                className="flex w-7 h-7 sm:w-8 sm:h-8 border-0 border-none items-center justify-center text-white active:scale-95 transition-transform shrink-0 cursor-pointer shadow-[0_2px_8px_rgba(233,29,88,0.32)] hover:brightness-90 hover:scale-105"
+                className="flex w-7 h-7 sm:w-8 sm:h-8 border-0 border-none items-center justify-center text-white active:scale-95 transition-transform shrink-0 cursor-pointer shadow-[0_2px_8px_rgba(255,56,92,0.30)] hover:brightness-90 hover:scale-105"
               >
                 <Plus size={16} strokeWidth={2.6} className="text-white" />
               </button>
@@ -945,7 +945,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
               >
                 <div className="flex items-center gap-2.5 min-w-0 flex-1">
                   <span className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center shrink-0">
-                    <Search size={15} className="text-[#C72B62]" strokeWidth={2.6} />
+                    <Search size={15} className="text-[#FF385C]" strokeWidth={2.6} />
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="text-[13px] font-bold text-slate-900 truncate leading-tight">
@@ -996,7 +996,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
                     key={tab.id}
                     type="button"
                     onClick={() => onSelectCategory(tab.id)}
-                    className={`relative flex items-center gap-1.5 whitespace-nowrap shrink-0 transition-colors duration-200 cursor-pointer pb-2 pt-1 ${
+                    className={`relative flex items-center gap-1.5 whitespace-nowrap shrink-0 transition-colors duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] cursor-pointer pb-2 pt-1 ${
                       isActive
                         ? 'text-slate-950 font-bold'
                         : 'text-slate-500 hover:text-slate-800 font-semibold'
@@ -1010,7 +1010,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
                       decoding="async"
                       aria-hidden="true"
                       referrerPolicy="no-referrer"
-                      className={`w-5 h-5 min-[380px]:w-6 min-[380px]:h-6 object-contain transition-transform duration-200 ${
+                      className={`w-5 h-5 min-[380px]:w-6 min-[380px]:h-6 object-contain transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
                         isActive ? 'scale-110' : 'opacity-85'
                       }`}
                     />
@@ -1018,7 +1018,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
                       {tab.label}
                     </span>
                     {isActive && (
-                      <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-slate-900 rounded-full" />
+                      <motion.span layoutId="qaaga-category-underline-mobile" transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }} className="absolute bottom-0 left-0 right-0 h-[2px] bg-slate-900 rounded-full" />
                     )}
                   </button>
                 );
@@ -1204,7 +1204,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
               color: '#FFFFFF',
               borderRadius: '100px',
             }}
-            className={`hidden md:flex border-0 border-none text-white items-center justify-center active:scale-95 transition-all shrink-0 cursor-pointer shadow-[0_4px_16px_rgba(233,29,88,0.32)] hover:brightness-90 hover:scale-105 hover:shadow-[0_6px_22px_rgba(233,29,88,0.42)] ${
+            className={`hidden md:flex border-0 border-none text-white items-center justify-center active:scale-95 transition-all shrink-0 cursor-pointer shadow-[0_4px_16px_rgba(255,56,92,0.30)] hover:brightness-90 hover:scale-105 hover:shadow-[0_6px_22px_rgba(255,56,92,0.40)] ${
               shouldCollapse ? 'w-9 h-9 sm:w-10 sm:h-10' : 'w-11 h-11 sm:w-12 sm:h-12'
             }`}
           >
