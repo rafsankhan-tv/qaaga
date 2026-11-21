@@ -927,9 +927,9 @@ export async function saveUserProfileToDatabase(profile: GuestProfile): Promise<
   const isTrustedAdmin = authData.user.app_metadata?.role === 'admin';
   const role = isTrustedAdmin && existing?.role === 'admin'
     ? 'admin'
-    : existing?.role === 'host' && profile.role === 'host'
+    : existing?.role === 'host' || profile.role === 'host'
       ? 'host'
-      : profile.role === 'host' ? 'host' : 'guest';
+      : 'guest';
   // Email confirmation is separate from identity-document approval.
   const verified = Boolean(existing?.verified);
 
