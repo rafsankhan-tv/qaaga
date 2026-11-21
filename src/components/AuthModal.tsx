@@ -30,6 +30,7 @@ interface AuthModalProps {
   onUpdateProfile: (updated: GuestProfile) => void;
   onShowToast: (toast: { message: string }) => void;
   onOpenAdminModal?: () => void;
+  preferredRole?: 'guest' | 'host';
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({
@@ -40,6 +41,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onUpdateProfile,
   onShowToast,
   onOpenAdminModal,
+  preferredRole = 'guest',
 }) => {
   const [emailOrPhone, setEmailOrPhone] = useState('');
   const [step, setStep] = useState<'input' | 'otp' | 'complete_profile' | 'success'>('input');
@@ -78,8 +80,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setStep('input');
       setOtpDigits(['', '', '', '', '', '']);
       setErrorMessage('');
+      setRoleInput(preferredRole);
     }
-  }, [isOpen]);
+  }, [isOpen, preferredRole]);
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -276,7 +279,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
       const savedProfile: GuestProfile = {
         ...completedProfile,
-        role: result.profile?.role === 'host' ? 'host' : 'guest',
+        role: result.profile?.role === 'admin' ? 'admin' : result.profile?.role === 'host' ? 'host' : 'guest',
         verified: Boolean(result.profile?.verified),
       };
 
