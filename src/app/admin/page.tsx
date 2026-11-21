@@ -1,22 +1,21 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import { ShieldAlert, ArrowLeft, KeyRound } from 'lucide-react';
+import { ArrowLeft, LogIn, ShieldAlert } from 'lucide-react';
 import {
   DEFAULT_BRANDING,
   SiteBranding,
-  GuestProfile,
   QaagaListing,
   BookingRecord,
-  SUPER_ADMIN_EMAIL,
 } from '@/data/listings';
 import {
   persistBrandingEverywhere,
   readSyncLocalBranding,
   reconcileBrandingOnLoad,
 } from '@/lib/brandingStorage.client';
+import { getSupabase } from '@/lib/supabaseClient';
 import {
   getListingsFromDatabase,
   getBookingsFromDatabase,
@@ -35,13 +34,16 @@ const AdminPanelModal = dynamic(
   }
 );
 
+type AdminAuthState = 'checking' | 'authorized' | 'denied';
+
 export default function AdminPage() {
   const [branding, setBranding] = useState<SiteBranding>(DEFAULT_BRANDING);
   const brandingRef = useRef<SiteBranding>(DEFAULT_BRANDING);
-  const [userProfile, setUserProfile] = useState<GuestProfile | null>(null);
-  const [isAuthorized, setIsAuthorized] = useState<boolean>(true);
+  const [authState, setAuthState] = useState<AdminAuthState>('checking');
+  const [authMessage, setAuthMessage] = useState('Checking your secure administrator session…');
   const [listings, setListings] = useState<QaagaListing[]>([]);
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
+  const [dashboardError, setDashboardError] = useState('');
 
   useEffect(() => {
     brandingRef.current = branding;
@@ -49,40 +51,110 @@ export default function AdminPage() {
 
   useEffect(() => {
     let active = true;
-    try {
-      const stored = localStorage.getItem('qaaga_v3_profile');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        setUserProfile(parsed);
-        const emailLower = (parsed.email || '').trim().toLowerCase();
-        if (emailLower === SUPER_ADMIN_EMAIL.toLowerCase()) {
-          setIsAuthorized(true);
-        } else if (parsed.role && parsed.role !== 'admin') {
-          setIsAuthorized(false);
+
+    const loadAdmin = async () => {
+      const supabase = getSupabase();
+      if (!supabase) {
+        if (active) {
+          setAuthMessage('Supabase is not configured for this deployment. Add the public project URL and publishable key in the deployment environment.');
+          setAuthState('denied');
+        }
+        return;
+      }
+
+      try {
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+        const accessToken = sessionData.session?.access_token;
+        if (sessionError || !accessToken) {
+          if (active) {
+            setAuthMessage('Please log in with your QAAGA administrator account to continue.');
+            setAuthState('denied');
+          }
+          return;
+        }
+
+        // Fetch the user from Supabase Auth; never trust localStorage or user_metadata for privileges.
+        const { data: authData, error: authError } = await supabase.auth.getUser(accessToken);
+        const authUser = authData.user;
+        const email = authUser?.email?.trim().toLowerCase();
+
+        if (authError || !authUser?.id || !email) {
+          if (active) {
+            setAuthMessage('Your login session is invalid or expired. Please log in again.');
+            setAuthState('denied');
+          }
+          return;
+        }
+
+        // Only a trusted Supabase app_metadata claim can grant administrator access.
+        if (authUser.app_metadata?.role !== 'admin') {
+          if (active) {
+            setAuthMessage('This account does not have administrator privileges. Contact the QAAGA Super Admin if you need access.');
+            setAuthState('denied');
+          }
+          return;
+        }
+
+        // Confirm the account is active in the database as well as in the signed Auth claim.
+        const profileResponse = await fetch(
+          '/api/auth/profile?email=' + encodeURIComponent(email),
+          { headers: { Authorization: 'Bearer ' + accessToken }, cache: 'no-store' }
+        );
+        const profileResult = await profileResponse.json().catch(() => ({}));
+        if (
+          !profileResponse.ok ||
+          profileResult?.profile?.role !== 'admin' ||
+          profileResult?.profile?.status !== 'active'
+        ) {
+          if (active) {
+            setAuthMessage('Your Supabase administrator claim or active admin profile is missing. Sign in again after the Super Admin completes secure admin onboarding.');
+            setAuthState('denied');
+          }
+          return;
+        }
+
+        if (!active) return;
+        setAuthState('authorized');
+
+        const localBranding = readSyncLocalBranding();
+        if (localBranding) {
+          setBranding(localBranding);
+          brandingRef.current = localBranding;
+        }
+
+        const results = await Promise.allSettled([
+          getListingsFromDatabase(),
+          getBookingsFromDatabase(),
+          reconcileBrandingOnLoad(),
+        ]);
+
+        if (!active) return;
+
+        if (results[0].status === 'fulfilled') {
+          setListings(results[0].value || []);
+        } else {
+          setDashboardError('Listings could not be loaded. Check the database access policies.');
+        }
+
+        if (results[1].status === 'fulfilled') {
+          setBookings(results[1].value || []);
+        } else {
+          setDashboardError((current) => current || 'Bookings could not be loaded. Check the database access policies.');
+        }
+
+        if (results[2].status === 'fulfilled' && results[2].value) {
+          setBranding(results[2].value);
+          brandingRef.current = results[2].value;
+        }
+      } catch {
+        if (active) {
+          setAuthMessage('QAAGA could not verify your administrator session. Please try logging in again.');
+          setAuthState('denied');
         }
       }
-    } catch {
-      // ignore
-    }
+    };
 
-    const syncLocal = readSyncLocalBranding();
-    if (syncLocal) {
-      setBranding(syncLocal);
-      brandingRef.current = syncLocal;
-    }
-
-    Promise.all([
-      getListingsFromDatabase(),
-      getBookingsFromDatabase(),
-      reconcileBrandingOnLoad(),
-    ]).then(([dbListings, dbBookings, resolvedBranding]) => {
-      if (!active) return;
-      setListings(dbListings || []);
-      setBookings(dbBookings || []);
-      setBranding(resolvedBranding);
-      brandingRef.current = resolvedBranding;
-    });
-
+    void loadAdmin();
     return () => {
       active = false;
     };
@@ -97,80 +169,72 @@ export default function AdminPage() {
   }, []);
 
   const handleRemoveLogo = useCallback(async () => {
-    const removed: SiteBranding = {
+    await persistBranding({
       ...brandingRef.current,
       logoUrl: null,
-    };
-    await persistBranding(removed);
+    });
   }, [persistBranding]);
 
   const handleRestoreDefaultLogo = useCallback(async () => {
-    const restored: SiteBranding = {
+    await persistBranding({
       ...brandingRef.current,
       logoUrl: DEFAULT_BRANDING.logoUrl,
-    };
-    await persistBranding(restored);
+    });
   }, [persistBranding]);
 
-  const handleGrantAdminAccess = () => {
-    const updated: GuestProfile = {
-      fullName: userProfile?.fullName || 'Rafsan Khan (Super Admin)',
-      email: SUPER_ADMIN_EMAIL,
-      city: 'Kuala Lumpur',
-      role: 'admin',
-      verified: true,
-    };
-    setUserProfile(updated);
-    setIsAuthorized(true);
-    try {
-      localStorage.setItem('qaaga_v3_profile', JSON.stringify(updated));
-    } catch {}
-  };
-
-  if (!isAuthorized) {
+  if (authState === 'checking') {
     return (
-      <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-6 text-center">
-        <div className="w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-400 flex items-center justify-center mb-4">
-          <ShieldAlert size={32} />
-        </div>
-        <h1 className="text-2xl font-bold tracking-tight">Admin Access Restricted</h1>
-        <p className="text-sm text-slate-400 max-w-md mt-2">
-          This area requires administrative privileges. You are currently logged in with a{' '}
-          <strong className="text-white capitalize">{userProfile?.role || 'Guest'}</strong> account.
-        </p>
-
-        <div className="flex items-center gap-3 mt-6">
-          <Link
-            href="/"
-            prefetch={true}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition-colors"
-          >
-            <ArrowLeft size={14} />
-            <span>Return to Home</span>
-          </Link>
-          <button
-            type="button"
-            onClick={handleGrantAdminAccess}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#C72B62] hover:bg-[#ad2253] text-white text-xs font-semibold cursor-pointer transition-colors shadow-sm"
-          >
-            <KeyRound size={14} />
-            <span>Switch to Admin Mode</span>
-          </button>
-        </div>
+      <div className="min-h-screen bg-slate-50 py-6">
+        <DashboardSkeleton />
+        <p className="text-center text-sm text-slate-500">{authMessage}</p>
       </div>
     );
   }
 
+  if (authState === 'denied') {
+    return (
+      <main className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6 text-center">
+        <div className="w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-400 flex items-center justify-center mb-4">
+          <ShieldAlert size={32} />
+        </div>
+        <h1 className="text-2xl font-bold tracking-tight">Admin Access Restricted</h1>
+        <p className="text-sm text-slate-300 max-w-lg mt-3">{authMessage}</p>
+        <div className="flex flex-wrap items-center justify-center gap-3 mt-6">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 text-sm font-semibold transition-colors"
+          >
+            <ArrowLeft size={15} />
+            Return to QAAGA
+          </Link>
+          <Link
+            href="/login?next=%2Fadmin%2Fdashboard"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#C72B62] hover:bg-[#ad2253] text-white text-sm font-semibold transition-colors"
+          >
+            <LogIn size={15} />
+            Log in
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
   return (
-    <AdminPanelModal
-      branding={branding}
-      onUpdateBranding={persistBranding}
-      onRemoveLogo={handleRemoveLogo}
-      onRestoreDefaultLogo={handleRestoreDefaultLogo}
-      allListings={listings}
-      bookings={bookings}
-      standalone={true}
-    />
+    <>
+      {dashboardError ? (
+        <div role="status" className="px-4 py-2 text-sm text-amber-800 bg-amber-50 border-b border-amber-200">
+          {dashboardError}
+        </div>
+      ) : null}
+      <AdminPanelModal
+        branding={branding}
+        onUpdateBranding={persistBranding}
+        onRemoveLogo={handleRemoveLogo}
+        onRestoreDefaultLogo={handleRestoreDefaultLogo}
+        allListings={listings}
+        bookings={bookings}
+        standalone={true}
+      />
+    </>
   );
 }
-
