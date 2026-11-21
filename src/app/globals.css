@@ -146,7 +146,7 @@ html.lenis body {
   z-index: -1;
   pointer-events: none;
   background: radial-gradient(
-    circle at center,
+    circle 140px at var(--mouse-x, 50%) var(--mouse-y, 50%),
     #FF385C 0%,
     #E61E4D 27.5%,
     #E31C5F 40%,
@@ -155,7 +155,8 @@ html.lenis body {
     #BD1E59 100%
   );
   opacity: 0;
-  transition: opacity 0.3s cubic-bezier(0.2, 0, 0, 1);
+  transition: opacity 0.18s cubic-bezier(0.2, 0, 0, 1);
+  will-change: opacity;
 }
 
 .qaaga-auth-primary:hover:not(:disabled) {
