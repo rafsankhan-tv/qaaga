@@ -49,6 +49,42 @@ async function mockPublicListingRead(page: Page) {
   });
 }
 
+test.describe('QAAGA authentication button pointer highlight', () => {
+  test('Continue button highlight follows the pointer in both directions', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto('/login');
+
+    const button = page.locator('.qaaga-auth-primary').first();
+    await expect(button).toBeVisible();
+    const bounds = await button.boundingBox();
+    expect(bounds).not.toBeNull();
+
+    const y = bounds!.y + bounds!.height / 2;
+    await page.mouse.move(bounds!.x + 12, y);
+    await expect.poll(() => button.evaluate((el) => (el as HTMLElement).style.getPropertyValue('--mouse-x'))).toBe('12px');
+    await expect.poll(() => button.evaluate((el) => getComputedStyle(el, '::before').opacity)).toBe('1');
+
+    const leftX = await button.evaluate((el) => getComputedStyle(el).getPropertyValue('--mouse-x').trim());
+    await page.mouse.move(bounds!.x + bounds!.width - 12, y, { steps: 12 });
+    await expect.poll(() => button.evaluate((el) => {
+      const value = getComputedStyle(el).getPropertyValue('--mouse-x').trim();
+      return Number.parseFloat(value);
+    })).toBeGreaterThan(Number.parseFloat(leftX));
+
+    const rightX = await button.evaluate((el) => Number.parseFloat(getComputedStyle(el).getPropertyValue('--mouse-x')));
+    await page.mouse.move(bounds!.x + 12, y, { steps: 12 });
+    await expect.poll(() => button.evaluate((el) => Number.parseFloat(getComputedStyle(el).getPropertyValue('--mouse-x'))))
+      .toBeLessThan(rightX);
+
+    const layer = await button.evaluate((el) => ({
+      zIndex: getComputedStyle(el, '::before').zIndex,
+      backgroundImage: getComputedStyle(el, '::before').backgroundImage,
+    }));
+    expect(layer.zIndex).toBe('0');
+    expect(layer.backgroundImage).toContain('radial-gradient');
+  });
+});
+
 test.describe('QAAGA public marketplace', () => {
   test('home and Dhaka room routes render without legacy Malaysia copy', async ({ page }) => {
     const pageErrors: string[] = [];
