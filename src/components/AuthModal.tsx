@@ -20,10 +20,6 @@ import { SiteBranding, GuestProfile } from '@/data/listings';
 import { BrandLogo } from './BrandLogo';
 import {
   getSupabase,
-  getSupabaseConfig,
-  saveSupabaseConfig,
-  testSupabaseConnection,
-  SupabaseTestResult,
 } from '@/lib/supabaseClient';
 
 interface AuthModalProps {
@@ -60,13 +56,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [bioInput, setBioInput] = useState('');
   const [avatarIndex, setAvatarIndex] = useState(0);
 
-  // Supabase Config & Connection test
-  const [showConfig, setShowConfig] = useState(false);
-  const [supabaseUrlInput, setSupabaseUrlInput] = useState('');
-  const [supabaseKeyInput, setSupabaseKeyInput] = useState('');
-  const [testResult, setTestResult] = useState<SupabaseTestResult | null>(null);
-  const [testingConnection, setTestingConnection] = useState(false);
-
   const digitRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   const AVATAR_OPTIONS = [
@@ -82,9 +71,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setStep('input');
       setOtpDigits(['', '', '', '', '', '']);
       setErrorMessage('');
-      const config = getSupabaseConfig();
-      setSupabaseUrlInput(config.url || '');
-      setSupabaseKeyInput(config.key || '');
     }
   }, [isOpen]);
 
@@ -322,20 +308,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
-  const handleTestConnection = async () => {
-    setTestingConnection(true);
-    const result = await testSupabaseConnection();
-    setTestResult(result);
-    setTestingConnection(false);
-    onShowToast({ message: result.message });
-  };
-
-  const handleSaveSupabaseConfig = () => {
-    saveSupabaseConfig(supabaseUrlInput, supabaseKeyInput);
-    onShowToast({ message: 'Supabase URL and Key updated' });
-    handleTestConnection();
-  };
-
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/65 backdrop-blur-sm animate-in fade-in duration-200"
@@ -370,7 +342,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
           {step === 'input' && (
             <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-sm">
-              Enter your email to receive an instant OTP verification code and set up your account.
+              Enter your email address to continue. We&apos;ll send you a secure verification code.
             </p>
           )}
 
@@ -422,9 +394,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3.5 sm:py-4 rounded-xl bg-[#C72B62] hover:bg-[#ad2253] active:scale-[0.99] text-white font-semibold text-base transition-all shadow-[0_4px_16px_rgba(199,43,98,0.25)] flex items-center justify-center cursor-pointer disabled:opacity-60"
+              className="qaaga-auth-primary w-full py-3.5 sm:py-4 rounded-xl text-white font-semibold text-base flex items-center justify-center cursor-pointer"
             >
-              {loading ? <Loader2 size={20} className="animate-spin" /> : 'Continue'}
+              {loading ? (
+                <span className="relative z-10 inline-flex items-center justify-center">
+                  <Loader2 size={20} className="animate-spin" />
+                </span>
+              ) : (
+                <span className="relative z-10">Continue</span>
+              )}
             </button>
 
             {/* Divider */}
@@ -475,69 +453,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </button>
             </div>
 
-            {/* Supabase Connection Status Banner */}
-            <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
-              <span className="inline-flex items-center gap-1.5 font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                Supabase Connected
-              </span>
-              <button
-                type="button"
-                onClick={() => setShowConfig(!showConfig)}
-                className="text-[#C72B62] hover:underline cursor-pointer font-medium"
-              >
-                {showConfig ? 'Hide Supabase details' : 'Supabase config'}
-              </button>
-            </div>
-
-            {showConfig && (
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-left space-y-2 text-xs animate-in fade-in">
-                <div>
-                  <p className="font-semibold text-slate-800">Supabase Publishable Key</p>
-                  <input
-                    type="text"
-                    value={supabaseKeyInput}
-                    onChange={(e) => setSupabaseKeyInput(e.target.value)}
-                    className="w-full p-1.5 rounded border border-slate-300 bg-white font-mono text-[11px] mt-0.5"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="qaaga-supabase-url" className="font-semibold text-slate-800 block">
-                    Supabase Project URL
-                  </label>
-                  <input
-                    id="qaaga-supabase-url"
-                    type="url"
-                    value={supabaseUrlInput}
-                    onChange={(e) => setSupabaseUrlInput(e.target.value)}
-                    placeholder="https://your-project.supabase.co"
-                    className="w-full p-1.5 rounded border border-slate-300 bg-white font-mono text-[11px] mt-0.5 focus:outline-none focus:ring-1 focus:ring-[#C72B62]"
-                  />
-                </div>
-                <div className="flex items-center gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={handleSaveSupabaseConfig}
-                    className="px-3 py-1 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-lg text-xs cursor-pointer"
-                  >
-                    Save & Reconnect
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleTestConnection}
-                    disabled={testingConnection}
-                    className="px-3 py-1 bg-white border border-slate-300 hover:border-slate-400 text-slate-700 font-semibold rounded-lg text-xs cursor-pointer"
-                  >
-                    {testingConnection ? 'Testing...' : 'Test Connection'}
-                  </button>
-                </div>
-                {testResult && (
-                  <p className={`text-[11px] font-medium ${testResult.connected ? 'text-emerald-600' : 'text-amber-700'}`}>
-                    {testResult.message}
-                  </p>
-                )}
-              </div>
-            )}
           </form>
         )}
 
@@ -572,9 +487,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               type="button"
               onClick={() => handleVerifyOtp()}
               disabled={loading || otpDigits.some((d) => !d)}
-              className="w-full py-3.5 sm:py-4 rounded-xl bg-[#C72B62] hover:bg-[#ad2253] active:scale-[0.99] text-white font-semibold text-base transition-all shadow-[0_4px_16px_rgba(199,43,98,0.25)] flex items-center justify-center cursor-pointer disabled:opacity-50"
+              className="qaaga-auth-primary w-full py-3.5 sm:py-4 rounded-xl text-white font-semibold text-base flex items-center justify-center cursor-pointer"
             >
-              {loading ? <Loader2 size={20} className="animate-spin" /> : 'Verify Code & Continue'}
+              {loading ? (
+                <span className="relative z-10 inline-flex items-center justify-center">
+                  <Loader2 size={20} className="animate-spin" />
+                </span>
+              ) : (
+                <span className="relative z-10">Verify Code &amp; Continue</span>
+              )}
             </button>
 
             {/* Resend & Back actions */}
@@ -592,13 +513,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 type="button"
                 disabled={resendCooldown > 0}
                 onClick={() => handleSendOtp()}
-                className={`font-semibold cursor-pointer ${
-                  resendCooldown > 0
-                    ? 'text-slate-400 cursor-not-allowed'
-                    : 'text-[#C72B62] hover:underline'
-                }`}
+                className={`qaaga-auth-resend ${resendCooldown > 0 ? 'is-disabled' : ''}`}
               >
-                {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend code'}
+                <span className="relative z-10">
+                  {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend OTP'}
+                </span>
               </button>
             </div>
           </div>
@@ -742,15 +661,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <button
               type="submit"
               disabled={loading || !fullNameInput.trim()}
-              className="w-full py-3.5 rounded-xl bg-[#C72B62] hover:bg-[#ad2253] active:scale-[0.99] text-white font-semibold text-sm transition-all shadow-[0_4px_16px_rgba(199,43,98,0.25)] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              className="qaaga-auth-primary w-full py-3.5 rounded-xl text-white font-semibold text-sm flex items-center justify-center gap-2 cursor-pointer"
             >
               {loading ? (
-                <Loader2 size={18} className="animate-spin" />
+                <span className="relative z-10 inline-flex items-center justify-center">
+                  <Loader2 size={18} className="animate-spin" />
+                </span>
               ) : (
-                <>
+                <span className="relative z-10 inline-flex items-center justify-center gap-2">
                   <Sparkles size={16} />
-                  <span>Complete Profile & Enter QAAGA</span>
-                </>
+                  <span>Complete Profile &amp; Enter QAAGA</span>
+                </span>
               )}
             </button>
           </form>

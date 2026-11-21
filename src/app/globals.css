@@ -115,6 +115,101 @@ html.lenis body {
   );
 }
 
+
+/* Airbnb-inspired QAAGA authentication actions */
+.qaaga-auth-primary {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background: linear-gradient(
+    to right,
+    #E61E4D 0%,
+    #E31C5F 50%,
+    #D70466 100%
+  );
+  color: #FFFFFF;
+  box-shadow:
+    0 3px 12px rgba(0, 0, 0, 0.10),
+    0 1px 2px rgba(0, 0, 0, 0.08);
+  transform: scale(1);
+  transition:
+    background-color 0.3s cubic-bezier(0.2, 0, 0, 1),
+    border-color 0.3s cubic-bezier(0.2, 0, 0, 1),
+    transform 0.25s cubic-bezier(0.2, 0, 0, 1),
+    box-shadow 0.3s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.qaaga-auth-primary::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(
+    circle at center,
+    #FF385C 0%,
+    #E61E4D 27.5%,
+    #E31C5F 40%,
+    #D70466 57.5%,
+    #BD1E59 75%,
+    #BD1E59 100%
+  );
+  opacity: 0;
+  transition: opacity 0.3s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.qaaga-auth-primary:hover:not(:disabled) {
+  transform: scale(1.02);
+  box-shadow: 0 6px 18px rgba(215, 4, 102, 0.24);
+}
+
+.qaaga-auth-primary:hover:not(:disabled)::before {
+  opacity: 1;
+}
+
+.qaaga-auth-primary:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.qaaga-auth-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: scale(1);
+}
+
+.qaaga-auth-resend {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 9999px;
+  background: linear-gradient(to right, #E61E4D 0%, #E31C5F 50%, #D70466 100%);
+  color: #FFFFFF;
+  font-size: 11px;
+  font-weight: 700;
+  transition: transform 0.25s cubic-bezier(0.2, 0, 0, 1), opacity 0.3s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.qaaga-auth-resend:hover:not(:disabled) {
+  transform: scale(1.02);
+}
+
+.qaaga-auth-resend:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.qaaga-auth-resend:disabled,
+.qaaga-auth-resend.is-disabled {
+  background: #F1F5F9;
+  color: #94A3B8;
+  cursor: not-allowed;
+}
+
 /* Respect prefers-reduced-motion globally */
 @media (prefers-reduced-motion: reduce) {
   html {
