@@ -476,7 +476,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
                 </span>
               </button>
 
-              {/* Plus Button beside Search Button: linear-gradient(90deg, #E91D58, #D90065), white plus icon */}
+              {/* Plus Button beside Search Button: #FF385C, white plus icon */}
               <button
                 type="button"
                 aria-label="Create new listing"
@@ -974,11 +974,11 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
                 aria-label="Create new listing"
                 onClick={onOpenHostModal}
                 style={{
-                  background: 'linear-gradient(90deg, #E91D58, #D90065)',
+                  background: '#FF385C',
                   color: '#FFFFFF',
                   borderRadius: '100px',
                 }}
-                className="w-10 h-10 flex border-0 border-none text-white items-center justify-center active:scale-95 transition-transform shrink-0 cursor-pointer shadow-[0_2px_8px_rgba(233,29,88,0.32)] hover:brightness-90"
+                className="w-10 h-10 flex border-0 border-none text-white items-center justify-center active:scale-95 transition-transform shrink-0 cursor-pointer shadow-[0_2px_8px_rgba(255,56,92,0.30)] hover:brightness-90"
               >
                 <Plus size={18} strokeWidth={2.6} className="text-white" />
               </button>
@@ -1194,13 +1194,13 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
           </div>
 
           {/* Adjacent '+' Circle Button beside Search Button:
-              background: linear-gradient(90deg, #E91D58, #D90065), border-radius: 100px, white plus icon */}
+              background: #FF385C, border-radius: 100px, white plus icon */}
           <button
             type="button"
             aria-label="Create new listing"
             onClick={onOpenHostModal}
             style={{
-              background: 'linear-gradient(90deg, #E91D58, #D90065)',
+              background: '#FF385C',
               color: '#FFFFFF',
               borderRadius: '100px',
             }}
