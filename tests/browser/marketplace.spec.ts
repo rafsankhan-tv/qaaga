@@ -265,6 +265,27 @@ test.describe('QAAGA public marketplace', () => {
   });
 });
 
+test.describe('QAAGA category motion and action colors', () => {
+  test('category state transitions match the 500ms rail motion and search/plus use coral', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto('/');
+
+    const categories = page.getByRole('navigation', { name: 'Listing categories' });
+    const experiences = categories.getByRole('button').nth(1);
+    await experiences.click();
+    await expect.poll(() => experiences.evaluate((el) => getComputedStyle(el).transitionDuration)).toBe('0.5s');
+    await expect.poll(() => experiences.locator('img').evaluate((el) => getComputedStyle(el).transitionDuration)).toBe('0.5s');
+
+    const search = page.locator('.search-button:visible').first();
+    await expect(search).toBeVisible();
+    await expect.poll(() => search.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe('rgb(255, 56, 92)');
+
+    const create = page.getByRole('button', { name: 'Create new listing' }).first();
+    await expect(create).toBeVisible();
+    await expect.poll(() => create.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe('rgb(255, 56, 92)');
+  });
+});
+
 test.describe('QAAGA admin authorization', () => {
   test('client-controlled localStorage role cannot grant admin dashboard access', async ({ page }) => {
     await page.addInitScript(() => {
