@@ -340,12 +340,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             {step === 'success' && 'Account verified!'}
           </h2>
 
-          {step === 'input' && (
-            <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-sm">
-              Enter your email address to continue. We&apos;ll send you a secure verification code.
-            </p>
-          )}
-
           {step === 'otp' && (
             <p className="text-xs sm:text-sm text-slate-500 mt-1">
               We sent a 6-digit code to{' '}
