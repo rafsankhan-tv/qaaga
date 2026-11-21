@@ -3,14 +3,13 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import { ShieldAlert, ArrowLeft, KeyRound } from 'lucide-react';
+import { ShieldAlert, ArrowLeft } from 'lucide-react';
 import {
   DEFAULT_BRANDING,
   SiteBranding,
   GuestProfile,
   QaagaListing,
   BookingRecord,
-  SUPER_ADMIN_EMAIL,
 } from '@/data/listings';
 import {
   persistBrandingEverywhere,
@@ -21,6 +20,7 @@ import {
   getListingsFromDatabase,
   getBookingsFromDatabase,
 } from '@/lib/supabaseService';
+import { getSupabase } from '@/lib/supabaseClient';
 import { DashboardSkeleton } from '@/components/Skeletons';
 
 const AdminPanelModal = dynamic(
@@ -35,11 +35,13 @@ const AdminPanelModal = dynamic(
   }
 );
 
+type AdminAuthState = 'checking' | 'authorized' | 'denied';
+
 export default function AdminPage() {
   const [branding, setBranding] = useState<SiteBranding>(DEFAULT_BRANDING);
   const brandingRef = useRef<SiteBranding>(DEFAULT_BRANDING);
   const [userProfile, setUserProfile] = useState<GuestProfile | null>(null);
-  const [isAuthorized, setIsAuthorized] = useState<boolean>(true);
+  const [authState, setAuthState] = useState<AdminAuthState>('checking');
   const [listings, setListings] = useState<QaagaListing[]>([]);
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
 
@@ -49,38 +51,63 @@ export default function AdminPage() {
 
   useEffect(() => {
     let active = true;
-    try {
-      const stored = localStorage.getItem('qaaga_v3_profile');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        setUserProfile(parsed);
-        const emailLower = (parsed.email || '').trim().toLowerCase();
-        if (emailLower === SUPER_ADMIN_EMAIL.toLowerCase()) {
-          setIsAuthorized(true);
-        } else if (parsed.role && parsed.role !== 'admin') {
-          setIsAuthorized(false);
-        }
+
+    const loadAdminDashboard = async () => {
+      const supabase = getSupabase();
+      if (!supabase) {
+        if (active) setAuthState('denied');
+        return;
       }
-    } catch {
-      // ignore
-    }
 
-    const syncLocal = readSyncLocalBranding();
-    if (syncLocal) {
-      setBranding(syncLocal);
-      brandingRef.current = syncLocal;
-    }
+      // Only Supabase's verified app_metadata claim is trusted for admin access.
+      // localStorage, user_metadata, and editable profile fields are not authorization.
+      const { data, error } = await supabase.auth.getUser();
+      const user = data.user;
+      if (error || !user?.id || user.app_metadata?.role !== 'admin') {
+        if (active) {
+          setUserProfile(user ? {
+            fullName: user.user_metadata?.full_name || user.user_metadata?.name || 'Member',
+            email: user.email || '',
+            city: 'Dhaka',
+            role: 'guest',
+            verified: Boolean(user.email_confirmed_at),
+          } : null);
+          setAuthState('denied');
+        }
+        return;
+      }
 
-    Promise.all([
-      getListingsFromDatabase(),
-      getBookingsFromDatabase(),
-      reconcileBrandingOnLoad(),
-    ]).then(([dbListings, dbBookings, resolvedBranding]) => {
+      if (!active) return;
+      setUserProfile({
+        fullName: user.user_metadata?.full_name || user.user_metadata?.name || 'Administrator',
+        email: user.email || '',
+        city: 'Dhaka',
+        role: 'admin',
+        verified: Boolean(user.email_confirmed_at),
+      });
+
+      const syncLocal = readSyncLocalBranding();
+      if (syncLocal) {
+        setBranding(syncLocal);
+        brandingRef.current = syncLocal;
+      }
+
+      const [dbListings, dbBookings, resolvedBranding] = await Promise.all([
+        getListingsFromDatabase(),
+        getBookingsFromDatabase(),
+        reconcileBrandingOnLoad(),
+      ]);
+
       if (!active) return;
       setListings(dbListings || []);
       setBookings(dbBookings || []);
       setBranding(resolvedBranding);
       brandingRef.current = resolvedBranding;
+      setAuthState('authorized');
+    };
+
+    loadAdminDashboard().catch(() => {
+      if (active) setAuthState('denied');
     });
 
     return () => {
@@ -112,22 +139,15 @@ export default function AdminPage() {
     await persistBranding(restored);
   }, [persistBranding]);
 
-  const handleGrantAdminAccess = () => {
-    const updated: GuestProfile = {
-      fullName: userProfile?.fullName || 'Rafsan Khan (Super Admin)',
-      email: SUPER_ADMIN_EMAIL,
-      city: 'Kuala Lumpur',
-      role: 'admin',
-      verified: true,
-    };
-    setUserProfile(updated);
-    setIsAuthorized(true);
-    try {
-      localStorage.setItem('qaaga_v3_profile', JSON.stringify(updated));
-    } catch {}
-  };
+  if (authState === 'checking') {
+    return (
+      <div className="min-h-screen bg-slate-50 py-6">
+        <DashboardSkeleton />
+      </div>
+    );
+  }
 
-  if (!isAuthorized) {
+  if (authState === 'denied') {
     return (
       <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-6 text-center">
         <div className="w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-400 flex items-center justify-center mb-4">
@@ -135,10 +155,9 @@ export default function AdminPage() {
         </div>
         <h1 className="text-2xl font-bold tracking-tight">Admin Access Restricted</h1>
         <p className="text-sm text-slate-400 max-w-md mt-2">
-          This area requires administrative privileges. You are currently logged in with a{' '}
-          <strong className="text-white capitalize">{userProfile?.role || 'Guest'}</strong> account.
+          This area requires a verified administrator account. You are currently signed in as{' '}
+          <strong className="text-white">{userProfile?.email || 'a guest'}</strong>.
         </p>
-
         <div className="flex items-center gap-3 mt-6">
           <Link
             href="/"
@@ -148,14 +167,12 @@ export default function AdminPage() {
             <ArrowLeft size={14} />
             <span>Return to Home</span>
           </Link>
-          <button
-            type="button"
-            onClick={handleGrantAdminAccess}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#C72B62] hover:bg-[#ad2253] text-white text-xs font-semibold cursor-pointer transition-colors shadow-sm"
+          <Link
+            href="/login"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#C72B62] hover:bg-[#ad2253] text-white text-xs font-semibold transition-colors shadow-sm"
           >
-            <KeyRound size={14} />
-            <span>Switch to Admin Mode</span>
-          </button>
+            Sign in
+          </Link>
         </div>
       </div>
     );
@@ -173,4 +190,3 @@ export default function AdminPage() {
     />
   );
 }
-
