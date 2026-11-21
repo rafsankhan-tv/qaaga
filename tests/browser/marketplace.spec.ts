@@ -84,6 +84,53 @@ test.describe('QAAGA authentication button pointer highlight', () => {
 });
 
 test.describe('QAAGA public marketplace', () => {
+  test('account menu routes sign-in and profile actions through email OTP', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto('/');
+
+    const accountMenu = page.getByRole('button', { name: 'Main account menu' });
+    await expect(accountMenu).toBeVisible();
+    await accountMenu.click();
+
+    await page.getByRole('button', { name: /Log in or sign up/ }).click();
+    await expect(page.getByLabel('Email address')).toBeVisible();
+    await page.getByRole('button', { name: 'Close' }).click();
+
+    await page.getByRole('button', { name: 'Main account menu' }).click();
+    await page.getByRole('button', { name: /Sign in to edit profile/ }).click();
+    await expect(page.getByLabel('Email address')).toBeVisible();
+  });
+
+  test('Become a Host modal supports all three listing categories and both entry points', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto('/');
+
+    await page.getByRole('button', { name: /become a host/i }).click();
+    await expect(page.getByRole('heading', { name: 'Become a host on qaaga.com' })).toBeVisible();
+
+    const category = page.locator('form').last().getByRole('combobox').first();
+    await expect(category.locator('option')).toHaveText(['Stay', 'Experiences', 'Services']);
+    await category.selectOption('experiences');
+    await expect(category).toHaveValue('experiences');
+    await category.selectOption('services');
+    await expect(category).toHaveValue('services');
+    await category.selectOption('stay');
+    await expect(category).toHaveValue('stay');
+    await expect(page.getByRole('button', { name: 'Submit listing for review' })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Close host modal' }).click();
+    await page.getByRole('button', { name: 'Create new listing' }).first().click();
+    await expect(page.getByRole('heading', { name: 'Become a host on qaaga.com' })).toBeVisible();
+  });
+
+  test('mobile Profile shortcut opens OTP sign-in for a signed-out visitor', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/');
+
+    await page.getByRole('button', { name: 'Profile', exact: true }).click();
+    await expect(page.getByLabel('Email address')).toBeVisible();
+  });
+
   test('home and Dhaka room routes render without legacy Malaysia copy', async ({ page }) => {
     const pageErrors: string[] = [];
     page.on('pageerror', (error) => pageErrors.push(error.message));
@@ -219,6 +266,19 @@ test.describe('QAAGA public marketplace', () => {
 });
 
 test.describe('QAAGA API and access-control smoke tests', () => {
+  test('OTP and profile endpoints validate requests before processing', async ({ request }) => {
+    const sendOtp = await request.post('/api/auth/otp/send', { data: { email: 'not-an-email' } });
+    expect(sendOtp.status()).toBe(400);
+
+    const verifyOtp = await request.post('/api/auth/otp/verify', {
+      data: { email: 'member@example.com', code: '123' },
+    });
+    expect(verifyOtp.status()).toBe(400);
+
+    const profile = await request.get('/api/auth/profile?email=member%40example.com');
+    expect(profile.status()).toBe(401);
+  });
+
   test('health, public listings and branding endpoints respond with safe empty states', async ({ request }) => {
     const health = await request.get('/api/health');
     expect(health.status()).toBe(200);
