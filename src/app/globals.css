@@ -160,17 +160,17 @@ html.lenis body {
   inset: 0;
   z-index: -1;
   pointer-events: none;
+  /* Paint above the button background, while the label stays above this layer. */
+  z-index: 0;
   background: radial-gradient(
-    circle 190px at var(--mouse-x, 50%) var(--mouse-y, 50%),
-    #FF385C 0%,
-    #E61E4D 27.5%,
-    #E31C5F 40%,
-    #D70466 57.5%,
-    #BD1E59 75%,
-    #BD1E59 100%
+    circle 165px at var(--mouse-x, 50%) var(--mouse-y, 50%),
+    rgba(255, 56, 92, 0.96) 0%,
+    rgba(255, 56, 92, 0.58) 34%,
+    rgba(255, 56, 92, 0.18) 62%,
+    rgba(255, 56, 92, 0) 100%
   );
   opacity: 0;
-  transition: opacity 0.18s cubic-bezier(0.2, 0, 0, 1);
+  transition: opacity 0.16s cubic-bezier(0.22, 1, 0.36, 1);
   will-change: opacity;
 }
 
