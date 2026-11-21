@@ -278,7 +278,7 @@ export const HostStudioModal: React.FC<{
             type="submit"
             className="w-full py-3 rounded-xl bg-[#C72B62] hover:bg-[#ad2253] text-white font-semibold text-sm cursor-pointer transition-colors"
           >
-            Publish Listing Live
+            Submit listing for review
           </button>
         </form>
 
