@@ -242,6 +242,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(
     initialRoute === '/login' || initialRoute === '/register'
   );
+  const [authIntent, setAuthIntent] = useState<'guest' | 'host'>('guest');
 
   const [explorerCollection, setExplorerCollection] = useState<{
     mode: 'popular-kl' | 'wishlist' | 'experiences-services';
@@ -1334,9 +1335,11 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
     photo: string;
     guestFav: boolean;
   }) => {
-    if (!profile.email) {
+    if (!profile.email?.trim()) {
+      setAuthIntent('host');
       setIsAuthModalOpen(true);
-      showToast({ message: 'Sign in before publishing a property.' });
+      navigateTo('/login');
+      showToast({ message: 'Sign in and complete your host profile before submitting this listing.' });
       return;
     }
 
@@ -1364,6 +1367,11 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
     };
 
     try {
+      // A signed-in guest becomes a host when submitting their first listing.
+      if (profile.role !== 'host' && profile.role !== 'admin') {
+        const hostProfile = await saveUserProfileToDatabase({ ...profile, role: 'host' });
+        setProfile(hostProfile);
+      }
       const saved = await insertListingToDatabase(newItem);
       setDbListings((prev) => [saved, ...prev]);
       setRecentlyViewedIds((prev) => [saved.id, ...prev]);
@@ -1524,6 +1532,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
           navigateTo('/admin');
         }}
         onOpenAuthModal={() => {
+          setAuthIntent('guest');
           setIsAuthModalOpen(true);
           navigateTo('/login');
         }}
@@ -2283,10 +2292,11 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
           type="button"
           aria-label="Profile"
           onClick={() => {
-            if (profile.verified) {
+            if (profile.email?.trim()) {
               setIsProfileOpen(true);
               navigateTo('/profile');
             } else {
+              setAuthIntent('guest');
               setIsAuthModalOpen(true);
               navigateTo('/login');
             }
@@ -2296,7 +2306,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
           }`}
         >
           <User size={20} />
-          <span>{profile.verified ? (profile.fullName.split(' ')[0] || 'Profile') : 'Profile'}</span>
+          <span>{profile.email?.trim() ? (profile.fullName.split(' ')[0] || 'Profile') : 'Profile'}</span>
         </button>
       </nav>
 
@@ -2542,6 +2552,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
           isOpen={isAuthModalOpen}
           onClose={() => {
             setIsAuthModalOpen(false);
+            setAuthIntent('guest');
             navigateTo('/');
           }}
           branding={branding}
@@ -2549,6 +2560,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
           onUpdateProfile={(updated) => {
             setProfile(updated);
           }}
+          preferredRole={authIntent}
           onOpenAdminModal={() => {
             setIsAdminOpen(true);
             navigateTo('/admin');
