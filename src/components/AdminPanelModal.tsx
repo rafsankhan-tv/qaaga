@@ -1117,7 +1117,6 @@ const AdminPanelModalInner: React.FC<AdminPanelProps> = ({
                               >
                                 <option value="guest">Make Guest</option>
                                 <option value="host">Make Host</option>
-                                <option value="admin">Make Admin</option>
                               </select>
 
                               <button
