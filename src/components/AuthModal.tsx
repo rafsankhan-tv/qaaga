@@ -213,8 +213,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         token: code,
         type: 'email',
       });
-      if (!error && data?.user) isVerified = true;
-      else if (error) setErrorMessage('Invalid or expired verification code. Please try again.');
+      if (!error && data?.user) {
+        // Supabase app_metadata is server-controlled. The database bootstrap trigger
+        // grants this claim only after the approved Super Admin email is verified.
+        if (data.user.app_metadata?.role === 'admin') {
+          setLoading(false);
+          setStep('success');
+          onShowToast({ message: 'Administrator verified. Opening the secure QAAGA dashboard…' });
+          window.location.assign('/admin/dashboard');
+          return;
+        }
+        isVerified = true;
+      } else if (error) {
+        setErrorMessage('Invalid or expired verification code. Please try again.');
+      }
     } catch {
       setErrorMessage('Unable to verify the code. Please try again.');
     }
