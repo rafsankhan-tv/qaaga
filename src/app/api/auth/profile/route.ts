@@ -122,7 +122,10 @@ export async function PUT(req: NextRequest) {
     if (existing?.status === 'suspended') {
       return NextResponse.json({ error: 'This account is suspended and cannot update its profile.' }, { status: 403 });
     }
-    const role = authenticated.user.app_metadata?.role === 'admin' ? 'admin' : profile.role;
+    // A returning host must not be downgraded when the generic OTP form defaults to Guest.
+    const role = authenticated.user.app_metadata?.role === 'admin'
+      ? 'admin'
+      : existing?.role === 'host' ? 'host' : profile.role;
     const verified = Boolean(existing?.verified);
     const identityStatus = existing?.identity_status || 'unverified';
     const accountStatus = existing?.status || 'active';
