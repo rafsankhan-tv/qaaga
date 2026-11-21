@@ -2475,6 +2475,7 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
               showToast({ message: 'Account profile updated successfully' });
             } catch (error: any) {
               showToast({ message: error?.message || 'Profile could not be saved.' });
+              throw error;
             }
           }}
           onLogout={async () => {
