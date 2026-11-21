@@ -265,6 +265,24 @@ test.describe('QAAGA public marketplace', () => {
   });
 });
 
+test.describe('QAAGA admin authorization', () => {
+  test('client-controlled localStorage role cannot grant admin dashboard access', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('qaaga_v3_profile', JSON.stringify({
+        fullName: 'Fake Admin',
+        email: 'fake-admin@example.test',
+        role: 'admin',
+        verified: true,
+      }));
+    });
+
+    await page.goto('/admin/dashboard');
+    await expect(page.getByRole('heading', { name: 'Admin Access Restricted' })).toBeVisible();
+    await expect(page.getByText(/verified administrator account/i)).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Switch to Admin Mode' })).toHaveCount(0);
+  });
+});
+
 test.describe('QAAGA API and access-control smoke tests', () => {
   test('OTP and profile endpoints validate requests before processing', async ({ request }) => {
     const sendOtp = await request.post('/api/auth/otp/send', { data: { email: 'not-an-email' } });
