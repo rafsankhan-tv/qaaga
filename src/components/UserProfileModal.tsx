@@ -36,7 +36,7 @@ import { BrandLogo } from './BrandLogo';
 export interface UserProfileModalProps {
   branding: SiteBranding;
   profile: GuestProfile;
-  onSave: (updated: GuestProfile) => void;
+  onSave: (updated: GuestProfile) => Promise<void>;
   onLogout?: () => void;
   onClose: () => void;
   customListings?: QaagaListing[];
@@ -62,18 +62,17 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
 
   const [showWrittenReviews, setShowWrittenReviews] = useState<boolean>(false);
   const [isEditing, setIsEditing] = useState<boolean>(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   // Form edit states
   const [formName, setFormName] = useState(profile.fullName);
-  const [formEmail, setFormEmail] = useState(profile.email);
-  const [formCity, setFormCity] = useState(profile.city);
-  const [formPhone, setFormPhone] = useState(profile.phone || '+60 12-345 6789');
-  const [formBio, setFormBio] = useState(
-    profile.bio ||
-      'Travel enthusiast exploring Southeast Asia. Focused on design-forward apartments and skyline views in Kuala Lumpur.'
-  );
-  const [formRole, setFormRole] = useState<'customer' | 'guest' | 'host' | 'admin'>(
-    profile.role || 'guest'
+  const [formEmail] = useState(profile.email);
+  const [formCity, setFormCity] = useState(profile.city || 'Dhaka');
+  const [formPhone, setFormPhone] = useState(profile.phone || '');
+  const [formBio, setFormBio] = useState(profile.bio || '');
+  const [formRole, setFormRole] = useState<'guest' | 'host'>(
+    profile.role === 'host' ? 'host' : 'guest'
   );
   const [formAvatar, setFormAvatar] = useState(profile.avatarUrl || '');
 
@@ -85,23 +84,31 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
     'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80',
   ];
 
-  const handleSaveProfile = (e?: React.FormEvent) => {
+  const handleSaveProfile = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!formName.trim() || !formEmail.trim()) return;
+    if (!formName.trim() || !formEmail.trim() || isSavingProfile) return;
 
-    onSave({
-      fullName: formName.trim(),
-      email: formEmail.trim(),
-      city: formCity.trim() || 'Kuala Lumpur',
-      phone: formPhone.trim() || undefined,
-      role: formRole,
-      bio: formBio.trim() || undefined,
-      avatarUrl: formAvatar || undefined,
-      verified: true,
-      joinedDate: profile.joinedDate || 'Nov 2026',
-      status: 'active',
-    });
-    setIsEditing(false);
+    setIsSavingProfile(true);
+    setSaveError('');
+    try {
+      await onSave({
+        fullName: formName.trim(),
+        email: formEmail.trim(),
+        city: formCity.trim() || 'Dhaka',
+        phone: formPhone.trim() || undefined,
+        role: formRole,
+        bio: formBio.trim() || undefined,
+        avatarUrl: formAvatar || undefined,
+        verified: Boolean(profile.verified),
+        joinedDate: profile.joinedDate,
+        status: profile.status,
+      });
+      setIsEditing(false);
+    } catch (error: any) {
+      setSaveError(error?.message || 'Your profile could not be saved. Please try again.');
+    } finally {
+      setIsSavingProfile(false);
+    }
   };
 
   const initialLetter =
@@ -426,7 +433,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl text-xs text-slate-700 pt-2">
                   <div className="flex items-center gap-2 p-3 rounded-xl bg-slate-50 border border-slate-100">
                     <MapPin size={15} className="text-[#C72B62]" />
-                    <span>Lives in: <strong className="text-slate-900">{profile.city || 'Kuala Lumpur'}</strong></span>
+                    <span>Lives in: <strong className="text-slate-900">{profile.city || 'Dhaka'}</strong></span>
                   </div>
                   <div className="flex items-center gap-2 p-3 rounded-xl bg-slate-50 border border-slate-100">
                     <Mail size={15} className="text-[#C72B62]" />
@@ -484,9 +491,9 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                     <input
                       type="email"
                       value={formEmail}
-                      onChange={(e) => setFormEmail(e.target.value)}
-                      className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:border-[#C72B62] focus:ring-2 focus:ring-[#C72B62]/20 text-sm"
-                      placeholder="user@qaaga.com"
+                      readOnly
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-300 bg-slate-50 text-slate-600 text-sm cursor-not-allowed"
+                      placeholder="Verified sign-in email"
                       required
                     />
                     <span className="absolute right-3 top-2.5 text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">
@@ -519,7 +526,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                       value={formCity}
                       onChange={(e) => setFormCity(e.target.value)}
                       className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:border-[#C72B62] focus:ring-2 focus:ring-[#C72B62]/20 text-sm"
-                      placeholder="Kuala Lumpur"
+                      placeholder="Dhaka"
                     />
                   </div>
                 </div>
@@ -529,8 +536,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                   <label className="block text-xs font-bold text-slate-700 mb-1.5">
                     Platform Role
                   </label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {(['guest', 'host', 'admin'] as const).map((r) => (
+                  <div className="grid grid-cols-2 gap-2">
+                    {(['guest', 'host'] as const).map((r) => (
                       <button
                         key={r}
                         type="button"
@@ -901,6 +908,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               />
             </div>
 
+            {saveError && <p role="alert" className="text-xs text-rose-600">{saveError}</p>}
             <div className="flex items-center justify-end gap-3 pt-2">
               <button
                 type="button"
@@ -911,10 +919,11 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               </button>
               <button
                 type="button"
-                onClick={() => handleSaveProfile()}
-                className="px-5 py-2 rounded-xl bg-[#C72B62] text-white text-xs font-bold hover:bg-[#ad2253] cursor-pointer"
+                onClick={() => void handleSaveProfile()}
+                disabled={isSavingProfile}
+                className="px-5 py-2 rounded-xl bg-[#C72B62] text-white text-xs font-bold hover:bg-[#ad2253] cursor-pointer disabled:opacity-60 disabled:cursor-wait"
               >
-                Save Profile
+                {isSavingProfile ? 'Saving…' : 'Save Profile'}
               </button>
             </div>
           </div>
