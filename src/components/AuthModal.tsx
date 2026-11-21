@@ -58,6 +58,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   const digitRefs = useRef<(HTMLInputElement | null)[]>([]);
 
+  // Keep the hover highlight directly beneath the pointer.
+  const handlePrimaryButtonMouseMove = (event: React.MouseEvent<HTMLButtonElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    event.currentTarget.style.setProperty('--mouse-x', `${event.clientX - rect.left}px`);
+    event.currentTarget.style.setProperty('--mouse-y', `${event.clientY - rect.top}px`);
+  };
+
   const AVATAR_OPTIONS = [
     'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=160&q=80',
     'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=160&q=80',
@@ -388,6 +395,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <button
               type="submit"
               disabled={loading}
+              onMouseMove={handlePrimaryButtonMouseMove}
               className="qaaga-auth-primary w-full py-3.5 sm:py-4 rounded-xl text-white font-semibold text-base flex items-center justify-center cursor-pointer"
             >
               {loading ? (
@@ -481,6 +489,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               type="button"
               onClick={() => handleVerifyOtp()}
               disabled={loading || otpDigits.some((d) => !d)}
+              onMouseMove={handlePrimaryButtonMouseMove}
               className="qaaga-auth-primary w-full py-3.5 sm:py-4 rounded-xl text-white font-semibold text-base flex items-center justify-center cursor-pointer"
             >
               {loading ? (
@@ -655,6 +664,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <button
               type="submit"
               disabled={loading || !fullNameInput.trim()}
+              onMouseMove={handlePrimaryButtonMouseMove}
               className="qaaga-auth-primary w-full py-3.5 rounded-xl text-white font-semibold text-sm flex items-center justify-center gap-2 cursor-pointer"
             >
               {loading ? (
