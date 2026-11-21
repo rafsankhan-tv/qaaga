@@ -62,7 +62,7 @@ test.describe('QAAGA authentication button pointer highlight', () => {
     const y = bounds!.y + bounds!.height / 2;
     await page.mouse.move(bounds!.x + 12, y);
     await expect.poll(() => button.evaluate((el) => (el as HTMLElement).style.getPropertyValue('--mouse-x'))).toBe('12px');
-    await expect.poll(() => button.evaluate((el) => getComputedStyle(el, '::before').opacity)).toBe('1');
+    await expect.poll(() => button.evaluate((el) => getComputedStyle(el).getPropertyValue('--glow-opacity').trim())).toBe('1');
 
     const leftX = await button.evaluate((el) => getComputedStyle(el).getPropertyValue('--mouse-x').trim());
     await page.mouse.move(bounds!.x + bounds!.width - 12, y, { steps: 12 });
@@ -76,12 +76,10 @@ test.describe('QAAGA authentication button pointer highlight', () => {
     await expect.poll(() => button.evaluate((el) => Number.parseFloat(getComputedStyle(el).getPropertyValue('--mouse-x'))))
       .toBeLessThan(rightX);
 
-    const layer = await button.evaluate((el) => ({
-      zIndex: getComputedStyle(el, '::before').zIndex,
-      backgroundImage: getComputedStyle(el, '::before').backgroundImage,
-    }));
-    expect(layer.zIndex).toBe('0');
-    expect(layer.backgroundImage).toContain('radial-gradient');
+    const layers = await button.evaluate((el) => getComputedStyle(el).backgroundImage);
+    expect(layers).toContain('radial-gradient');
+    expect(layers).toContain('linear-gradient');
+    await expect.poll(() => button.evaluate((el) => getComputedStyle(el).getPropertyValue('--glow-opacity').trim())).toBe('1');
   });
 });
 
