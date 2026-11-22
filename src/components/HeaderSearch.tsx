@@ -108,6 +108,7 @@ interface HeaderSearchProps {
   onChangeCurrency: (c: CurrencyCode) => void;
 
   onOpenHostModal: () => void;
+  onSwitchToHosting?: () => void;
   onOpenTrips: () => void;
   onOpenMessages: () => void;
   onOpenWishlist: () => void;
@@ -163,6 +164,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
   currency,
   onChangeCurrency,
   onOpenHostModal,
+  onSwitchToHosting,
   onOpenTrips,
   onOpenMessages,
   onOpenWishlist,
@@ -506,7 +508,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
               type="button"
               onClick={() => {
                 if (!hasAccount) onOpenAuthModal();
-                else onOpenHostModal();
+                else (onSwitchToHosting || onOpenHostModal)();
               }}
               className="hidden md:inline-flex items-center whitespace-nowrap rounded-full px-3 py-2 text-[14px] sm:text-[15px] font-semibold text-[#222222] hover:bg-[#F7F7F7] transition-colors cursor-pointer"
             >
