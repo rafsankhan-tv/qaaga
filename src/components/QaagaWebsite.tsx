@@ -412,11 +412,37 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
         email,
         city: profileData.city || 'Dhaka',
         verified: Boolean(profileData.verified),
-        role: profileData.role === 'admin' ? 'admin' : profileData.role === 'host' ? 'host' : 'guest',
+        role: session.user.app_metadata?.role === 'admin' || profileData.role === 'admin'
+          ? 'admin'
+          : profileData.role === 'host' ? 'host' : 'guest',
         phone: profileData.phone,
         avatarUrl: profileData.avatarUrl,
         bio: profileData.bio,
       });
+
+      // After a successful sign-in, route the account to its role-specific workspace.
+      // Only redirect from the auth entry pages so normal homepage visits are unaffected.
+      if (typeof window !== 'undefined' && ['/login', '/register'].includes(window.location.pathname)) {
+        let destination = '/my-bookings';
+        if (session.user.app_metadata?.role === 'admin' || profileData.role === 'admin') {
+          destination = '/admin';
+        } else {
+          const [globalRoles, propertyRoles] = await Promise.all([
+            supabase.from('user_role_assignments').select('role')
+              .eq('user_id', session.user.id).eq('is_active', true),
+            supabase.from('property_staff_assignments').select('role')
+              .eq('user_id', session.user.id).eq('is_active', true),
+          ]);
+          const assignedRoles = [
+            ...(globalRoles.data || []).map((item: { role: string }) => item.role),
+            ...(propertyRoles.data || []).map((item: { role: string }) => item.role),
+          ];
+          if (assignedRoles.includes('super_admin')) destination = '/admin';
+          else if (assignedRoles.length > 0) destination = '/staff/dashboard';
+          else if (profileData.role === 'host') destination = '/host/dashboard';
+        }
+        window.location.replace(destination);
+      }
     };
 
     restoreAuthenticatedProfile().catch((error) => {
