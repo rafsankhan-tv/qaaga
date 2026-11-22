@@ -7,14 +7,19 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Bell,
   CalendarCheck2,
+  ChevronRight,
   Heart,
   HelpCircle,
+  Home,
+  Globe,
+  LogOut,
   LayoutDashboard,
   Menu,
   MessageSquare,
   Plus,
   Search,
   Shield,
+  Settings,
   SlidersHorizontal,
   User,
   X,
@@ -110,6 +115,7 @@ interface HeaderSearchProps {
   onOpenHelpModal: () => void;
   onOpenAdminModal: () => void;
   onOpenAuthModal: () => void;
+  onLogout?: () => void | Promise<void>;
 }
 
 export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
@@ -164,6 +170,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
   onOpenHelpModal,
   onOpenAdminModal,
   onOpenAuthModal,
+  onLogout,
 }) => {
   const hasAccount = Boolean(profile.email?.trim());
   const searchRef = useRef<HTMLDivElement | null>(null);
@@ -493,435 +500,117 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
             </div>
           </div>
 
-          {/* Right: "become a host" + Notification Bell + Avatar Menu */}
-          <div
-            ref={rightUtilsRef}
-            className="relative flex items-center justify-end shrink-0 gap-1.5 sm:gap-2.5 md:gap-3 lg:gap-4"
-          >
-            <div className="flex items-center gap-1.5 sm:gap-2.5 md:gap-3.5 lg:gap-4">
-              <button
-                type="button"
-                onClick={onOpenHostModal}
-                className="hidden md:inline-flex items-center text-xs sm:text-[13px] md:text-[15px] text-slate-800 hover:text-slate-950 font-medium px-2 py-1 rounded-full hover:bg-slate-100/80 transition-colors whitespace-nowrap cursor-pointer"
-              >
-                <span>become a host</span>
-              </button>
+          {/* Right: Switch to hosting + separate Profile + Hamburger menu */}
+          <div ref={rightUtilsRef} className="relative flex items-center justify-end shrink-0 gap-2 sm:gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                if (!hasAccount) onOpenAuthModal();
+                else onOpenHostModal();
+              }}
+              className="hidden md:inline-flex items-center whitespace-nowrap rounded-full px-3 py-2 text-[14px] sm:text-[15px] font-semibold text-[#222222] hover:bg-[#F7F7F7] transition-colors cursor-pointer"
+            >
+              {hasAccount ? 'Switch to hosting' : 'Become a host'}
+            </button>
 
-              {/* Notification Bell Icon + #C72B62 Combined Total Count */}
-              <button
-                type="button"
-                aria-label="Notifications"
-                onClick={onToggleNotif}
-                className="relative min-w-[34px] min-h-[34px] sm:min-w-[40px] sm:min-h-[40px] flex items-center justify-center rounded-full hover:bg-slate-100 transition-colors cursor-pointer"
-              >
-                <Bell
-                  size={21}
-                  className="fill-[#949494] text-[#767676] hover:fill-[#767676] transition-colors"
-                />
-                {(totalAlertsCount > 0 || notifications.length > 0) && (
-                  <span className="absolute top-0.5 right-0.5 text-[12px] sm:text-[14px] font-bold text-[#C72B62] leading-none tabular-nums">
-                    {totalAlertsCount > 0 ? totalAlertsCount : notifications.length}
-                  </span>
-                )}
-              </button>
+            {/* Profile photo is an independent action, not part of the hamburger button */}
+            <button
+              type="button"
+              aria-label="Open profile"
+              onClick={() => {
+                onCloseMenus();
+                if (hasAccount) onOpenProfileModal();
+                else onOpenAuthModal();
+              }}
+              className="w-10 h-10 sm:w-12 sm:h-12 rounded-full overflow-hidden border border-[#DDDDDD] bg-[#F7F7F7] flex items-center justify-center hover:shadow-md transition-all cursor-pointer shrink-0"
+            >
+              {hasAccount && profile.avatarUrl ? (
+                <img src={profile.avatarUrl} alt={profile.fullName || 'Profile'} className="w-full h-full object-cover" />
+              ) : hasAccount ? (
+                <span className="text-base font-semibold text-[#222222]">{profile.fullName?.charAt(0)?.toUpperCase() || 'U'}</span>
+              ) : (
+                <User size={22} className="text-[#222222]" />
+              )}
+            </button>
 
-              {/* User Profile / Account Menu Pill (Airbnb style: hamburger + avatar, opens Account & Admin menu) */}
-              <button
-                type="button"
-                aria-label={hasAccount ? `${profile.fullName}'s account menu` : 'Main account menu'}
-                onClick={onToggleAccount}
-                className="flex items-center gap-2 pl-2.5 sm:pl-3 pr-1 sm:pr-1.5 py-1 rounded-full border border-slate-300 hover:border-slate-400 hover:shadow-md transition-all cursor-pointer bg-white active:scale-95 shrink-0"
-              >
-                <Menu size={16} className="text-slate-700 shrink-0 ml-0.5" />
-                <div
-                  className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full border border-slate-300 text-white flex items-center justify-center shrink-0 relative ${
-                    hasAccount ? 'bg-[#C72B62]' : 'bg-[#717171]'
-                  }`}
-                >
-                  {profile.avatarUrl ? (
-                    <img
-                      src={profile.avatarUrl}
-                      alt={profile.fullName}
-                      className="w-full h-full rounded-full object-cover"
-                    />
-                  ) : hasAccount ? (
-                    <span className="text-xs sm:text-sm font-bold text-white uppercase select-none">
-                      {profile.fullName.charAt(0) || 'U'}
-                    </span>
-                  ) : (
-                    <User size={16} className="fill-white text-white" />
-                  )}
-                  {hasAccount && (
-                    <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-emerald-500 rounded-full border-2 border-white" />
-                  )}
-                </div>
-              </button>
-            </div>
+            {/* Independent three-line menu */}
+            <button
+              type="button"
+              aria-label="Open main menu"
+              aria-expanded={isAccountOpen}
+              onClick={() => {
+                setIsNotifOpen(false);
+                onToggleAccount();
+              }}
+              className="w-10 h-10 sm:w-12 sm:h-12 rounded-full border border-[#DDDDDD] bg-white hover:shadow-md hover:border-[#B0B0B0] flex items-center justify-center transition-all cursor-pointer shrink-0"
+            >
+              <Menu size={21} strokeWidth={2} className="text-[#222222]" />
+            </button>
 
-            {/* Notifications Dropdown Popover with Messages, Bookings & Wishlist Access */}
-            <AnimatePresence>
-              {isNotifOpen && (
-                <motion.div
-                  initial={{ opacity: 0, y: 8, scale: 0.96 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 6, scale: 0.96 }}
-                  transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-                  className="absolute right-0 top-11 sm:top-12 w-80 sm:w-96 bg-white rounded-2xl shadow-[0_14px_40px_rgba(15,23,42,0.18)] border border-slate-200 py-3 z-50 text-left"
-                >
-                {/* Header */}
-                <div className="px-4 pb-2.5 border-b border-slate-100 flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-bold text-slate-900">Notifications & Activity</p>
-                    <p className="text-[11px] text-slate-500">
-                      {totalAlertsCount > 0 ? `${totalAlertsCount} new updates & alerts` : 'All caught up'}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {unreadNotifCount > 0 && (
-                      <button
-                        type="button"
-                        onClick={onMarkAllNotifsRead}
-                        className="text-xs font-semibold text-[#C72B62] hover:underline cursor-pointer"
-                      >
-                        Mark all read
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      aria-label="Close notifications"
-                      onClick={onCloseMenus}
-                      className="w-7 h-7 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-500 cursor-pointer"
-                    >
-                      <X size={15} />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Quick Access: Messages, Bookings, Wishlist */}
-                <div className="p-2 border-b border-slate-100 bg-slate-50/70">
-                  <div className="flex items-center justify-between px-2 pb-1.5">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                      Direct Access
-                    </p>
-                    <span className="text-[10px] text-slate-400">Activity Hub</span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {/* Messages */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onCloseMenus();
-                        onOpenMessages();
-                      }}
-                      className="group flex flex-col items-center justify-center p-2.5 rounded-xl bg-white border border-slate-200/90 hover:border-[#C72B62]/50 hover:bg-[#C72B62]/[0.04] transition-all cursor-pointer text-center relative shadow-2xs hover:shadow-xs"
-                    >
-                      <div className="relative mb-1">
-                        <MessageSquare size={17} className="text-[#C72B62]" />
-                        {unreadThreadsCount > 0 && (
-                          <span className="absolute -top-1 -right-2 w-2 h-2 bg-[#C72B62] rounded-full animate-pulse" />
-                        )}
-                      </div>
-                      <span className="text-[11px] font-semibold text-slate-800 group-hover:text-[#C72B62] truncate w-full">
-                        Messages
-                      </span>
-                      <span className="text-[10px] font-medium text-slate-500">
-                        {unreadThreadsCount > 0 ? `${unreadThreadsCount} new` : `${threadsCount} chats`}
-                      </span>
-                    </button>
-
-                    {/* Bookings */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onCloseMenus();
-                        onOpenTrips();
-                      }}
-                      className="group flex flex-col items-center justify-center p-2.5 rounded-xl bg-white border border-slate-200/90 hover:border-[#C72B62]/50 hover:bg-[#C72B62]/[0.04] transition-all cursor-pointer text-center relative shadow-2xs hover:shadow-xs"
-                    >
-                      <div className="relative mb-1">
-                        <CalendarCheck2 size={17} className="text-[#C72B62]" />
-                      </div>
-                      <span className="text-[11px] font-semibold text-slate-800 group-hover:text-[#C72B62] truncate w-full">
-                        Bookings
-                      </span>
-                      <span className="text-[10px] font-medium text-slate-500">
-                        {bookingsCount} {bookingsCount === 1 ? 'trip' : 'trips'}
-                      </span>
-                    </button>
-
-                    {/* Wishlist */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onCloseMenus();
-                        onOpenWishlist();
-                      }}
-                      className="group flex flex-col items-center justify-center p-2.5 rounded-xl bg-white border border-slate-200/90 hover:border-[#C72B62]/50 hover:bg-[#C72B62]/[0.04] transition-all cursor-pointer text-center relative shadow-2xs hover:shadow-xs"
-                    >
-                      <div className="relative mb-1">
-                        <Heart size={17} className="text-[#C72B62]" />
-                      </div>
-                      <span className="text-[11px] font-semibold text-slate-800 group-hover:text-[#C72B62] truncate w-full">
-                        Wishlist
-                      </span>
-                      <span className="text-[10px] font-medium text-slate-500">
-                        {wishlistCount} saved
-                      </span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Notifications & Responses Feed */}
-                <div className="px-3 pt-2.5 pb-1 flex items-center justify-between">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                    Recent Alerts & Responses
-                  </p>
-                  <span className="text-[10px] font-semibold bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-md">
-                    {notifications.length}
-                  </span>
-                </div>
-
-                <div className="max-h-72 overflow-y-auto divide-y divide-slate-100">
-                  {notifications.length === 0 ? (
-                    <div className="py-8 px-4 text-center">
-                      <p className="text-xs text-slate-500 font-medium">No recent alerts</p>
-                      <p className="text-[11px] text-slate-400 mt-0.5">
-                        Messages and booking updates will appear here
-                      </p>
-                    </div>
-                  ) : (
-                    notifications.map((n) => (
-                      <button
-                        key={n.id}
-                        type="button"
-                        onClick={() => onClickNotification(n)}
-                        className={`w-full px-4 py-3 text-left hover:bg-slate-50 transition-colors cursor-pointer flex items-start gap-3 ${
-                          n.unread ? 'bg-[#C72B62]/[0.04]' : ''
-                        }`}
-                      >
-                        <div
-                          className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
-                            n.actionType === 'messages'
-                              ? 'bg-pink-100 text-[#C72B62]'
-                              : n.actionType === 'trips'
-                              ? 'bg-emerald-100 text-emerald-700'
-                              : 'bg-rose-100 text-[#C72B62]'
-                          }`}
-                        >
-                          {n.actionType === 'messages' ? (
-                            <MessageSquare size={13} />
-                          ) : n.actionType === 'trips' ? (
-                            <CalendarCheck2 size={13} />
-                          ) : (
-                            <Heart size={13} />
-                          )}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="text-xs font-bold text-slate-900 truncate">
-                              {n.title}
-                            </p>
-                            <span className="text-[10px] text-slate-400 shrink-0">
-                              {n.time}
-                            </span>
-                          </div>
-                          <p className="text-xs text-slate-600 mt-0.5 line-clamp-2">
-                            {n.body}
-                          </p>
-                        </div>
-                        {n.unread && (
-                          <span className="w-2 h-2 rounded-full bg-[#C72B62] shrink-0 mt-2" />
-                        )}
-                      </button>
-                    ))
-                  )}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-            {/* Account / Profile Dropdown Menu */}
             <AnimatePresence>
               {isAccountOpen && (
                 <motion.div
-                  initial={{ opacity: 0, y: 8, scale: 0.96 }}
+                  initial={{ opacity: 0, y: 8, scale: 0.98 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 6, scale: 0.96 }}
-                  transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-                  className="absolute right-0 top-11 sm:top-12 w-72 bg-white rounded-2xl shadow-[0_14px_40px_rgba(15,23,42,0.16)] border border-slate-200 py-2 z-50 text-left"
+                  exit={{ opacity: 0, y: 6, scale: 0.98 }}
+                  transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+                  className="absolute right-0 top-[calc(100%+10px)] w-[min(340px,calc(100vw-24px))] max-h-[min(780px,calc(100vh-110px))] overflow-y-auto bg-white rounded-2xl shadow-[0_8px_28px_rgba(0,0,0,0.18)] border border-[#EBEBEB] py-2 z-[80] text-left"
                 >
-                {/* Primary Log In or Sign Up Button */}
-                <div className="p-1.5 border-b border-slate-100">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onCloseMenus();
-                      onOpenAuthModal();
-                    }}
-                    className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-[#C72B62]/[0.08] hover:bg-[#C72B62]/[0.15] text-[#C72B62] font-semibold cursor-pointer text-left transition-colors"
-                  >
-                    <span className="inline-flex items-center gap-2">
-                      <User size={15} />
-                      <span>{hasAccount ? 'Switch account' : 'Log in or sign up'}</span>
-                    </span>
-                    <span className="text-[10px] bg-[#C72B62] text-white px-2 py-0.5 rounded-full font-bold">
-                      OTP
-                    </span>
-                  </button>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    onCloseMenus();
-                    if (hasAccount) onOpenProfileModal();
-                    else onOpenAuthModal();
-                  }}
-                  className="w-full px-4 py-2.5 border-b border-slate-100 text-left hover:bg-slate-50 transition-colors cursor-pointer"
-                >
-                  <p className="text-xs font-bold text-slate-900 truncate">{hasAccount ? profile.fullName : 'Guest User'}</p>
-                  <p className="text-[11px] text-slate-500 truncate">
-                    {hasAccount ? `${profile.email} · Edit profile` : 'Sign in to edit profile'}
-                  </p>
-                </button>
-
-                <div className="p-1.5 space-y-0.5 text-[13px] text-slate-700">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onCloseMenus();
-                      onOpenMessages();
-                    }}
-                    className="w-full flex items-center justify-between px-3 py-2 rounded-xl hover:bg-slate-50 font-medium cursor-pointer"
-                  >
-                    <span>Messages</span>
-                    <span className="text-xs font-bold text-[#C72B62] tabular-nums">
-                      {threadsCount}
-                    </span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onCloseMenus();
-                      onOpenTrips();
-                    }}
-                    className="w-full flex items-center justify-between px-3 py-2 rounded-xl hover:bg-slate-50 font-medium cursor-pointer"
-                  >
-                    <span>Trips & Reservations</span>
-                    <span className="text-xs font-bold text-[#C72B62] tabular-nums">
-                      {bookingsCount}
-                    </span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onCloseMenus();
-                      onOpenWishlist();
-                    }}
-                    className="w-full flex items-center justify-between px-3 py-2 rounded-xl hover:bg-slate-50 font-medium cursor-pointer"
-                  >
-                    <span>Wishlist</span>
-                    <span className="text-xs font-semibold text-slate-500 tabular-nums">
-                      {wishlistCount}
-                    </span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onCloseMenus();
-                      onOpenHostModal();
-                    }}
-                    className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-[#C72B62]/[0.06] hover:bg-[#C72B62]/[0.12] text-[#C72B62] font-semibold cursor-pointer"
-                  >
-                    <span>Become a host</span>
-                    <Plus size={15} strokeWidth={2.4} />
-                  </button>
-
-                  <div className="pt-1 mt-1 border-t border-slate-100 space-y-0.5">
-                    <Link
-                      href="/user/dashboard"
-                      prefetch={true}
-                      onClick={onCloseMenus}
-                      className="w-full flex items-center justify-between px-3 py-2 rounded-xl hover:bg-slate-50 font-medium text-slate-700"
-                    >
-                      <span className="inline-flex items-center gap-2">
-                        <LayoutDashboard size={14} className="text-[#C72B62]" />
-                        <span>Customer Dashboard</span>
-                      </span>
-                    </Link>
-                    <Link
-                      href="/host/dashboard"
-                      prefetch={true}
-                      onClick={onCloseMenus}
-                      className="w-full flex items-center justify-between px-3 py-2 rounded-xl hover:bg-slate-50 font-medium text-slate-700"
-                    >
-                      <span className="inline-flex items-center gap-2">
-                        <LayoutDashboard size={14} className="text-slate-600" />
-                        <span>Host Dashboard</span>
-                      </span>
-                    </Link>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onCloseMenus();
-                      onOpenAdminModal();
-                    }}
-                    className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold cursor-pointer mt-1"
-                  >
-                    <span className="inline-flex items-center gap-2">
-                      <Shield size={14} />
-                      <span>Admin Panel</span>
-                    </span>
-                    <span className="text-[10px] font-medium text-white/80">
-                      Logo & Site
-                    </span>
-                  </button>
-                </div>
-
-                {/* Currency Switcher */}
-                <div className="px-3.5 py-2.5 border-t border-slate-100">
-                  <p className="text-[11px] font-semibold text-slate-400 mb-1.5">
-                    Display currency
-                  </p>
-                  <div className="grid grid-cols-4 gap-1 bg-slate-100 p-1 rounded-xl">
-                    {(['USD', 'MYR', 'EUR', 'BDT'] as CurrencyCode[]).map((code) => (
-                      <button
-                        key={code}
-                        type="button"
-                        onClick={() => onChangeCurrency(code)}
-                        className={`py-1 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer ${
-                          currency === code
-                            ? 'bg-white text-[#C72B62] shadow-2xs'
-                            : 'text-slate-600 hover:text-slate-900'
-                        }`}
-                      >
-                        {code}
+                  <div className="px-4 py-2 border-b border-[#EBEBEB]">
+                    {hasAccount ? (
+                      <button type="button" onClick={() => { onCloseMenus(); onOpenProfileModal(); }} className="w-full text-left py-1 cursor-pointer">
+                        <p className="text-[15px] font-semibold text-[#222222] truncate">{profile.fullName}</p>
+                        <p className="text-[13px] text-[#717171] truncate">{profile.email}</p>
                       </button>
-                    ))}
+                    ) : (
+                      <button type="button" onClick={() => { onCloseMenus(); onOpenAuthModal(); }} className="w-full text-left py-2 cursor-pointer">
+                        <p className="text-[15px] font-semibold text-[#222222]">Log in or sign up</p>
+                        <p className="text-[13px] text-[#717171]">Access your QAAGA account</p>
+                      </button>
+                    )}
                   </div>
-                </div>
 
-                <div className="p-1.5 border-t border-slate-100">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onCloseMenus();
-                      onOpenHelpModal();
-                    }}
-                    className="w-full flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-slate-50 text-xs font-medium text-slate-700 cursor-pointer"
-                  >
-                    <HelpCircle size={14} className="text-[#C72B62]" />
-                    <span>Help Center & Guest Protection</span>
-                  </button>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+                  <div className="py-2 border-b border-[#EBEBEB]">
+                    <button type="button" onClick={() => { onCloseMenus(); onOpenWishlist(); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-[14px] font-semibold text-[#222222] hover:bg-[#F7F7F7] cursor-pointer"><Heart size={19}/>Wishlists</button>
+                    <button type="button" onClick={() => { onCloseMenus(); onOpenTrips(); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-[14px] font-semibold text-[#222222] hover:bg-[#F7F7F7] cursor-pointer"><CalendarCheck2 size={19}/>Trips</button>
+                    <button type="button" onClick={() => { onCloseMenus(); onOpenMessages(); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-[14px] font-semibold text-[#222222] hover:bg-[#F7F7F7] cursor-pointer"><MessageSquare size={19}/>Messages{unreadThreadsCount > 0 && <span className="ml-auto text-xs text-[#C72B62]">{unreadThreadsCount} new</span>}</button>
+                    <button type="button" onClick={() => { onCloseMenus(); if (hasAccount) onOpenProfileModal(); else onOpenAuthModal(); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-[14px] font-semibold text-[#222222] hover:bg-[#F7F7F7] cursor-pointer"><User size={19}/>Profile</button>
+                  </div>
+
+                  <div className="py-2 border-b border-[#EBEBEB]">
+                    <button type="button" onClick={() => { onCloseMenus(); onToggleNotif(); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-[14px] text-[#222222] hover:bg-[#F7F7F7] cursor-pointer"><Bell size={19}/>Notifications{totalAlertsCount > 0 && <span className="ml-auto text-xs font-semibold text-[#C72B62]">{totalAlertsCount}</span>}</button>
+                    <button type="button" onClick={() => { onCloseMenus(); if (hasAccount) onOpenProfileModal(); else onOpenAuthModal(); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-[14px] text-[#222222] hover:bg-[#F7F7F7] cursor-pointer"><Settings size={19}/>Account settings</button>
+                    <div className="px-4 py-2.5">
+                      <div className="flex items-center gap-3 mb-2 text-[14px] text-[#222222]"><Globe size={19}/>Languages & currency</div>
+                      <div className="grid grid-cols-4 gap-1 rounded-xl bg-[#F7F7F7] p-1">
+                        {(['USD', 'MYR', 'EUR', 'BDT'] as CurrencyCode[]).map((code) => (
+                          <button key={code} type="button" onClick={() => onChangeCurrency(code)} className={`rounded-lg py-1.5 text-[12px] font-semibold cursor-pointer ${currency === code ? 'bg-white text-[#C72B62] shadow-sm' : 'text-[#717171] hover:text-[#222222]'}`}>{code}</button>
+                        ))}
+                      </div>
+                    </div>
+                    <button type="button" onClick={() => { onCloseMenus(); onOpenHelpModal(); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-[14px] text-[#222222] hover:bg-[#F7F7F7] cursor-pointer"><HelpCircle size={19}/>Help Center</button>
+                  </div>
+
+                  <div className="py-2 border-b border-[#EBEBEB]">
+                    <button type="button" onClick={() => { onCloseMenus(); if (hasAccount) onOpenHostModal(); else onOpenAuthModal(); }} className="w-full flex items-center justify-between gap-3 px-4 py-2.5 text-left hover:bg-[#F7F7F7] cursor-pointer">
+                      <span><span className="block text-[14px] font-semibold text-[#222222]">Become a host</span><span className="block text-[12px] text-[#717171]">It’s easy to start hosting and earn extra income.</span></span>
+                      <Home size={24} className="text-[#717171] shrink-0"/>
+                    </button>
+                    <button type="button" onClick={() => { onCloseMenus(); onOpenHelpModal(); }} className="w-full px-4 py-2.5 text-left text-[14px] text-[#222222] hover:bg-[#F7F7F7] cursor-pointer">Refer a Host</button>
+                    <button type="button" onClick={() => { onCloseMenus(); onOpenHelpModal(); }} className="w-full px-4 py-2.5 text-left text-[14px] text-[#222222] hover:bg-[#F7F7F7] cursor-pointer">Find a co-host</button>
+                    <button type="button" onClick={() => { onCloseMenus(); onOpenHelpModal(); }} className="w-full px-4 py-2.5 text-left text-[14px] text-[#222222] hover:bg-[#F7F7F7] cursor-pointer">Gift cards</button>
+                  </div>
+
+                  <div className="py-1">
+                    {hasAccount ? (
+                      <button type="button" onClick={async () => { onCloseMenus(); await onLogout?.(); }} className="w-full flex items-center gap-3 px-4 py-3 text-[14px] text-[#222222] hover:bg-[#F7F7F7] cursor-pointer"><LogOut size={19}/>Log out</button>
+                    ) : (
+                      <button type="button" onClick={() => { onCloseMenus(); onOpenAuthModal(); }} className="w-full flex items-center gap-3 px-4 py-3 text-[14px] text-[#222222] hover:bg-[#F7F7F7] cursor-pointer"><User size={19}/>Log in</button>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </header>
 
