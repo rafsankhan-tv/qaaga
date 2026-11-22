@@ -1029,7 +1029,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
           {/* DESKTOP ONLY (hidden md:flex): Centered 3-Segment Search Pill + Adjacent '+' Button */}
           <div className="hidden md:flex items-center justify-center gap-2 sm:gap-3.5 w-full">
             <div
-              className="w-full rounded-full bg-white border border-slate-300/90 shadow-[0_3px_14px_rgba(15,23,42,0.05)] flex items-center max-w-[850px] min-h-[58px] sm:min-h-[66px] pl-4 sm:pl-7 pr-1.5 sm:pr-2.5 py-1.5"
+              className="w-full rounded-full bg-white border border-slate-300/90 shadow-[0_3px_14px_rgba(15,23,42,0.05)] flex items-center max-w-[1110px] min-h-[58px] sm:min-h-[66px] pl-4 sm:pl-7 pr-1.5 sm:pr-2.5 py-1.5"
             >
             {/* Segment 1: Where */}
             <div
@@ -1221,7 +1221,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 8, scale: 0.98 }}
                 transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-                className={`hidden md:block absolute left-0 right-0 mx-auto md:left-1/4 md:-translate-x-1/4 md:mx-0 w-full max-w-[480px] bg-white rounded-3xl shadow-[0_16px_48px_rgba(15,23,42,0.16)] border border-slate-200 p-5 z-40 text-left ${
+                className={`hidden md:block absolute left-0 right-0 mx-auto md:left-0 md:translate-x-0 md:mx-0 w-full max-w-[554px] bg-white rounded-[32px] shadow-[0_12px_40px_rgba(0,0,0,0.16)] border border-[#EBEBEB] p-6 z-40 text-left ${
                   shouldCollapse ? 'top-[50px] sm:top-[56px]' : 'top-[66px] sm:top-[74px]'
                 }`}
               >
@@ -1247,7 +1247,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 8, scale: 0.98 }}
                 transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-                className={`hidden md:block absolute left-0 right-0 mx-auto md:left-1/2 md:-translate-x-1/2 md:mx-0 w-full max-w-[760px] bg-white rounded-3xl shadow-[0_16px_48px_rgba(15,23,42,0.16)] border border-slate-200 p-6 z-40 text-left ${
+                className={`hidden md:block absolute left-0 right-0 mx-auto md:left-1/2 md:-translate-x-1/2 md:mx-0 w-full max-w-[1110px] bg-white rounded-[32px] shadow-[0_12px_40px_rgba(0,0,0,0.16)] border border-[#EBEBEB] p-7 z-40 text-left ${
                   shouldCollapse ? 'top-[50px] sm:top-[56px]' : 'top-[66px] sm:top-[74px]'
                 }`}
               >
@@ -1291,7 +1291,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 8, scale: 0.98 }}
                 transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-                className={`hidden md:block absolute left-0 right-0 mx-auto md:left-auto md:mx-0 md:right-16 w-full max-w-[400px] bg-white rounded-3xl shadow-[0_16px_48px_rgba(15,23,42,0.16)] border border-slate-200 p-5 z-40 text-left ${
+                className={`hidden md:block absolute left-0 right-0 mx-auto md:left-auto md:mx-0 md:right-0 w-full max-w-[552px] bg-white rounded-[32px] shadow-[0_12px_40px_rgba(0,0,0,0.16)] border border-[#EBEBEB] p-7 z-40 text-left ${
                   shouldCollapse ? 'top-[50px] sm:top-[56px]' : 'top-[66px] sm:top-[74px]'
                 }`}
               >

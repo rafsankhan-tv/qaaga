@@ -1,16 +1,9 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, X, Calendar as CalendarIcon, Sparkles } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
-export interface CalendarRange {
-  checkIn: string | null; // e.g. "2026-11-14"
-  checkOut: string | null; // e.g. "2026-11-18"
-  display: string; // e.g. "Nov 14 – 18"
-  nights: number;
-}
-
-interface SearchCalendarProps {
+interface Props {
   checkInDate: string | null;
   checkOutDate: string | null;
   onSelectRange: (checkIn: string | null, checkOut: string | null, display: string, nights: number) => void;
@@ -20,297 +13,76 @@ interface SearchCalendarProps {
   isMobileSheet?: boolean;
 }
 
-// Preset options for fast selection
-interface DatePreset {
-  id: string;
-  label: string;
-  tag: string;
-  checkIn: string;
-  checkOut: string;
-  nights: number;
-  display: string;
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const WEEK = ['S','M','T','W','T','F','S'];
+
+function dhakaToday() {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dhaka', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
+  const get = (type: string) => Number(parts.find((part) => part.type === type)?.value);
+  return new Date(get('year'), get('month') - 1, get('day'));
+}
+function iso(date: Date) { return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`; }
+function parse(value: string) { const [year, month, day] = value.split('-').map(Number); return new Date(year, month - 1, day); }
+function nightsBetween(start: string, end: string) { return Math.max(1, Math.round((parse(end).getTime() - parse(start).getTime()) / 86400000)); }
+function displayRange(start: string, end: string) {
+  const a = parse(start), b = parse(end);
+  return a.getMonth() === b.getMonth() ? `${SHORT[a.getMonth()]} ${a.getDate()} – ${b.getDate()}` : `${SHORT[a.getMonth()]} ${a.getDate()} – ${SHORT[b.getMonth()]} ${b.getDate()}`;
 }
 
-function getDhakaToday(): Date {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Dhaka',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(new Date());
-  const part = (type: string) => Number(parts.find((item) => item.type === type)?.value);
-  return new Date(part('year'), part('month') - 1, part('day'));
-}
+export const SearchCalendar: React.FC<Props> = ({ checkInDate, checkOutDate, onSelectRange, onClear, onNext, isMobileSheet = false }) => {
+  const [monthOffset, setMonthOffset] = useState(0);
+  const [mode, setMode] = useState<'dates' | 'flexible'>('dates');
+  const [flexibility, setFlexibility] = useState('Exact dates');
+  const today = useMemo(() => dhakaToday(), []);
+  const left = useMemo(() => new Date(today.getFullYear(), today.getMonth() + monthOffset, 1), [today, monthOffset]);
+  const right = useMemo(() => new Date(today.getFullYear(), today.getMonth() + monthOffset + 1, 1), [today, monthOffset]);
+  const todayIso = iso(today);
 
-function addDays(date: Date, days: number): Date {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return next;
-}
-
-function toLocalIso(date: Date): string {
-  return formatIso(date.getFullYear(), date.getMonth(), date.getDate());
-}
-
-function makePreset(id: string, label: string, start: Date, nights: number): DatePreset {
-  const end = addDays(start, nights);
-  const checkIn = toLocalIso(start);
-  const checkOut = toLocalIso(end);
-  const range = formatDisplayRange(checkIn, checkOut);
-
-  return {
-    id,
-    label,
-    tag: range.display + ' · ' + range.nights + ' nights',
-    checkIn,
-    checkOut,
-    nights: range.nights,
-    display: range.display,
-  };
-}
-
-function buildDatePresets(): DatePreset[] {
-  const today = getDhakaToday();
-  const daysUntilFriday = (5 - today.getDay() + 7) % 7 || 7;
-  const thisWeekend = addDays(today, daysUntilFriday);
-
-  return [
-    makePreset('weekend', 'This weekend', thisWeekend, 2),
-    makePreset('next-week', 'Next weekend', addDays(thisWeekend, 7), 3),
-    makePreset('5-nights', '5 nights stay', addDays(today, 14), 5),
-    makePreset('1-week', '1 week getaway', addDays(today, 21), 7),
-  ];
-}
-
-const MONTH_NAMES = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-];
-
-const SHORT_MONTHS = [
-  'Jan',
-  'Feb',
-  'Mar',
-  'Apr',
-  'May',
-  'Jun',
-  'Jul',
-  'Aug',
-  'Sep',
-  'Oct',
-  'Nov',
-  'Dec',
-];
-
-const DAY_NAMES = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
-
-// Use Bangladesh-local dates so booking availability never relies on a stale hard-coded day.
-const TODAY_STR = toLocalIso(getDhakaToday());
-
-function formatIso(year: number, monthZeroIdx: number, day: number): string {
-  const m = String(monthZeroIdx + 1).padStart(2, '0');
-  const d = String(day).padStart(2, '0');
-  return `${year}-${m}-${d}`;
-}
-
-function parseIso(isoStr: string) {
-  const [y, m, d] = isoStr.split('-').map(Number);
-  return { year: y, month: m - 1, day: d };
-}
-
-function formatDisplayRange(inIso: string, outIso: string): { display: string; nights: number } {
-  const start = parseIso(inIso);
-  const end = parseIso(outIso);
-
-  const startDate = new Date(start.year, start.month, start.day);
-  const endDate = new Date(end.year, end.month, end.day);
-  const diffTime = endDate.getTime() - startDate.getTime();
-  const nights = Math.max(1, Math.round(diffTime / (1000 * 60 * 60 * 24)));
-
-  let display = '';
-  if (start.month === end.month) {
-    display = `${SHORT_MONTHS[start.month]} ${start.day} – ${end.day}`;
-  } else {
-    display = `${SHORT_MONTHS[start.month]} ${start.day} – ${SHORT_MONTHS[end.month]} ${end.day}`;
-  }
-
-  return { display, nights };
-}
-
-const PRESETS: DatePreset[] = buildDatePresets();
-
-export const SearchCalendar: React.FC<SearchCalendarProps> = ({
-  checkInDate,
-  checkOutDate,
-  onSelectRange,
-  onClear,
-  onClose,
-  onNext,
-  isMobileSheet = false,
-}) => {
-  // Month offset is relative to the current Bangladesh-local month.
-  const [monthOffset, setMonthOffset] = useState<number>(0);
-  const [hoveredDate, setHoveredDate] = useState<string | null>(null);
-
-  // Determine current viewing months
-  const leftMonthData = useMemo(() => {
-    const today = getDhakaToday();
-    const base = new Date(today.getFullYear(), today.getMonth(), 1);
-    const target = new Date(base.getFullYear(), base.getMonth() + monthOffset, 1);
-    const year = target.getFullYear();
-    const month = target.getMonth();
-    const monthName = MONTH_NAMES[month];
-    const firstDay = target.getDay(); // 0 is Sunday
-    const totalDays = new Date(year, month + 1, 0).getDate();
-    return { year, month, monthName, firstDay, totalDays };
-  }, [monthOffset]);
-
-  const rightMonthData = useMemo(() => {
-    const today = getDhakaToday();
-    const base = new Date(today.getFullYear(), today.getMonth(), 1);
-    const target = new Date(base.getFullYear(), base.getMonth() + monthOffset + 1, 1);
-    const year = target.getFullYear();
-    const month = target.getMonth();
-    const monthName = MONTH_NAMES[month];
-    const firstDay = target.getDay();
-    const totalDays = new Date(year, month + 1, 0).getDate();
-    return { year, month, monthName, firstDay, totalDays };
-  }, [monthOffset]);
-
-  const handlePrevMonth = () => {
-    if (monthOffset > 0) {
-      setMonthOffset((prev) => prev - 1);
-    }
-  };
-
-  const handleNextMonth = () => {
-    setMonthOffset((prev) => prev + 1);
-  };
-
-  const handleDayClick = (isoString: string) => {
-    // If no check-in, or already have both check-in and check-out: start fresh with check-in
-    if (!checkInDate || (checkInDate && checkOutDate)) {
-      const { display, nights } = formatDisplayRange(isoString, isoString);
-      onSelectRange(isoString, null, `${SHORT_MONTHS[parseIso(isoString).month]} ${parseIso(isoString).day}`, 1);
+  const chooseDay = (day: number, month: Date) => {
+    const chosen = iso(new Date(month.getFullYear(), month.getMonth(), day));
+    if (!checkInDate || checkOutDate) {
+      onSelectRange(chosen, null, `${SHORT[month.getMonth()]} ${day}`, 1);
       return;
     }
-
-    // If checkIn exists and no checkOut:
-    if (checkInDate && !checkOutDate) {
-      if (isoString > checkInDate) {
-        // Valid checkout after checkin
-        const { display, nights } = formatDisplayRange(checkInDate, isoString);
-        onSelectRange(checkInDate, isoString, display, nights);
-        if (onNext) {
-          onNext();
-        }
-      } else if (isoString < checkInDate) {
-        // Prevent checkout earlier than check-in: reset check-in to this earlier date
-        const parsed = parseIso(isoString);
-        onSelectRange(isoString, null, `${SHORT_MONTHS[parsed.month]} ${parsed.day}`, 1);
-      } else {
-        // Clicked same day: toggle or keep check-in
-        onSelectRange(isoString, null, `${SHORT_MONTHS[parseIso(isoString).month]} ${parseIso(isoString).day}`, 1);
-      }
+    if (chosen > checkInDate) {
+      const count = nightsBetween(checkInDate, chosen);
+      onSelectRange(checkInDate, chosen, displayRange(checkInDate, chosen), count);
+      onNext?.();
+    } else {
+      onSelectRange(chosen, null, `${SHORT[month.getMonth()]} ${day}`, 1);
     }
   };
 
-  const handleApplyPreset = (preset: DatePreset) => {
-    onSelectRange(preset.checkIn, preset.checkOut, preset.display, preset.nights);
-    if (onNext) {
-      onNext();
-    }
-  };
-
-  const renderMonthGrid = (data: typeof leftMonthData) => {
-    const { year, month, firstDay, totalDays } = data;
-    const daysArray = Array.from({ length: totalDays }, (_, i) => i + 1);
-    const blanksArray = Array.from({ length: firstDay }, (_, i) => i);
-
+  const renderMonth = (month: Date) => {
+    const year = month.getFullYear(), monthIndex = month.getMonth();
+    const firstDay = new Date(year, monthIndex, 1).getDay();
+    const count = new Date(year, monthIndex + 1, 0).getDate();
+    const cells = Array.from({ length: firstDay + count }, (_, index) => index < firstDay ? null : index - firstDay + 1);
+    while (cells.length % 7) cells.push(null);
     return (
-      <div className="w-full">
-        <div className="grid grid-cols-7 text-center text-[11px] font-semibold text-slate-400 mb-2">
-          {DAY_NAMES.map((d) => (
-            <span key={d}>{d}</span>
-          ))}
+      <div className="min-w-0">
+        <h3 className="mb-5 text-center text-[20px] font-semibold tracking-[-0.02em] text-[#222222]">{MONTHS[monthIndex]} {year}</h3>
+        <div className="mb-3 grid grid-cols-7">
+          {WEEK.map((day, index) => <span key={`${day}-${index}`} className="flex h-8 items-center justify-center text-[13px] font-semibold text-[#717171]">{day}</span>)}
         </div>
-
-        <div className="grid grid-cols-7 gap-y-1 text-center tabular-nums">
-          {blanksArray.map((b) => (
-            <div key={`blank-${b}`} className="h-9 w-full" aria-hidden="true" />
-          ))}
-
-          {daysArray.map((day) => {
-            const dateStr = formatIso(year, month, day);
-            const isPast = dateStr < TODAY_STR;
-            const isToday = dateStr === TODAY_STR;
-            const isCheckIn = checkInDate === dateStr;
-            const isCheckOut = checkOutDate === dateStr;
-            const inRange =
-              checkInDate && checkOutDate && dateStr > checkInDate && dateStr < checkOutDate;
-            const inHoverRange =
-              checkInDate &&
-              !checkOutDate &&
-              hoveredDate &&
-              dateStr > checkInDate &&
-              dateStr <= hoveredDate;
-
-            let cellClass =
-              'h-9 w-full rounded-full text-xs font-semibold flex items-center justify-center transition-all cursor-pointer relative ';
-
-            if (isPast) {
-              cellClass =
-                'h-9 w-full rounded-full text-xs font-normal text-slate-300 flex items-center justify-center cursor-not-allowed pointer-events-none';
-            } else if (isCheckIn || isCheckOut) {
-              cellClass += 'bg-[#C72B62] text-white shadow-sm z-10 scale-100 font-bold';
-            } else if (inRange || inHoverRange) {
-              cellClass += 'bg-[#C72B62]/12 text-[#C72B62] font-semibold rounded-none';
-            } else {
-              cellClass += 'text-slate-800 hover:bg-slate-100 hover:text-slate-950';
-            }
-
+        <div className="grid grid-cols-7 gap-y-1">
+          {cells.map((day, index) => {
+            if (!day) return <span key={`blank-${index}`} className="h-11" />;
+            const date = iso(new Date(year, monthIndex, day));
+            const past = date < todayIso;
+            const start = date === checkInDate, end = date === checkOutDate;
+            const inRange = Boolean(checkInDate && checkOutDate && date > checkInDate && date < checkOutDate);
             return (
-              <div
-                key={dateStr}
-                className="relative py-0.5 flex items-center justify-center"
-                onMouseEnter={() => !isPast && checkInDate && !checkOutDate && setHoveredDate(dateStr)}
-                onMouseLeave={() => setHoveredDate(null)}
-              >
-                {/* Visual strip connector for in-range days */}
-                {(inRange || inHoverRange) && (
-                  <div
-                    className={`absolute inset-y-0.5 bg-[#C72B62]/10 pointer-events-none ${
-                      isCheckIn
-                        ? 'left-1/2 right-0'
-                        : isCheckOut
-                        ? 'left-0 right-1/2'
-                        : 'inset-x-0'
-                    }`}
-                  />
-                )}
-
+              <div key={date} className={`relative flex h-11 items-center justify-center ${inRange ? 'bg-[#F7F7F7]' : ''}`}>
                 <button
                   type="button"
-                  disabled={isPast}
-                  onClick={() => handleDayClick(dateStr)}
-                  className={cellClass}
-                  aria-label={`${MONTH_NAMES[month]} ${day}, ${year}`}
-                >
-                  <span>{day}</span>
-                  {isToday && !isCheckIn && !isCheckOut && (
-                    <span className="absolute bottom-1 w-1 h-1 rounded-full bg-[#C72B62]" />
-                  )}
-                </button>
+                  disabled={past}
+                  onClick={() => chooseDay(day, month)}
+                  aria-label={`${MONTHS[monthIndex]} ${day}, ${year}`}
+                  aria-pressed={start || end}
+                  className={`relative z-10 flex h-10 w-10 items-center justify-center rounded-full text-[15px] font-medium transition-colors ${past ? 'cursor-not-allowed text-[#D0D0D0]' : start || end ? 'bg-[#222222] text-white' : 'text-[#222222] hover:border hover:border-[#222222]'}`}
+                >{day}</button>
               </div>
             );
           })}
@@ -319,117 +91,47 @@ export const SearchCalendar: React.FC<SearchCalendarProps> = ({
     );
   };
 
+  const chips = ['Exact dates', '± 1 day', '± 2 days', '± 3 days', '± 7 days', '± 14 days'];
+
   return (
-    <div className="w-full text-left space-y-4">
-      {/* Top Header: Navigation & Month Indicators */}
-      <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            aria-label="Previous month"
-            disabled={monthOffset <= 0}
-            onClick={handlePrevMonth}
-            className="w-8 h-8 rounded-full border border-slate-200 hover:bg-slate-100 flex items-center justify-center text-slate-700 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
-          >
-            <ChevronLeft size={16} />
+    <section className="w-full text-left" aria-label="Choose travel dates">
+      <div className="mx-auto mb-7 flex h-[58px] w-full max-w-[406px] items-center rounded-full bg-[#EBEBEB] p-1">
+        {(['dates', 'flexible'] as const).map((item) => (
+          <button key={item} type="button" onClick={() => setMode(item)} className={`h-[48px] flex-1 rounded-full text-[16px] font-semibold transition-all ${mode === item ? 'bg-white text-[#222222] shadow-[0_1px_3px_rgba(0,0,0,0.12)]' : 'text-[#222222] hover:bg-white/40'}`}>
+            {item === 'dates' ? 'Dates' : 'Flexible'}
           </button>
-          <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-            <CalendarIcon size={14} className="text-[#C72B62]" />
-            <span>Select check-in & check-out dates</span>
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2">
-          {checkInDate && (
-            <button
-              type="button"
-              onClick={onClear}
-              className="text-xs font-semibold text-[#C72B62] hover:underline cursor-pointer"
-            >
-              Clear dates
-            </button>
-          )}
-          <button
-            type="button"
-            aria-label="Next month"
-            onClick={handleNextMonth}
-            className="w-8 h-8 rounded-full border border-slate-200 hover:bg-slate-100 flex items-center justify-center text-slate-700 cursor-pointer transition-colors"
-          >
-            <ChevronRight size={16} />
-          </button>
-        </div>
+        ))}
       </div>
 
-      {/* Main Calendar View: Two Months on Desktop, One Month on Mobile */}
-      <div className={`grid gap-8 ${isMobileSheet ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2'}`}>
-        {/* Left Month */}
-        <div className="space-y-3">
-          <h4 className="text-sm font-bold text-slate-900 text-center">
-            {leftMonthData.monthName} {leftMonthData.year}
-          </h4>
-          {renderMonthGrid(leftMonthData)}
-        </div>
-
-        {/* Right Month (visible on Desktop) */}
-        {!isMobileSheet && (
-          <div className="space-y-3 hidden md:block border-l border-slate-100 pl-8">
-            <h4 className="text-sm font-bold text-slate-900 text-center">
-              {rightMonthData.monthName} {rightMonthData.year}
-            </h4>
-            {renderMonthGrid(rightMonthData)}
+      {mode === 'dates' ? (
+        <>
+          <div className={`grid items-start gap-7 ${isMobileSheet ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2 md:gap-12'}`}>
+            <div className="relative">
+              <button type="button" aria-label="Previous month" disabled={monthOffset === 0} onClick={() => setMonthOffset((value) => Math.max(0, value - 1))} className="absolute -left-1 top-0 z-10 flex h-9 w-9 items-center justify-center rounded-full text-[#222222] hover:bg-slate-100 disabled:opacity-20"><ChevronLeft size={21} /></button>
+              {renderMonth(left)}
+            </div>
+            {!isMobileSheet && (
+              <div className="relative md:border-l md:border-[#EBEBEB] md:pl-8">
+                <button type="button" aria-label="Next month" onClick={() => setMonthOffset((value) => value + 1)} className="absolute -right-1 top-0 z-10 flex h-9 w-9 items-center justify-center rounded-full text-[#222222] hover:bg-slate-100"><ChevronRight size={21} /></button>
+                {renderMonth(right)}
+              </div>
+            )}
           </div>
-        )}
-      </div>
-
-      {/* Status banner */}
-      <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
-        <div className="text-xs text-slate-600">
-          {checkInDate && checkOutDate ? (
-            <span className="font-semibold text-slate-900">
-              Selected:{' '}
-              <span className="text-[#C72B62]">
-                {formatDisplayRange(checkInDate, checkOutDate).display}
-              </span>{' '}
-              ({formatDisplayRange(checkInDate, checkOutDate).nights} night
-              {formatDisplayRange(checkInDate, checkOutDate).nights > 1 ? 's' : ''})
-            </span>
-          ) : checkInDate ? (
-            <span className="font-medium text-slate-700">
-              Check-in set for{' '}
-              <strong className="text-slate-900">
-                {SHORT_MONTHS[parseIso(checkInDate).month]} {parseIso(checkInDate).day}
-              </strong>
-              . Now select check-out.
-            </span>
-          ) : (
-            <span className="text-slate-400">Click any available day to begin selection.</span>
-          )}
+          <div className="mt-7 flex flex-wrap items-center gap-2.5 border-t border-[#EBEBEB] pt-5">
+            {chips.map((chip) => <button key={chip} type="button" onClick={() => setFlexibility(chip)} className={`rounded-full border px-4 py-2.5 text-[13px] font-medium transition-colors ${flexibility === chip ? 'border-[#222222] text-[#222222]' : 'border-[#DDDDDD] text-[#484848] hover:border-[#222222]'}`}>{chip}</button>)}
+            {checkInDate && <button type="button" onClick={onClear} className="ml-auto text-sm font-medium text-[#484848] underline underline-offset-2">Clear dates</button>}
+          </div>
+        </>
+      ) : (
+        <div className="flex min-h-[310px] flex-col items-center justify-center px-4 text-center">
+          <h3 className="text-[21px] font-semibold text-[#222222]">How flexible are your dates?</h3>
+          <p className="mt-2 max-w-md text-[15px] leading-6 text-[#717171]">Choose how much your travel dates can vary to explore more available stays.</p>
+          <div className="mt-7 flex flex-wrap justify-center gap-2.5">
+            {chips.slice(1).map((chip) => <button key={chip} type="button" onClick={() => setFlexibility(chip)} className={`rounded-full border px-5 py-3 text-sm font-medium ${flexibility === chip ? 'border-[#222222] bg-[#F7F7F7]' : 'border-[#DDDDDD] hover:border-[#222222]'}`}>{chip}</button>)}
+          </div>
+          <p className="mt-5 text-xs text-[#717171]">Date flexibility: {flexibility}</p>
         </div>
-
-        {/* Quick Date Presets */}
-        <div className="flex flex-wrap items-center gap-1.5">
-          {PRESETS.map((p) => {
-            const isActive = checkInDate === p.checkIn && checkOutDate === p.checkOut;
-            return (
-              <button
-                key={p.id}
-                type="button"
-                data-testid={`calendar-preset-${p.id}`}
-                data-check-in={p.checkIn}
-                data-check-out={p.checkOut}
-                onClick={() => handleApplyPreset(p)}
-                className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all cursor-pointer ${
-                  isActive
-                    ? 'bg-[#C72B62] text-white border-[#C72B62]'
-                    : 'bg-slate-50 text-slate-700 border-slate-200 hover:border-slate-800'
-                }`}
-              >
-                {p.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    </div>
+      )}
+    </section>
   );
 };
