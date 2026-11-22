@@ -1029,7 +1029,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
           {/* DESKTOP ONLY (hidden md:flex): Centered 3-Segment Search Pill + Adjacent '+' Button */}
           <div className="hidden md:flex items-center justify-center gap-2 sm:gap-3.5 w-full">
             <div
-              className="w-full rounded-full bg-white border border-slate-300/90 shadow-[0_3px_14px_rgba(15,23,42,0.05)] flex items-center max-w-[1110px] min-h-[58px] sm:min-h-[66px] pl-4 sm:pl-7 pr-1.5 sm:pr-2.5 py-1.5"
+              className="w-full rounded-full bg-[#EBEBEB] border border-[#DDDDDD] flex items-center max-w-[850px] min-h-[56px] sm:min-h-[58px] px-1.5 sm:px-2 py-1.5"
             >
             {/* Segment 1: Where */}
             <div
@@ -1137,60 +1137,38 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
               aria-hidden="true"
             />
 
-            {/* Segment 3: Who */}
-            <button
-              type="button"
-              onClick={() => handleOpenSearchModal('who')}
-              data-testid="search-who-segment"
-              className={`w-[24%] sm:w-[26%] min-w-0 text-left py-1.5 sm:py-2 px-3 sm:px-4 rounded-full transition-all cursor-pointer ${
-                activePopover === 'who'
-                  ? 'bg-white shadow-[0_4px_16px_rgba(0,0,0,0.12)] border border-slate-200/90'
-                  : 'hover:bg-slate-100/60'
-              }`}
-            >
-              <span
-                className={`block font-bold text-slate-950 leading-tight transition-all ${
+            {/* White active capsule containing Who + Search, as in the reference */}
+            <div className="flex w-[42%] sm:w-[43%] min-w-0 items-center rounded-full bg-white p-1 shadow-[0_2px_8px_rgba(0,0,0,0.10)]">
+              {/* Segment 3: Who */}
+              <button
+                type="button"
+                onClick={() => handleOpenSearchModal('who')}
+                data-testid="search-who-segment"
+                className={`flex-1 min-w-0 text-left py-1.5 sm:py-2 px-3 sm:px-4 rounded-full transition-all cursor-pointer ${
+                  activePopover === 'who' ? 'bg-white' : 'hover:bg-slate-50'
+                }`}
+              >
+                <span className={`block font-bold text-slate-950 leading-tight transition-all ${
                   shouldCollapse ? 'text-[11px]' : 'text-[12px]'
-                }`}
-              >
-                Who
-              </span>
-              <span
-                className={`block leading-tight truncate tabular-nums transition-all ${
-                  shouldCollapse
-                    ? 'text-[12px] sm:text-[13px] mt-0'
-                    : 'text-[12.5px] sm:text-[14px] mt-0.5'
-                } ${
-                  guestSummaryText ? 'text-slate-900 font-medium' : 'text-slate-400'
-                }`}
-              >
-                {guestSummaryText || 'Add guests'}
-              </span>
-            </button>
-
-            {/* Custom Search Button with exact linear gradient, hover radial-gradient, and border-radius: 32px */}
-            <button
-              type="button"
-              aria-label="Search"
-              onClick={handleExecuteSearch}
-              className={`search-button inline-flex items-center justify-center border-0 border-none text-white font-[600] tracking-normal cursor-pointer select-none shrink-0 transition-all duration-200 ease-out hover:scale-[1.02] active:scale-[0.98] ml-1 sm:ml-2 ${
-                activePopover
-                  ? 'py-[10px] sm:py-[14px] px-[16px] sm:px-[24px] gap-[8px]'
-                  : 'w-11 h-11 sm:w-12 sm:h-12 p-0'
-              }`}
-            >
-              <Search
-                size={activePopover ? 20 : 18}
-                className="text-white shrink-0"
-                strokeWidth={2.5}
-                aria-hidden="true"
-              />
-              {activePopover && (
-                <span className="leading-none text-white font-[600] text-[15px] sm:text-[16px] whitespace-nowrap animate-in fade-in zoom-in-95 duration-200">
-                  Search
+                }`}>Who</span>
+                <span className={`block leading-tight truncate tabular-nums transition-all ${
+                  shouldCollapse ? 'text-[12px]' : 'text-[12.5px] sm:text-[13px]'
+                } ${guestSummaryText ? 'text-slate-900 font-medium' : 'text-[#717171]'}`}>
+                  {guestSummaryText || 'Add guests'}
                 </span>
-              )}
-            </button>
+              </button>
+
+              {/* Pink Search capsule inside the white active area */}
+              <button
+                type="button"
+                aria-label="Search"
+                onClick={handleExecuteSearch}
+                className="search-button inline-flex h-[44px] shrink-0 items-center justify-center gap-2 rounded-full border-0 px-4 sm:px-5 text-white font-semibold tracking-normal cursor-pointer select-none transition-all duration-200 ease-out hover:brightness-95 active:scale-[0.98]"
+              >
+                <Search size={19} className="shrink-0 text-white" strokeWidth={2.5} aria-hidden="true" />
+                <span className="text-[14px] sm:text-[15px] leading-none whitespace-nowrap text-white">Search</span>
+              </button>
+            </div>
           </div>
 
           {/* Adjacent '+' Circle Button beside Search Button:
