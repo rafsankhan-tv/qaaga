@@ -485,20 +485,6 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
                 </span>
               </button>
 
-              {/* Plus Button beside Search Button: #FF385C, white plus icon */}
-              <button
-                type="button"
-                aria-label="Create new listing"
-                onClick={onOpenHostModal}
-                style={{
-                  background: '#FF385C',
-                  color: '#FFFFFF',
-                  borderRadius: '100px',
-                }}
-                className="flex w-7 h-7 sm:w-8 sm:h-8 border-0 border-none items-center justify-center text-white active:scale-95 transition-transform shrink-0 cursor-pointer shadow-[0_2px_8px_rgba(255,56,92,0.30)] hover:brightness-90 hover:scale-105"
-              >
-                <Plus size={16} strokeWidth={2.6} className="text-white" />
-              </button>
             </div>
           </div>
 
@@ -719,7 +705,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
           {/* DESKTOP ONLY (hidden md:flex): Centered 3-Segment Search Pill + Adjacent '+' Button */}
           <div className="hidden md:flex items-center justify-center gap-2 sm:gap-3.5 w-full">
             <div
-              className="w-full rounded-full bg-white border border-[#DDDDDD] shadow-[0_2px_8px_rgba(0,0,0,0.08)] flex items-center max-w-[850px] min-h-[64px] px-2 sm:px-2.5 py-1.5"
+              className="w-full rounded-full bg-white border border-[#DDDDDD] shadow-[0_2px_8px_rgba(0,0,0,0.08)] flex items-center max-w-[740px] min-h-[56px] px-2 sm:px-2.5 py-1"
             >
             {/* Segment 1: Where */}
             <div
@@ -735,7 +721,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
                 <label
                   htmlFor="qaaga-where-input"
                   className={`block font-bold text-slate-950 leading-tight cursor-pointer transition-all ${
-                    shouldCollapse ? 'text-[11px]' : 'text-[12px]'
+                    shouldCollapse ? 'text-[11px]' : 'text-[14px]'
                   }`}
                 >
                   Where
@@ -793,7 +779,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
               type="button"
               onClick={() => handleOpenSearchModal('when')}
               data-testid="search-when-segment"
-              className={`w-[28%] sm:w-[32%] min-w-0 text-left py-1.5 sm:py-2 px-3 sm:px-4 rounded-full transition-all cursor-pointer ${
+              className={`w-[25%] sm:w-[25%] min-w-0 text-left py-1.5 sm:py-2 px-3 sm:px-4 rounded-full transition-all cursor-pointer ${
                 activePopover === 'when'
                   ? 'bg-white shadow-[0_4px_16px_rgba(0,0,0,0.12)] border border-slate-200/90'
                   : 'hover:bg-slate-100/60'
@@ -828,7 +814,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
             />
 
             {/* White active capsule containing Who + Search, as in the reference */}
-            <div className="flex w-[27%] sm:w-[27%] min-w-0 items-center rounded-full bg-transparent p-0 shadow-none">
+            <div className="flex w-[25%] sm:w-[25%] min-w-0 items-center rounded-full bg-transparent p-0 shadow-none">
               {/* Segment 3: Who */}
               <button
                 type="button"
@@ -860,23 +846,6 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
             </div>
           </div>
 
-          {/* Adjacent '+' Circle Button beside Search Button:
-              background: #FF385C, border-radius: 100px, white plus icon */}
-          <button
-            type="button"
-            aria-label="Create new listing"
-            onClick={onOpenHostModal}
-            style={{
-              background: '#FF385C',
-              color: '#FFFFFF',
-              borderRadius: '100px',
-            }}
-            className={`hidden md:flex border-0 border-none text-white items-center justify-center active:scale-95 transition-all shrink-0 cursor-pointer shadow-[0_4px_16px_rgba(255,56,92,0.30)] hover:brightness-90 hover:scale-105 hover:shadow-[0_6px_22px_rgba(255,56,92,0.40)] ${
-              shouldCollapse ? 'w-9 h-9 sm:w-10 sm:h-10' : 'w-11 h-11 sm:w-12 sm:h-12'
-            }`}
-          >
-            <Plus size={shouldCollapse ? 20 : 24} strokeWidth={2.6} className="text-white" />
-          </button>
         </div>
 
           {/* POPOVER 1: WHERE */}
