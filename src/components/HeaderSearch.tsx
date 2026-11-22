@@ -541,7 +541,6 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
               aria-label="Open main menu"
               aria-expanded={isAccountOpen}
               onClick={() => {
-                setIsNotifOpen(false);
                 onToggleAccount();
               }}
               className="w-10 h-10 sm:w-12 sm:h-12 rounded-full border border-[#DDDDDD] bg-white hover:shadow-md hover:border-[#B0B0B0] flex items-center justify-center transition-all cursor-pointer shrink-0"
