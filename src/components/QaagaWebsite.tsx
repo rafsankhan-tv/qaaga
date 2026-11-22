@@ -1562,6 +1562,31 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
           setIsAuthModalOpen(true);
           navigateTo('/login');
         }}
+        onLogout={async () => {
+          const supabase = getSupabase();
+          if (supabase) {
+            const { error } = await supabase.auth.signOut();
+            if (error) {
+              showToast({ message: 'Sign out failed. Please try again.' });
+              return;
+            }
+          }
+          const guest: GuestProfile = {
+            fullName: 'Guest User',
+            email: '',
+            city: 'Dhaka',
+            verified: false,
+            role: 'guest',
+          };
+          setProfile(guest);
+          setBookings([]);
+          setThreads([]);
+          setNotifications([]);
+          setWishlistIds([]);
+          setIsProfileOpen(false);
+          showToast({ message: 'Signed out successfully' });
+          navigateTo('/');
+        }}
       />
 
       {/* =================================================================== */}
