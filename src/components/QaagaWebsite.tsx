@@ -1533,6 +1533,9 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
           setIsHostModalOpen(true);
           navigateTo('/host');
         }}
+        onSwitchToHosting={() => {
+          window.location.assign('/host/dashboard');
+        }}
         onOpenTrips={() => {
           setIsTripsOpen(true);
           navigateTo('/my-bookings');
