@@ -31,7 +31,7 @@ declare global {
             client_id: string;
             callback: (response: { credential?: string }) => void;
           }) => void;
-          renderButton: (parent: HTMLElement, options: Record<string, string | number>) => void;
+          prompt: () => void;
         };
       };
     };
@@ -78,7 +78,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [avatarIndex, setAvatarIndex] = useState(0);
 
   const digitRefs = useRef<(HTMLInputElement | null)[]>([]);
-  const googleButtonRef = useRef<HTMLDivElement | null>(null);
+  const [googleReady, setGoogleReady] = useState(false);
 
   // Keep the hover highlight directly beneath the pointer.
   const handlePrimaryButtonMouseMove = (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -105,12 +105,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   }, [isOpen, preferredRole]);
 
   useEffect(() => {
-    if (!isOpen || !googleButtonRef.current) return;
+    if (!isOpen) return;
 
     let cancelled = false;
 
     const mountGoogleButton = () => {
-      if (cancelled || !googleButtonRef.current || !window.google?.accounts.id) return;
+      if (cancelled || !window.google?.accounts.id) return;
 
       window.google.accounts.id.initialize({
         client_id: GOOGLE_WEB_CLIENT_ID,
@@ -142,13 +142,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         },
       });
 
-      googleButtonRef.current.replaceChildren();
-      window.google.accounts.id.renderButton(googleButtonRef.current, {
-        type: 'icon',
-        theme: 'outline',
-        size: 'large',
-        shape: 'circle',
-      });
+      setGoogleReady(true);
     };
 
     if (window.google?.accounts.id) {
@@ -177,6 +171,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     return () => {
       cancelled = true;
+      setGoogleReady(false);
     };
   }, [isOpen, onClose, onShowToast]);
 
@@ -516,11 +511,27 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
             {/* Social Login Buttons: Google & Apple */}
             <div className="grid grid-cols-2 gap-3.5">
-              <div
-                ref={googleButtonRef}
-                className="w-full min-h-12 flex items-center justify-center overflow-hidden"
-                aria-label="Sign in with Google"
-              />
+              <button
+                type="button"
+                onClick={() => {
+                  if (!googleReady || !window.google?.accounts.id) {
+                    setErrorMessage('Google sign-in is still loading. Please try again in a moment.');
+                    return;
+                  }
+                  setErrorMessage('');
+                  window.google.accounts.id.prompt();
+                }}
+                disabled={loading}
+                className="w-full h-12 rounded-2xl border border-slate-300 hover:border-slate-400 bg-white hover:bg-slate-50 flex items-center justify-center transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-[0.98] disabled:opacity-60"
+                aria-label="Continue with Google"
+              >
+                <svg className="w-5 h-5" viewBox="0 0 48 48" aria-hidden="true">
+                  <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
+                  <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.76 7.18l7.73 6C44.42 37.96 46.98 31.8 46.98 24.55z" />
+                  <path fill="#FBBC05" d="M10.53 28.59A14.4 14.4 0 0 1 9.75 24c0-1.59.27-3.13.76-4.59l-7.98-6.19A23.9 23.9 0 0 0 0 24c0 3.87.93 7.54 2.56 10.78l7.97-6.19z" />
+                  <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.91-5.8l-7.73-6c-2.15 1.45-4.92 2.3-8.18 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.97 6.19C6.51 42.62 14.62 48 24 48z" />
+                </svg>
+              </button>
 
               <button
                 type="button"
