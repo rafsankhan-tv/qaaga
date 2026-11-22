@@ -41,7 +41,7 @@ export const SearchLocationPanel: React.FC<Props> = ({ whereQuery, onSelectLocat
           {whereQuery ? 'Matching destinations' : 'Suggested destinations'}
         </h3>
         {whereQuery && (
-          <button type="button" onClick={() => { setQuery(''); onClear(); }} className="text-xs font-medium text-slate-500 hover:text-slate-900">
+          <button type="button" onClick={onClear} className="text-xs font-medium text-slate-500 hover:text-slate-900">
             Clear
           </button>
         )}
