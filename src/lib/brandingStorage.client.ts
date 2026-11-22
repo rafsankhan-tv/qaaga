@@ -245,20 +245,13 @@ export async function reconcileBrandingOnLoad(
       }
     } catch {}
 
-    // Reconcile highest revision among client, server, and Supabase
-    const candidates = [clientBest, serverLatest, supabaseLatest].filter(
-      (c): c is SiteBranding => c !== null && c !== undefined
-    );
+    // Supabase is the cross-device source of truth. Browser storage is only a
+    // resilience fallback and must never override a newer admin-selected asset.
+    const winner = supabaseLatest || serverLatest || clientBest;
 
-    if (candidates.length > 0) {
-      const winner = candidates.reduce((best, curr) =>
-        curr.revision > best.revision ? curr : best
-      );
-
-      if (winner.revision > 0) {
-        writeSyncLocalBranding(winner);
-        await writeIdbBranding(winner);
-      }
+    if (winner) {
+      writeSyncLocalBranding(winner);
+      await writeIdbBranding(winner);
       cachedResolvedBranding = winner;
       brandingReconcileTimestamp = Date.now();
       return winner;
