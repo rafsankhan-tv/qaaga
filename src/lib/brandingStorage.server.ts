@@ -5,6 +5,7 @@ import {
   LogoSizePreset,
   SiteBranding,
 } from '@/data/listings';
+import { createPublicServerSupabase } from '@/lib/supabaseServer';
 
 const WORKSPACE_STORAGE_DIR = path.join(process.cwd(), 'storage');
 const PRIMARY_BRANDING_PATH = path.join(WORKSPACE_STORAGE_DIR, 'site-branding.json');
@@ -76,6 +77,36 @@ async function tryReadJson(filePath: string): Promise<SiteBranding | null> {
 }
 
 export async function readServerBranding(): Promise<SiteBranding> {
+  // Supabase is the shared source of truth across Vercel serverless instances.
+  // Local files are only a development/failure fallback; never prefer them over cloud data.
+  try {
+    const supabase = createPublicServerSupabase();
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('site_branding')
+        .select('*')
+        .eq('id', 'default_branding')
+        .maybeSingle();
+
+      if (!error && data) {
+        return sanitizeBranding({
+          logoUrl: data.logo_url,
+          faviconUrl: data.favicon_url,
+          altText: data.alt_text,
+          fallbackText: data.fallback_text,
+          fallbackDomain: data.fallback_domain,
+          showTextWhenRemoved: data.show_text_when_removed,
+          size: data.size,
+          blendMultiply: data.blend_multiply,
+          revision: Number(data.revision) || 1,
+          updatedAt: data.updated_at,
+        });
+      }
+    }
+  } catch {
+    // Continue to the local fallback for development or temporary DB outages.
+  }
+
   const [primary, fallback] = await Promise.all([
     tryReadJson(PRIMARY_BRANDING_PATH),
     tryReadJson(FALLBACK_BRANDING_PATH),
