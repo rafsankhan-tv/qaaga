@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
-import { Building2, Compass, Navigation, Trees, Landmark, MapPin, X } from 'lucide-react';
+import React, { useMemo } from 'react';
+import { Building2, Compass, Navigation, Trees, Landmark, MapPin } from 'lucide-react';
 
 export interface LocationItem {
   id: string;
@@ -29,17 +29,16 @@ interface Props {
 }
 
 export const SearchLocationPanel: React.FC<Props> = ({ whereQuery, onSelectLocation, onClear }) => {
-  const [query, setQuery] = useState('');
   const filtered = useMemo(() => {
-    const value = query.trim().toLowerCase();
+    const value = whereQuery.trim().toLowerCase();
     return value ? LOCATIONS.filter((item) => item.name.toLowerCase().includes(value) || item.subtitle.toLowerCase().includes(value)) : LOCATIONS;
-  }, [query]);
+  }, [whereQuery]);
 
   return (
     <section className="w-full text-left" aria-label="Suggested destinations">
       <div className="flex items-center justify-between px-1 pb-3">
         <h3 className="text-[15px] font-semibold tracking-[-0.01em] text-[#222222]">
-          {query ? 'Matching destinations' : 'Suggested destinations'}
+          {whereQuery ? 'Matching destinations' : 'Suggested destinations'}
         </h3>
         {whereQuery && (
           <button type="button" onClick={() => { setQuery(''); onClear(); }} className="text-xs font-medium text-slate-500 hover:text-slate-900">
@@ -76,11 +75,6 @@ export const SearchLocationPanel: React.FC<Props> = ({ whereQuery, onSelectLocat
             <p className="mt-1 text-xs text-slate-500">Try another city or destination.</p>
           </div>
         )}
-      </div>
-      <div className="sr-only">
-        <label htmlFor="qaaga-destination-filter">Filter destinations</label>
-        <input id="qaaga-destination-filter" value={query} onChange={(event) => setQuery(event.target.value)} />
-        <button type="button" onClick={() => setQuery('')} aria-label="Clear destination filter"><X size={12} /></button>
       </div>
     </section>
   );
