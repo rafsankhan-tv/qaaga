@@ -144,12 +144,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
       googleButtonRef.current.replaceChildren();
       window.google.accounts.id.renderButton(googleButtonRef.current, {
-        type: 'standard',
+        type: 'icon',
         theme: 'outline',
         size: 'large',
-        text: 'continue_with',
-        shape: 'rectangular',
-        width: Math.max(180, Math.floor(googleButtonRef.current.clientWidth)),
+        shape: 'circle',
       });
     };
 
@@ -521,7 +519,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <div
                 ref={googleButtonRef}
                 className="w-full min-h-12 flex items-center justify-center overflow-hidden"
-                aria-label="Continue with Google"
+                aria-label="Sign in with Google"
               />
 
               <button
