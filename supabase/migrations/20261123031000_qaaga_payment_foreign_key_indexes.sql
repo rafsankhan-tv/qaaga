@@ -1,0 +1,3 @@
+create index if not exists idx_platform_payment_methods_created_by on public.platform_payment_methods(created_by);
+create index if not exists idx_service_fee_payment_proofs_booking on public.service_fee_payment_proofs(booking_id);
+create index if not exists idx_service_fee_payment_proofs_method on public.service_fee_payment_proofs(payment_method_id);
