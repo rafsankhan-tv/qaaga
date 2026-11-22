@@ -1,0 +1,3 @@
+revoke all on function private.qaaga_guard_booking_update() from authenticated;
+drop policy if exists qaaga_service_fee_ledger_read on public.service_fee_ledger;
+create policy qaaga_service_fee_ledger_read on public.service_fee_ledger for select to authenticated using((select private.qaaga_has_role('finance')) or (select private.qaaga_is_super_admin()) or exists(select 1 from public.bookings b where b.id=booking_id and lower(b.customer_email)=(select private.qaaga_current_email())));

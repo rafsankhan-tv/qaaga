@@ -2126,6 +2126,11 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
                     Saved Wishlist ({wishlistIds.length})
                   </button>
                 </li>
+                <li>
+                  <Link href="/support" className="hover:text-[#C72B62] hover:underline">
+                    Help, Support & QAAGA Fee Payment
+                  </Link>
+                </li>
               </ul>
             </div>
 
@@ -2151,6 +2156,11 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
                   </Link>
                 </li>
                 <li>
+                  <Link href="/staff/dashboard" className="hover:text-[#C72B62] hover:underline">
+                    QAAGA Staff Workspace
+                  </Link>
+                </li>
+                <li>
                   <button
                     type="button"
                     onClick={() => setIsHelpOpen(true)}
@@ -2162,13 +2172,19 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
                 </li>
                 <li>
                   <Link
-                    href="/admin/dashboard"
+                    href="/admin"
                     prefetch={true}
                     className="inline-flex items-center gap-1 font-semibold text-slate-800 hover:text-[#C72B62] hover:underline"
                   >
                     <Shield size={13} className="text-[#C72B62]" />
                     <span>Admin Panel (Logo & Site)</span>
                   </Link>
+                </li>
+                <li>
+                  <Link href="/admin/roles" className="hover:text-[#C72B62] hover:underline">Role Management</Link>
+                </li>
+                <li>
+                  <Link href="/admin/payments" className="hover:text-[#C72B62] hover:underline">Payment Methods</Link>
                 </li>
               </ul>
             </div>

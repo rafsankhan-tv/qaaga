@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import { ShieldAlert, ArrowLeft } from 'lucide-react';
+import { ShieldAlert, ArrowLeft, CreditCard } from 'lucide-react';
 import {
   DEFAULT_BRANDING,
   SiteBranding,
@@ -179,14 +179,14 @@ export default function AdminPage() {
   }
 
   return (
-    <AdminPanelModal
-      branding={branding}
-      onUpdateBranding={persistBranding}
-      onRemoveLogo={handleRemoveLogo}
-      onRestoreDefaultLogo={handleRestoreDefaultLogo}
-      allListings={listings}
-      bookings={bookings}
-      standalone={true}
-    />
+    <>
+      <Link href="/admin/roles" className="fixed right-5 top-5 z-[100] inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2.5 text-xs font-semibold text-white shadow-lg hover:bg-slate-800">
+        <ShieldAlert size={14} /> Role Management
+      </Link>
+      <Link href="/admin/payments" className="fixed right-5 top-16 z-[100] inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2.5 text-xs font-semibold text-white shadow-lg hover:bg-slate-800">
+        <CreditCard size={14} /> Payment Methods
+      </Link>
+      <AdminPanelModal branding={branding} onUpdateBranding={persistBranding} onRemoveLogo={handleRemoveLogo} onRestoreDefaultLogo={handleRestoreDefaultLogo} allListings={listings} bookings={bookings} standalone={true} />
+    </>
   );
 }
