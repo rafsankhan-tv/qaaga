@@ -20,9 +20,9 @@ Deno.serve(async(req:Request)=>{
    db.from("property_staff_assignments").select("id,user_id,role,property_id,is_active,created_at").order("created_at",{ascending:false}).limit(300)
   ]);
   if(ge||se)return json({error:"Unable to load role assignments."},502);
-  const ids=[...new Set([...(global||[]).map(x=>x.user_id),...(scoped||[]).map(x=>x.user_id)])];
-  const users=await Promise.all(ids.map(async id=>{const {data}=await db.auth.admin.getUserById(id);return [id,data.user?.email||""] as const}));
-  const emailMap=Object.fromEntries(users);
+  const {data:userData,error:userError}=await db.auth.admin.listUsers({page:1,perPage:1000});
+  if(userError)return json({error:"Unable to resolve role account emails."},502);
+  const emailMap=Object.fromEntries(userData.users.map(u=>[u.id,u.email||""]));
   return json({success:true,global:(global||[]).map(x=>({...x,email:emailMap[x.user_id]||""})),propertyScoped:(scoped||[]).map(x=>({...x,email:emailMap[x.user_id]||""}))});
  }
  const action=b.action,email=String(b.email||"").trim().toLowerCase(),role=String(b.role||""),propertyId=String(b.propertyId||"").trim();
