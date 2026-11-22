@@ -1,12 +1,12 @@
 {
-  "logoUrl": "/assets/aistudio/Screenshot_2026-11-04_at_2.55.29_AM_bd5ef49c.png",
-  "faviconUrl": "/assets/aistudio/Screenshot_2026-11-04_at_3.36.38_AM_8097a68e.png",
+  "logoUrl": "https://xrdudvpmleknomqlcdbc.supabase.co/storage/v1/object/public/qaaga-branding/qaaga-logo.png",
+  "faviconUrl": "https://xrdudvpmleknomqlcdbc.supabase.co/storage/v1/object/public/qaaga-branding/qaaga-favicon.png",
   "altText": "qaaga.com",
   "fallbackText": "qaaga",
   "fallbackDomain": ".com",
   "showTextWhenRemoved": true,
   "size": "md",
   "blendMultiply": true,
-  "revision": 1794529099376,
-  "updatedAt": "2026-11-13T00:18:19.376Z"
+  "revision": 1795388000000,
+  "updatedAt": "2026-11-23T00:00:00.000Z"
 }

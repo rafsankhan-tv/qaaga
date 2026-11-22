@@ -118,11 +118,12 @@ export interface SiteBranding {
   updatedAt: string;
 }
 
+// Canonical, permanent QAAGA branding assets in the public Supabase Storage bucket.
 export const DEFAULT_SITE_LOGO_URL =
-  '/assets/aistudio/Screenshot_2026-11-04_at_2.55.29_AM_bd5ef49c.png';
+  'https://xrdudvpmleknomqlcdbc.supabase.co/storage/v1/object/public/qaaga-branding/qaaga-logo.png';
 
 export const DEFAULT_FAVICON_URL =
-  '/assets/aistudio/Screenshot_2026-11-04_at_3.36.38_AM_8097a68e.png';
+  'https://xrdudvpmleknomqlcdbc.supabase.co/storage/v1/object/public/qaaga-branding/qaaga-favicon.png';
 
 export const DEFAULT_BRANDING: SiteBranding = {
   logoUrl: DEFAULT_SITE_LOGO_URL,
