@@ -719,7 +719,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
           {/* DESKTOP ONLY (hidden md:flex): Centered 3-Segment Search Pill + Adjacent '+' Button */}
           <div className="hidden md:flex items-center justify-center gap-2 sm:gap-3.5 w-full">
             <div
-              className="w-full rounded-full bg-[#EBEBEB] border border-[#DDDDDD] flex items-center max-w-[850px] min-h-[56px] sm:min-h-[58px] px-1.5 sm:px-2 py-1.5"
+              className="w-full rounded-full bg-white border border-[#DDDDDD] shadow-[0_2px_8px_rgba(0,0,0,0.08)] flex items-center max-w-[850px] min-h-[64px] px-2 sm:px-2.5 py-1.5"
             >
             {/* Segment 1: Where */}
             <div
@@ -828,7 +828,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
             />
 
             {/* White active capsule containing Who + Search, as in the reference */}
-            <div className="flex w-[42%] sm:w-[43%] min-w-0 items-center rounded-full bg-white p-1 shadow-[0_2px_8px_rgba(0,0,0,0.10)]">
+            <div className="flex w-[27%] sm:w-[27%] min-w-0 items-center rounded-full bg-transparent p-0 shadow-none">
               {/* Segment 3: Who */}
               <button
                 type="button"
@@ -853,10 +853,9 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
                 type="button"
                 aria-label="Search"
                 onClick={handleExecuteSearch}
-                className="search-button inline-flex h-[44px] shrink-0 items-center justify-center gap-2 rounded-full border-0 px-4 sm:px-5 text-white font-semibold tracking-normal cursor-pointer select-none transition-all duration-200 ease-out hover:brightness-95 active:scale-[0.98]"
+                className="search-button inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-0 p-0 text-white cursor-pointer select-none transition-all duration-200 ease-out hover:brightness-95 hover:scale-[1.03] active:scale-[0.97]"
               >
-                <Search size={19} className="shrink-0 text-white" strokeWidth={2.5} aria-hidden="true" />
-                <span className="text-[14px] sm:text-[15px] leading-none whitespace-nowrap text-white">Search</span>
+                <Search size={20} className="shrink-0 text-white" strokeWidth={2.5} aria-hidden="true" />
               </button>
             </div>
           </div>
