@@ -8,7 +8,7 @@ Deno.serve(async(req:Request)=>{
  if(req.method!=="POST")return json({error:"Method not allowed."},405);
  const url=Deno.env.get("SUPABASE_URL"),anon=Deno.env.get("SUPABASE_ANON_KEY"),secret=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
  if(!url||!anon||!secret)return json({error:"Role administration is not configured."},503);
- const token=req.headers.get("Authorization")?.match(/^Bearer\\s+(.+)$/i)?.[1];if(!token)return json({error:"Authentication required."},401);
+ const token=req.headers.get("Authorization")?.match(/^Bearer\s+(.+)$/i)?.[1];if(!token)return json({error:"Authentication required."},401);
  const auth=createClient(url,anon,{auth:{persistSession:false,autoRefreshToken:false}}),db=createClient(url,secret,{auth:{persistSession:false,autoRefreshToken:false}});
  const {data:ad,error:ae}=await auth.auth.getUser(token),actor=ad.user;if(ae||!actor?.id||!actor.email)return json({error:"Invalid or expired session."},401);
  const {data:sa}=await db.from("user_role_assignments").select("id").eq("user_id",actor.id).eq("role","super_admin").eq("is_active",true).maybeSingle();
@@ -26,7 +26,7 @@ Deno.serve(async(req:Request)=>{
   return json({success:true,global:(global||[]).map(x=>({...x,email:emailMap[x.user_id]||""})),propertyScoped:(scoped||[]).map(x=>({...x,email:emailMap[x.user_id]||""}))});
  }
  const action=b.action,email=String(b.email||"").trim().toLowerCase(),role=String(b.role||""),propertyId=String(b.propertyId||"").trim();
- if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email))return json({error:"Valid account email required."},400);
+ if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return json({error:"Valid account email required."},400);
  if(!roles.has(role))return json({error:"Unsupported role."},400);
  if(role==="super_admin"&&actor.app_metadata?.role!=="admin")return json({error:"Only root admin can grant Super Admin."},403);
  if(["co_host","property_manager"].includes(role)&&!propertyId)return json({error:"Property ID required."},400);
