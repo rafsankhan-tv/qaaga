@@ -247,8 +247,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
         return lenis.scroll;
       }
       return (
-        window.pageYOffset ||
-        window.scrollY ||
+        window.pageYOffset ||        window.scrollY ||
         document.documentElement?.scrollTop ||
         document.body?.scrollTop ||
         0
@@ -492,13 +491,12 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
                 aria-label="Create new listing"
                 title="Create new listing"
                 onClick={onOpenHostModal}
-                className="inline-flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-full border-0 bg-[#FF385C] text-white shadow-[0_2px_8px_rgba(255,56,92,0.28)] transition-[transform,filter,box-shadow] duration-200 ease-out hover:brightness-95 hover:shadow-[0_4px_12px_rgba(255,56,92,0.34)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF385C] focus-visible:ring-offset-2"
+                className="inline-flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-full border border-[#DDDDDD] bg-white text-[#FF385C] shadow-none transition-[transform,border-color,box-shadow] duration-200 ease-out hover:border-[#B0B0B0] hover:shadow-[0_2px_8px_rgba(0,0,0,0.10)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF385C] focus-visible:ring-offset-2"
               >
                 <Plus size={18} strokeWidth={2.6} aria-hidden="true" />
               </button>
             </div>
           </div>
-
           {/* Right: Switch to hosting + separate Profile + Hamburger menu */}
           <div ref={rightUtilsRef} className="relative flex items-center justify-end shrink-0 gap-2 sm:gap-3">
             <button
@@ -714,9 +712,9 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
           </div>
 
           {/* DESKTOP ONLY (hidden md:flex): Centered 3-Segment Search Pill + Adjacent '+' Button */}
-          <div className="hidden md:flex w-full mx-auto flex-row flex-nowrap items-center justify-center gap-3" style={{ display: "flex", flexDirection: "row", flexWrap: "nowrap", alignItems: "center", width: "100%", maxWidth: "980px", marginLeft: "auto", marginRight: "auto", gap: "12px" }}>
+          <div data-testid="desktop-search-row" className="hidden md:flex flex-row flex-nowrap items-center justify-center gap-2.5 mx-auto" style={{ display: "flex", flexDirection: "row", flexWrap: "nowrap", alignItems: "center", justifyContent: "center", width: "min(100%, 834px)", maxWidth: "834px", marginLeft: "auto", marginRight: "auto", gap: "10px" }}>
             <div
-              className="min-w-0 rounded-[32px] bg-white border border-[#DDDDDD] shadow-[0_2px_8px_rgba(0,0,0,0.08)] grid grid-cols-[minmax(0,2fr)_1px_minmax(0,1fr)_1px_minmax(0,2fr)] items-center gap-[2px] min-h-[66px] px-2 py-1.5" style={{ flex: "1 1 0%", width: "100%", maxWidth: "850px" }}
+              className="min-w-0 h-[52px] min-h-[52px] rounded-full bg-white border border-[#DDDDDD] shadow-[0_2px_8px_rgba(0,0,0,0.08)] grid grid-cols-[minmax(0,2fr)_1px_minmax(0,1fr)_1px_minmax(0,2fr)] items-center gap-0 px-1 py-0" style={{ flex: "1 1 auto", width: "100%", maxWidth: "780px", height: "52px" }}
             >
             {/* Segment 1: Where */}
             <div
@@ -747,8 +745,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
                       onSetActivePopover('where');
                     }
                   }}
-                  onChange={(e) => onWhereChange(e.target.value)}
-                  onKeyDown={(e) => {
+                  onChange={(e) => onWhereChange(e.target.value)}                  onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       e.preventDefault();
                       handleExecuteSearch();
@@ -863,7 +860,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
               aria-label="Create new listing"
               title="Create new listing"
               onClick={onOpenHostModal}
-              className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-0 bg-[#FF385C] text-white shadow-[0_2px_8px_rgba(255,56,92,0.28)] transition-[transform,filter,box-shadow] duration-200 ease-out hover:brightness-95 hover:shadow-[0_4px_12px_rgba(255,56,92,0.34)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF385C] focus-visible:ring-offset-2" style={{ flex: "0 0 48px", width: "48px", height: "48px", position: "relative" }}
+              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#DDDDDD] bg-white text-[#FF385C] shadow-none transition-[transform,border-color,box-shadow] duration-200 ease-out hover:border-[#B0B0B0] hover:shadow-[0_2px_8px_rgba(0,0,0,0.10)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF385C] focus-visible:ring-offset-2" style={{ flex: "0 0 44px", width: "44px", height: "44px", position: "relative" }}
             >
               <Plus size={20} strokeWidth={2.6} aria-hidden="true" />
             </button>
