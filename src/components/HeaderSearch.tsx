@@ -714,7 +714,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
           </div>
 
           {/* DESKTOP ONLY (hidden md:flex): Centered 3-Segment Search Pill + Adjacent '+' Button */}
-          <div className="hidden md:grid w-full max-w-[980px] mx-auto grid-cols-[minmax(0,1fr)_48px] items-center justify-center gap-2 sm:gap-3.5">
+          <div className="hidden md:flex w-full max-w-[980px] mx-auto flex-row flex-nowrap items-center justify-center gap-2 sm:gap-3.5" style={{ display: "flex", flexDirection: "row", flexWrap: "nowrap", alignItems: "center" }}>
             <div
               className="flex-1 min-w-0 w-full max-w-[850px] rounded-[32px] bg-white border border-[#DDDDDD] shadow-[0_2px_8px_rgba(0,0,0,0.08)] grid grid-cols-[minmax(0,2fr)_1px_minmax(0,1fr)_1px_minmax(0,2fr)] items-center gap-[2px] min-h-[66px] px-2 py-1.5"
             >
