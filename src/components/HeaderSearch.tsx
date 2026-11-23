@@ -855,7 +855,6 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
                 <Search size={20} className="shrink-0 text-white" strokeWidth={2.5} aria-hidden="true" />
               </button>
             </div>
-            </div>
 
             {/* Desktop '+' action — aligned beside the full search capsule */}
             <button
