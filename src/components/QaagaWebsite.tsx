@@ -839,10 +839,13 @@ export const QaagaWebsite: React.FC<QaagaWebsiteProps> = ({
     [currency, activeNights]
   );
 
+  // A default of one adult is not an active search filter. Keep the
+  // discovery homepage visible until the guest changes a search criterion.
   const hasActiveSearchCriteria =
     whereQuery.trim().length > 0 ||
     Boolean(selectedDates.display) ||
-    totalGuests > 0 ||
+    adults > 1 ||
+    childrenCount > 0 ||
     infants > 0 ||
     pets > 0;
 
