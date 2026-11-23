@@ -714,9 +714,9 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
           </div>
 
           {/* DESKTOP ONLY (hidden md:flex): Centered 3-Segment Search Pill + Adjacent '+' Button */}
-          <div className="hidden md:flex w-full max-w-[980px] mx-auto flex-row flex-nowrap items-center justify-center gap-2 sm:gap-3.5" style={{ display: "flex", flexDirection: "row", flexWrap: "nowrap", alignItems: "center" }}>
+          <div className="hidden md:flex w-full mx-auto flex-row flex-nowrap items-center justify-center gap-3" style={{ display: "flex", flexDirection: "row", flexWrap: "nowrap", alignItems: "center", width: "100%", maxWidth: "980px", marginLeft: "auto", marginRight: "auto", gap: "12px" }}>
             <div
-              className="flex-1 min-w-0 w-full max-w-[850px] rounded-[32px] bg-white border border-[#DDDDDD] shadow-[0_2px_8px_rgba(0,0,0,0.08)] grid grid-cols-[minmax(0,2fr)_1px_minmax(0,1fr)_1px_minmax(0,2fr)] items-center gap-[2px] min-h-[66px] px-2 py-1.5"
+              className="min-w-0 rounded-[32px] bg-white border border-[#DDDDDD] shadow-[0_2px_8px_rgba(0,0,0,0.08)] grid grid-cols-[minmax(0,2fr)_1px_minmax(0,1fr)_1px_minmax(0,2fr)] items-center gap-[2px] min-h-[66px] px-2 py-1.5" style={{ flex: "1 1 0%", width: "100%", maxWidth: "850px" }}
             >
             {/* Segment 1: Where */}
             <div
@@ -863,7 +863,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
               aria-label="Create new listing"
               title="Create new listing"
               onClick={onOpenHostModal}
-              className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-0 bg-[#FF385C] text-white shadow-[0_2px_8px_rgba(255,56,92,0.28)] transition-[transform,filter,box-shadow] duration-200 ease-out hover:brightness-95 hover:shadow-[0_4px_12px_rgba(255,56,92,0.34)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF385C] focus-visible:ring-offset-2"
+              className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-0 bg-[#FF385C] text-white shadow-[0_2px_8px_rgba(255,56,92,0.28)] transition-[transform,filter,box-shadow] duration-200 ease-out hover:brightness-95 hover:shadow-[0_4px_12px_rgba(255,56,92,0.34)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF385C] focus-visible:ring-offset-2" style={{ flex: "0 0 48px", width: "48px", height: "48px", position: "relative" }}
             >
               <Plus size={20} strokeWidth={2.6} aria-hidden="true" />
             </button>
