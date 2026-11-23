@@ -485,6 +485,17 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
                 </span>
               </button>
 
+              {/* Compact '+' action — remains visible beside the search pill */}
+              <button
+                type="button"
+                data-testid="compact-create-listing"
+                aria-label="Create new listing"
+                title="Create new listing"
+                onClick={onOpenHostModal}
+                className="inline-flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-full border-0 bg-[#FF385C] text-white shadow-[0_2px_8px_rgba(255,56,92,0.28)] transition-[transform,filter,box-shadow] duration-200 ease-out hover:brightness-95 hover:shadow-[0_4px_12px_rgba(255,56,92,0.34)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF385C] focus-visible:ring-offset-2"
+              >
+                <Plus size={18} strokeWidth={2.6} aria-hidden="true" />
+              </button>
             </div>
           </div>
 
@@ -844,6 +855,19 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
                 <Search size={20} className="shrink-0 text-white" strokeWidth={2.5} aria-hidden="true" />
               </button>
             </div>
+            </div>
+
+            {/* Desktop '+' action — aligned beside the full search capsule */}
+            <button
+              type="button"
+              data-testid="desktop-create-listing"
+              aria-label="Create new listing"
+              title="Create new listing"
+              onClick={onOpenHostModal}
+              className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-0 bg-[#FF385C] text-white shadow-[0_2px_8px_rgba(255,56,92,0.28)] transition-[transform,filter,box-shadow] duration-200 ease-out hover:brightness-95 hover:shadow-[0_4px_12px_rgba(255,56,92,0.34)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF385C] focus-visible:ring-offset-2"
+            >
+              <Plus size={20} strokeWidth={2.6} aria-hidden="true" />
+            </button>
           </div>
 
         </div>
