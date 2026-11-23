@@ -705,7 +705,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
           {/* DESKTOP ONLY (hidden md:flex): Centered 3-Segment Search Pill + Adjacent '+' Button */}
           <div className="hidden md:flex items-center justify-center gap-2 sm:gap-3.5 w-full">
             <div
-              className="w-full rounded-full bg-white border border-[#DDDDDD] shadow-[0_2px_8px_rgba(0,0,0,0.08)] flex items-center max-w-[740px] min-h-[56px] px-2 sm:px-2.5 py-1"
+              className="w-full rounded-[32px] bg-white border border-[#DDDDDD] shadow-[0_2px_8px_rgba(0,0,0,0.08)] grid grid-cols-[minmax(0,2fr)_1px_minmax(0,1fr)_1px_minmax(0,2fr)] items-center gap-[2px] max-w-[850px] min-h-[66px] px-2 py-1.5"
             >
             {/* Segment 1: Where */}
             <div
@@ -768,7 +768,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
 
             {/* Crisp Divider 1: Fades out when adjacent segment is active */}
             <div
-              className={`w-[1px] bg-slate-300 mx-1 shrink-0 transition-opacity ${
+              className={`w-px bg-[#DDDDDD] shrink-0 transition-opacity ${
                 activePopover === 'where' || activePopover === 'when' ? 'opacity-0' : 'opacity-100'
               } ${shouldCollapse ? 'h-4 sm:h-5' : 'h-6 sm:h-7'}`}
               aria-hidden="true"
@@ -779,7 +779,7 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
               type="button"
               onClick={() => handleOpenSearchModal('when')}
               data-testid="search-when-segment"
-              className={`w-[25%] sm:w-[25%] min-w-0 text-left py-1.5 sm:py-2 px-3 sm:px-4 rounded-full transition-all cursor-pointer ${
+              className={`w-full min-w-0 text-left py-1.5 sm:py-2 px-3 sm:px-4 rounded-full transition-all cursor-pointer ${
                 activePopover === 'when'
                   ? 'bg-white shadow-[0_4px_16px_rgba(0,0,0,0.12)] border border-slate-200/90'
                   : 'hover:bg-slate-100/60'
@@ -807,14 +807,14 @@ export const HeaderSearch: React.FC<HeaderSearchProps> = React.memo(({
 
             {/* Crisp Divider 2: Fades out when adjacent segment is active */}
             <div
-              className={`w-[1px] bg-slate-300 mx-1 shrink-0 transition-opacity ${
+              className={`w-px bg-[#DDDDDD] shrink-0 transition-opacity ${
                 activePopover === 'when' || activePopover === 'who' ? 'opacity-0' : 'opacity-100'
               } ${shouldCollapse ? 'h-4 sm:h-5' : 'h-6 sm:h-7'}`}
               aria-hidden="true"
             />
 
             {/* White active capsule containing Who + Search, as in the reference */}
-            <div className="flex w-[25%] sm:w-[25%] min-w-0 items-center rounded-full bg-transparent p-0 shadow-none">
+            <div className="flex w-full min-w-0 items-center rounded-full bg-transparent p-0 shadow-none">
               {/* Segment 3: Who */}
               <button
                 type="button"
